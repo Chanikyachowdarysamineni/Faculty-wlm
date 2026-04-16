@@ -1,0 +1,492 @@
+/**
+ * FacultyPreferencesForm.css
+ * 
+ * Styles for the Faculty Course Preferences Form component
+ */
+
+.fpf-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 800px;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-header {
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.fpf-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+}
+
+.fpf-emp-id {
+  font-size: 13px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fpf-emp-id strong {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MESSAGE BOXES
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-error,
+.fpf-success,
+.fpf-warning {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fpf-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border-left: 4px solid #dc2626;
+}
+
+.fpf-success {
+  background: #f0fdf4;
+  color: #15803d;
+  border-left: 4px solid #22c55e;
+}
+
+.fpf-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border-left: 4px solid #f59e0b;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATUS
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.fpf-status {
+  background: #f0f9ff;
+  border: 1px solid #0284c7;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #0369a1;
+}
+
+.fpf-status strong {
+  color: #0284c7;
+  font-weight: 600;
+}
+
+.fpf-timestamp {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTIONS
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.fpf-section:last-child {
+  border-bottom: none;
+  margin-bottom: 20px;
+  padding-bottom: 0;
+}
+
+.fpf-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.fpf-section-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COURSE LIST
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.fpf-course-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.fpf-course-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.fpf-course-item.selected {
+  background: #efe6ff;
+  border-color: #a855f7;
+}
+
+.fpf-course-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #a855f7;
+  flex-shrink: 0;
+}
+
+.fpf-course-code {
+  min-width: 80px;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.fpf-course-name {
+  flex: 1;
+  color: #475569;
+  font-size: 13px;
+}
+
+.fpf-course-hours {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.fpf-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONTROLS
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.fpf-btn-link {
+  background: none;
+  border: none;
+  color: #0284c7;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+  text-decoration: underline;
+  font-family: 'Poppins', sans-serif;
+  transition: all 0.2s ease;
+}
+
+.fpf-btn-link:hover {
+  color: #0369a1;
+}
+
+.fpf-btn-link:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.fpf-divider {
+  color: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COURSE COUNT
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-count {
+  font-size: 12px;
+  color: #64748b;
+  padding-top: 8px;
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LABEL & TEXTAREA
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.fpf-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+  resize: vertical;
+  transition: all 0.2s ease;
+  background: #ffffff;
+}
+
+.fpf-textarea:focus {
+  outline: none;
+  border-color: #a855f7;
+  background: #fafbfc;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.fpf-textarea:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fpf-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  justify-content: center;
+}
+
+.fpf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fpf-btn-primary {
+  background: #a855f7;
+  color: #ffffff;
+}
+
+.fpf-btn-primary:hover:not(:disabled) {
+  background: #9333ea;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+}
+
+.fpf-btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.fpf-btn-secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.fpf-btn-danger {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.fpf-btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.fpf-btn-edit {
+  background: #3b82f6;
+  color: #ffffff;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.fpf-btn-edit:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.fpf-btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INFO BOX
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-info-box {
+  background: #eff6ff;
+  border: 1px solid #0284c7;
+  border-left: 4px solid #0284c7;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: #0369a1;
+}
+
+.fpf-info-box strong {
+  color: #0284c7;
+  font-weight: 600;
+}
+
+.fpf-info-box p {
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE
+═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .fpf-container {
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .fpf-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .fpf-course-item {
+    flex-wrap: wrap;
+  }
+
+  .fpf-course-hours {
+    margin-left: 0;
+    order: -1;
+    width: 100%;
+    text-align: right;
+  }
+
+  .fpf-actions {
+    flex-direction: column;
+  }
+
+  .fpf-btn {
+    width: 100%;
+  }
+
+  .fpf-status {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fpf-timestamp {
+    margin-left: 0;
+  }
+
+  .fpf-course-list {
+    max-height: 300px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLING
+═══════════════════════════════════════════════════════════════════ */
+
+.fpf-course-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fpf-course-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.fpf-course-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.fpf-course-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

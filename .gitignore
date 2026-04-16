@@ -1,0 +1,99 @@
+# ─── Dependencies ─────────────────────────────────
+node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log*
+yarn-error.log*
+
+# ─── Build & Distribution ─────────────────────────
+build/
+dist/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.dll
+
+# ─── Testing & Coverage ───────────────────────────
+coverage/
+.nyc_output/
+junit.xml
+test-results.xml
+
+# ─── Environment & Secrets ────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+!.env.example
+render.yaml
+!render.yaml.example
+
+# ─── IDE & Editor Settings ────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# ─── OS & System Files ────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+node_modules/.cache/
+
+# ─── Logs & Temporary Files ───────────────────────
+logs/
+*.log
+*.log.*
+tmp/
+temp/
+*.pid
+*.seed
+
+# ─── Database ──────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+mongodb/
+
+# ─── Runtime ───────────────────────────────────────
+.next/
+out/
+.nuxt/
+dist/
+.parcel-cache/
+.cache/
+
+# ─── Docker ────────────────────────────────────────
+.dockerignore
+docker-compose.override.yml
+
+# ─── Render Deployment ────────────────────────────
+.render/
+
+# ─── IDE specific ───────────────────────────────
+.vscode/settings.json
+.vscode/extensions.json
+*.code-workspace
+
+# ─── Misc ──────────────────────────────────────────
+*.pem
+*.key
+*.cert
+.git/hooks/
+.turbo/
+dist-ssr/
+*.local

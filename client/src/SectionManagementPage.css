@@ -1,0 +1,406 @@
+/* ════════════════════════════════════════════════════════════════╗
+   ║  SectionManagementPage.css - Section Management Styles          ║
+   ╚════════════════════════════════════════════════════════════════ */
+
+.smp-main {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.smp-heading {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.smp-subheading {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 20px 0;
+}
+
+/* ─── Alert/Message ─── */
+.smp-alert {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.smp-alert-success {
+  background-color: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.smp-alert-error {
+  background-color: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.smp-alert-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0;
+  margin-left: 12px;
+}
+
+.smp-alert-close:hover {
+  opacity: 1;
+}
+
+/* ─── Year Tabs ─── */
+.smp-year-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.smp-year-tab {
+  padding: 10px 16px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.smp-year-tab:hover:not(:disabled) {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #f0f4ff;
+}
+
+.smp-year-tab.active {
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
+}
+
+.smp-year-tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── Year Info ─── */
+.smp-year-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border-left: 4px solid #6366f1;
+}
+
+.smp-info-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.smp-info-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: #6366f1;
+}
+
+/* ─── Add Section Form ─── */
+.smp-add-section {
+  margin-bottom: 24px;
+}
+
+.smp-form {
+  display: flex;
+  gap: 8px;
+}
+
+.smp-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.smp-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.smp-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.smp-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.smp-btn-add {
+  background: #6366f1;
+  color: white;
+}
+
+.smp-btn-add:hover:not(:disabled) {
+  background: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.smp-btn-add:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── Sections Grid ─── */
+.smp-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ─── Empty State ─── */
+.smp-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 24px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 2px dashed #e5e7eb;
+}
+
+.smp-empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.smp-empty-state p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.smp-empty-hint {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-top: 4px !important;
+}
+
+/* ─── Section Card ─── */
+.smp-section-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.smp-section-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.smp-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.smp-card-number {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.smp-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.smp-action-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  color: #6b7280;
+}
+
+.smp-action-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.smp-action-edit:hover:not(:disabled) {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.smp-action-delete:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.smp-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.smp-card-content {
+  flex: 1;
+}
+
+.smp-section-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+/* ─── Edit Form ─── */
+.smp-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smp-edit-input {
+  padding: 8px 10px;
+  border: 2px solid #6366f1;
+  border-radius: 4px;
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.smp-edit-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.smp-edit-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 0;
+  font-style: italic;
+}
+
+/* ─── Footer/Stats ─── */
+.smp-footer {
+  padding: 20px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 24px;
+}
+
+.smp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.smp-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #6366f1;
+}
+
+.smp-stat-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.smp-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .smp-main {
+    padding: 16px;
+  }
+
+  .smp-heading {
+    font-size: 24px;
+  }
+
+  .smp-form {
+    flex-direction: column;
+  }
+
+  .smp-year-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .smp-sections-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .smp-stats {
+    grid-template-columns: 1fr;
+  }
+}

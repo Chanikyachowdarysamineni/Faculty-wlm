@@ -1,0 +1,613 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * COMPREHENSIVE MOBILE-FIRST RESPONSIVE SYSTEM
+ * ═══════════════════════════════════════════════════════════════════
+ * 
+ * Breakpoints:
+ * - Mobile: 0 - 480px (small phones)
+ * - Mobile+: 480px - 640px (large phones)
+ * - Tablet: 640px - 1024px (tablets & landscape phones)
+ * - Desktop: 1024px+ (desktop & large screens)
+ * 
+ * Strategy: Mobile-first with media queries for larger screens
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   ROOT CSS VARIABLES (Responsive scaling)
+═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Font sizes - responsive scaling */
+  --font-xs: clamp(11px, 2.5vw, 13px);
+  --font-sm: clamp(12px, 2.7vw, 14px);
+  --font-base: clamp(13px, 3vw, 16px);
+  --font-lg: clamp(15px, 3.2vw, 18px);
+  --font-xl: clamp(18px, 3.5vw, 22px);
+  --font-2xl: clamp(20px, 4vw, 28px);
+  --font-3xl: clamp(24px, 5vw, 32px);
+
+  /* Spacing - responsive padding/margins */
+  --space-xs: clamp(4px, 1vw, 8px);
+  --space-sm: clamp(8px, 1.5vw, 12px);
+  --space-md: clamp(12px, 2vw, 16px);
+  --space-lg: clamp(16px, 2.5vw, 24px);
+  --space-xl: clamp(20px, 3vw, 32px);
+  --space-2xl: clamp(24px, 3.5vw, 40px);
+
+  /* Component heights */
+  --input-height-mobile: 44px;
+  --input-height-desktop: 40px;
+  --button-height-mobile: 48px;
+  --button-height-desktop: 40px;
+  --topbar-height: 60px;
+  --sidebar-width-desktop: 280px;
+  --sidebar-width-tablet: 220px;
+
+  /* Border radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLOBAL STYLES
+═══════════════════════════════════════════════════════════════════ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+}
+
+/* Prevent zoom on input focus (iOS) */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE TYPOGRAPHY
+═══════════════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  padding: 0;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h1 { font-size: var(--font-3xl); }
+h2 { font-size: var(--font-2xl); }
+h3 { font-size: var(--font-xl); }
+h4 { font-size: var(--font-lg); }
+h5 { font-size: var(--font-base); }
+h6 { font-size: var(--font-sm); }
+
+p {
+  margin: 0;
+  font-size: var(--font-base);
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE IMAGES & MEDIA
+═══════════════════════════════════════════════════════════════════ */
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+picture {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE CONTAINERS
+═══════════════════════════════════════════════════════════════════ */
+
+.container,
+.container-fluid {
+  width: 100%;
+  max-width: 100%;
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 480px) {
+  .container,
+  .container-fluid {
+    padding-left: var(--space-lg);
+    padding-right: var(--space-lg);
+  }
+}
+
+@media (min-width: 768px) {
+  .container,
+  .container-fluid {
+    padding-left: var(--space-xl);
+    padding-right: var(--space-xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1200px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1400px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE BUTTONS
+═══════════════════════════════════════════════════════════════════ */
+
+button,
+.btn,
+[role="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  min-height: var(--input-height-mobile);
+  min-width: var(--input-height-mobile);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+@media (min-width: 768px) {
+  button,
+  .btn,
+  [role="button"] {
+    min-height: var(--input-height-desktop);
+    padding: 8px 16px;
+  }
+}
+
+button:active,
+.btn:active,
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE FORMS & INPUTS
+═══════════════════════════════════════════════════════════════════ */
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: var(--space-sm);
+  min-height: var(--input-height-mobile);
+  font-size: 16px;
+  font-family: 'Poppins', sans-serif;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: #1e293b;
+  transition: all var(--transition-fast);
+}
+
+@media (min-width: 768px) {
+  input,
+  select,
+  textarea {
+    min-height: var(--input-height-desktop);
+    padding: 8px 12px;
+  }
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE GRIDS
+═══════════════════════════════════════════════════════════════════ */
+
+.grid {
+  display: grid;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+/* 1 column on mobile */
+.grid-cols-1 { grid-template-columns: 1fr; }
+
+/* 2 columns on tablet+ */
+@media (min-width: 640px) {
+  .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-cols-auto-2 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+}
+
+/* 3 columns on desktop */
+@media (min-width: 1024px) {
+  .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-cols-auto-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+}
+
+/* 4 columns on large desktop */
+@media (min-width: 1440px) {
+  .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Auto-fit grid (responsive columns) */
+.grid-auto { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+
+@media (max-width: 768px) {
+  .grid-auto { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 480px) and (max-width: 768px) {
+  .grid-auto { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FLEXBOX UTILITIES
+═══════════════════════════════════════════════════════════════════ */
+
+.flex {
+  display: flex;
+}
+
+.flex-wrap { flex-wrap: wrap; }
+.flex-nowrap { flex-wrap: nowrap; }
+
+.flex-col { flex-direction: column; }
+.flex-row { flex-direction: row; }
+
+.gap-xs { gap: var(--space-xs); }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+.gap-xl { gap: var(--space-xl); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE TABLES
+═══════════════════════════════════════════════════════════════════ */
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+th,
+td {
+  padding: var(--space-sm);
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+  /* Stack tables vertically on mobile */
+  .table-stack {
+    display: block;
+    width: 100%;
+  }
+
+  .table-stack thead {
+    display: none;
+  }
+
+  .table-stack tbody,
+  .table-stack tr,
+  .table-stack td {
+    display: block;
+    width: 100%;
+  }
+
+  .table-stack tr {
+    margin-bottom: var(--space-lg);
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+  }
+
+  .table-stack td {
+    padding: var(--space-sm) 0;
+    border: none;
+    position: relative;
+    padding-left: 50%;
+  }
+
+  .table-stack td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    font-weight: 700;
+    color: #475569;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE CARDS
+═══════════════════════════════════════════════════════════════════ */
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  transition: all var(--transition-normal);
+}
+
+@media (min-width: 768px) {
+  .card {
+    padding: var(--space-lg);
+  }
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card-header {
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.card-body {
+  margin-bottom: var(--space-md);
+}
+
+.card-footer {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOBILE NAVIGATION DRAWER
+═══════════════════════════════════════════════════════════════════ */
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  max-width: 280px;
+  height: 100vh;
+  background: #fff;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  transition: left var(--transition-normal);
+  overflow-y: auto;
+}
+
+.nav-drawer.open {
+  left: 0;
+}
+
+.nav-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+
+.nav-drawer.open ~ .nav-drawer-overlay,
+.nav-drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (min-width: 768px) {
+  .nav-drawer,
+  .nav-drawer-overlay {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HAMBURGER MENU BUTTON
+═══════════════════════════════════════════════════════════════════ */
+
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  gap: 5px;
+}
+
+.hamburger-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.hamburger-btn span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: #1e293b;
+  border-radius: 1px;
+  transition: all var(--transition-normal);
+}
+
+.hamburger-btn.open span:nth-child(1) {
+  transform: rotate(45deg) translateY(11px);
+}
+
+.hamburger-btn.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-btn.open span:nth-child(3) {
+  transform: rotate(-45deg) translateY(-11px);
+}
+
+@media (min-width: 768px) {
+  .hamburger-btn {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VISIBILITY & DISPLAY UTILITIES
+═══════════════════════════════════════════════════════════════════ */
+
+/* Hide on mobile */
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* Hide on tablet & up */
+@media (min-width: 768px) {
+  .hide-desktop { display: none !important; }
+}
+
+/* Show only on mobile */
+.show-mobile { display: none; }
+@media (max-width: 767px) {
+  .show-mobile { display: block; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE SPACING
+═══════════════════════════════════════════════════════════════════ */
+
+.p-mobile { padding: var(--space-md); }
+.p-tablet { padding: var(--space-lg); }
+
+@media (min-width: 480px) {
+  .p-mobile { padding: var(--space-lg); }
+}
+
+@media (min-width: 768px) {
+  .p-tablet { padding: var(--space-xl); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLLABLE CONTAINERS
+═══════════════════════════════════════════════════════════════════ */
+
+.scrollable-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.scrollable-x::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollable-x::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.scrollable-x::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOUCH-FRIENDLY INTERACTIONS
+═══════════════════════════════════════════════════════════════════ */
+
+@media (hover: none) {
+  button:active,
+  .btn:active,
+  [role="button"]:active {
+    opacity: 0.8;
+  }
+
+  a:active {
+    opacity: 0.7;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SAFE AREA INSETS (iPhone notch & bottom bar)
+═══════════════════════════════════════════════════════════════════ */
+
+.safe-area-inset {
+  padding-left: max(var(--space-md), env(safe-area-inset-left));
+  padding-right: max(var(--space-md), env(safe-area-inset-right));
+  padding-top: max(var(--space-md), env(safe-area-inset-top));
+  padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRINT STYLES
+═══════════════════════════════════════════════════════════════════ */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}

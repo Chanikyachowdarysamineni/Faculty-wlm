@@ -1,0 +1,52 @@
+{
+  "name": "wlm-server",
+  "version": "1.0.0",
+  "description": "Faculty Work Load Management – REST API",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "npm install",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "seed": "node src/seed.js",
+    "seed:prod": "node src/seed-production.js",
+    "seed:prod:import": "node src/seed-production-import.js",
+    "export:seed": "node scripts/export-db-to-seed.js",
+    "import-faculty": "node scripts/import-faculty.js",
+    "import-faculty-json": "node scripts/import-faculty-json.js",
+    "import-courses": "node scripts/import-courses.js",
+    "import-courses-json": "node scripts/import-courses-json.js",
+    "diagnostic": "node src/diagnostic.js",
+    "create-indexes": "node src/scripts/create_indexes.js",
+    "setup:admin": "node scripts/setup-admin-user.js",
+    "make-admin": "node scripts/make-admin.js",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=test/unit",
+    "test:integration": "jest --testPathPattern=test/integration",
+    "test:all": "jest --passWithNoTests --forceExit"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.3",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.3.0",
+    "morgan": "^1.10.0",
+    "nodemailer": "^8.0.2",
+    "redis": "^4.6.14",
+    "ws": "^8.16.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^9.1.6",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.0.0"
+  }
+}

@@ -1,0 +1,574 @@
+/* Global responsive layer for all pages and screen types */
+
+:root {
+  --app-space-x: clamp(12px, 2vw, 32px);
+  --app-space-y: clamp(18px, 2.2vw, 34px);
+  --app-title-size: clamp(18px, 2vw, 24px);
+  --app-control-min-h: 38px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.dash-main,
+.wl-wrapper,
+.cp-wrapper,
+.ff-wrapper,
+.fp-wrapper,
+.ms-wrapper,
+.mwl-wrapper,
+.pp-wrapper,
+.ap-wrapper,
+.efp-wrapper {
+  width: min(100%, 1720px);
+  margin-inline: auto;
+  padding-left: var(--app-space-x);
+  padding-right: var(--app-space-x);
+}
+
+.dash-heading,
+.wl-heading,
+.cp-heading,
+.ff-heading,
+.fp-heading,
+.ms-page-title,
+.ap-heading,
+.mwl-title,
+.pp-name,
+.efp-title {
+  font-size: var(--app-title-size);
+}
+
+.wl-btn,
+.cp-btn,
+.fp-btn,
+.ff-toggle-btn,
+.ff-btn,
+.ap-btn,
+.ms-btn,
+.mwl-refresh-btn,
+.dash-sync-retry,
+.dash-inline-retry,
+.efp-refresh,
+.ms-sync-btn,
+.pp-sync-btn,
+.mwl-error-retry,
+.ap-error-retry,
+.ff-error-retry,
+.ms-error-retry {
+  min-height: var(--app-control-min-h);
+}
+
+.dash-table-card,
+.wl-table-wrap,
+.cp-table-wrap,
+.fp-table-wrap,
+.ff-table-wrap,
+.ap-grid-wrap,
+.mwl-table-wrap,
+.efp-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dash-table,
+.wl-table,
+.cp-table,
+.fp-table,
+.ff-table,
+.ap-table,
+.mwl-table,
+.efp-table {
+  min-width: max-content;
+}
+
+/* ── Smart boards and very large displays ─────────────────────────────── */
+@media (min-width: 1900px) {
+  :root {
+    --app-space-x: 44px;
+    --app-space-y: 40px;
+    --app-title-size: 28px;
+    --app-control-min-h: 46px;
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    width: min(100%, 2100px);
+  }
+
+  .dash-card-value {
+    font-size: 38px;
+  }
+
+  .dash-table th,
+  .dash-table td,
+  .wl-table th,
+  .wl-table td,
+  .cp-table th,
+  .cp-table td,
+  .fp-table th,
+  .fp-table td,
+  .ff-table th,
+  .ff-table td,
+  .ap-table th,
+  .ap-table td,
+  .mwl-table th,
+  .mwl-table td,
+  .efp-table th,
+  .efp-table td {
+    font-size: 14px;
+    padding: 12px 14px;
+  }
+}
+
+/* ── Standard laptops / desktop ───────────────────────────────────────── */
+@media (max-width: 1440px) {
+  .dash-header {
+    padding-inline: 14px;
+    gap: 10px;
+  }
+
+  .dash-nav {
+    gap: 8px;
+  }
+
+  .dash-nav-btn-inner {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search {
+    width: min(100%, 260px);
+  }
+}
+
+/* ── Tablets and compact landscape displays ───────────────────────────── */
+@media (max-width: 1100px) {
+  .dash-header {
+    height: auto;
+    min-height: 68px;
+    align-items: flex-start;
+    padding-block: 8px;
+  }
+
+  .dash-nav {
+    width: 100%;
+    order: 3;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .wl-topbar,
+  .cp-topbar,
+  .fp-topbar,
+  .ff-topbar,
+  .ap-topbar,
+  .ms-page-header,
+  .mwl-header,
+  .pp-sync-meta-row,
+  .efp-topbar,
+  .dash-sync-row {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .wl-topbar-right,
+  .cp-topbar-right,
+  .fp-topbar-right,
+  .ff-topbar-right,
+  .ap-topbar-right,
+  .ms-status-pills,
+  .efp-actions {
+    width: 100%;
+  }
+
+  .wl-search-wrap,
+  .cp-search-wrap,
+  .fp-search-wrap {
+    width: 100%;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search,
+  .efp-search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ff-id-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pp-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 22px;
+  }
+
+  .pp-hero-stats {
+    border-left: 0;
+    padding-left: 0;
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .ms-profile-card {
+    flex-wrap: wrap;
+  }
+
+  .mwl-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Mobile / narrow screens ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --app-space-x: 12px;
+    --app-space-y: 18px;
+    --app-title-size: 18px;
+    --app-control-min-h: 40px;
+  }
+
+  .dash-cards,
+  .dash-panels-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-id-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-card,
+  .pp-section,
+  .ms-prefs-section,
+  .ms-edit-section,
+  .mwl-target-bar-wrap,
+  .ap-section-bar,
+  .dash-table-card,
+  .efp-wrapper {
+    padding: 14px;
+  }
+
+  .mwl-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .ms-profile-card,
+  .pp-hero {
+    padding: 16px;
+  }
+
+  .wl-btn,
+  .cp-btn,
+  .fp-btn,
+  .ff-toggle-btn,
+  .ff-btn,
+  .ap-btn,
+  .ms-btn,
+  .mwl-refresh-btn,
+  .efp-refresh {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .wl-topbar-right,
+  .cp-topbar-right,
+  .fp-topbar-right,
+  .ff-topbar-right,
+  .ap-topbar-right,
+  .ms-status-pills,
+  .efp-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .wl-form-header,
+  .cp-form-header,
+  .fp-form-header,
+  .ff-topbar-left,
+  .ap-topbar-left,
+  .dash-table-header,
+  .dash-sync-row,
+  .pp-sync-meta-row {
+    flex-wrap: wrap;
+  }
+
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table,
+  .dash-table {
+    min-width: 760px;
+  }
+
+  .wlm-wrapper {
+    background-attachment: scroll;
+  }
+
+  .wlm-card {
+    flex-direction: column;
+    min-height: auto;
+    max-width: 96vw;
+  }
+
+  .wlm-left {
+    min-height: 180px;
+    padding: 18px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  }
+
+  .wlm-right {
+    padding: 24px 18px;
+  }
+
+  .wlm-logo-wrap {
+    width: 120px;
+    height: 120px;
+  }
+}
+
+/* ── Additional adaptive layer for all pages ───────────────────────────── */
+@media (max-width: 1280px) {
+  :root {
+    --app-space-x: clamp(12px, 1.8vw, 24px);
+    --app-title-size: clamp(17px, 1.8vw, 22px);
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    padding-left: var(--app-space-x);
+    padding-right: var(--app-space-x);
+  }
+
+  .dash-header {
+    padding-inline: clamp(10px, 1.6vw, 20px);
+  }
+
+  .dash-nav-btn-inner {
+    padding: 6px 11px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 992px) {
+  .dash-header,
+  .wl-topbar,
+  .cp-topbar,
+  .fp-topbar,
+  .ff-topbar,
+  .ap-topbar,
+  .ms-page-header,
+  .mwl-header,
+  .efp-topbar,
+  .pp-sync-meta-row,
+  .dash-sync-row {
+    align-items: stretch;
+    row-gap: 10px;
+  }
+
+  .wl-topbar-right,
+  .cp-topbar-right,
+  .fp-topbar-right,
+  .ff-topbar-right,
+  .ap-topbar-right,
+  .ms-status-pills,
+  .efp-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .wl-form-row,
+  .wl-form-row-4,
+  .cp-form-row,
+  .fp-form-row,
+  .ff-id-row,
+  .ms-grid,
+  .mwl-summary,
+  .pp-details-grid,
+  .efp-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wl-form-card,
+  .cp-form-card,
+  .fp-form-card,
+  .ff-card,
+  .pp-section,
+  .mwl-target-bar-wrap,
+  .ms-prefs-section,
+  .ms-edit-section,
+  .dash-table-card,
+  .ap-section-bar {
+    padding: clamp(12px, 2vw, 18px);
+  }
+}
+
+@media (max-width: 576px) {
+  :root {
+    --app-space-x: 10px;
+    --app-space-y: 14px;
+    --app-title-size: 17px;
+    --app-control-min-h: 40px;
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .dash-nav-btn-inner {
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+
+  .wl-form-row,
+  .wl-form-row-4,
+  .cp-form-row,
+  .fp-form-row,
+  .ff-id-row,
+  .ms-grid,
+  .mwl-summary,
+  .pp-details-grid,
+  .efp-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search,
+  .efp-search,
+  .ap-search,
+  .ms-search,
+  .mwl-search,
+  .pp-search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .wl-btn,
+  .cp-btn,
+  .fp-btn,
+  .ff-btn,
+  .ff-toggle-btn,
+  .ap-btn,
+  .ms-btn,
+  .mwl-refresh-btn,
+  .efp-refresh,
+  .dash-sync-retry,
+  .dash-inline-retry,
+  .ms-sync-btn,
+  .pp-sync-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dash-table,
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dash-site-name {
+    font-size: 12px;
+  }
+
+  .dash-breadcrumb,
+  .dash-sync-pill,
+  .wl-count-badge,
+  .cp-count-badge,
+  .fp-count-badge,
+  .ms-count-badge,
+  .mwl-count-badge,
+  .pp-meta-badge,
+  .efp-stat-badge {
+    font-size: 10px;
+  }
+
+  .dash-table,
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table {
+    min-width: 620px;
+  }
+}
+
+@media (min-width: 2200px) {
+  :root {
+    --app-space-x: 54px;
+    --app-space-y: 46px;
+    --app-title-size: 30px;
+    --app-control-min-h: 48px;
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    width: min(100%, 2300px);
+  }
+}

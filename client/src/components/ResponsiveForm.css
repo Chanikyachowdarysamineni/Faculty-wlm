@@ -1,0 +1,373 @@
+/**
+ * ResponsiveForm.css - Mobile-Optimized Form Styles
+ * 
+ * - Touch-friendly input sizing
+ * - Prevents iOS zoom
+ * - Responsive column layouts
+ */
+
+.responsive-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM FIELD
+═══════════════════════════════════════════════════════════════════ */
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-required {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 12px;
+  min-height: 44px;
+  font-size: 16px;
+  font-family: 'Poppins', sans-serif;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+@media (min-width: 768px) {
+  .form-input {
+    min-height: 40px;
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: #fafbfc;
+}
+
+.form-input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.form-input::placeholder {
+  color: #94a3b8;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SELECT DROPDOWN
+═══════════════════════════════════════════════════════════════════ */
+
+select.form-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231e293b' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l6 6a1 1 0 001.414 0l6-6a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  padding-right: 36px;
+}
+
+select.form-input:disabled {
+  opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ERROR STATES
+═══════════════════════════════════════════════════════════════════ */
+
+.form-field.error .form-input {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.form-field.error .form-input:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+.form-error {
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-error::before {
+  content: '⚠️';
+  font-size: 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM GROUPS (Multiple columns)
+═══════════════════════════════════════════════════════════════════ */
+
+.form-group {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Single column (mobile default) */
+.form-group-1 {
+  grid-template-columns: 1fr;
+}
+
+/* Two columns on tablet */
+.form-group-2 {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .form-group-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Three columns on desktop */
+.form-group-3 {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .form-group-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Four columns on large desktop */
+.form-group-4 {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .form-group-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1440px) {
+  .form-group-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM ACTIONS (Buttons)
+═══════════════════════════════════════════════════════════════════ */
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .form-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .form-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-actions button {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+
+@media (min-width: 769px) {
+  .form-actions {
+    justify-content: flex-end;
+  }
+
+  .form-actions button {
+    min-height: 40px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CHECKBOXES & RADIO BUTTONS
+═══════════════════════════════════════════════════════════════════ */
+
+.form-checkbox,
+.form-radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+@media (min-width: 768px) {
+  .form-checkbox,
+  .form-radio {
+    min-height: 40px;
+  }
+}
+
+.form-checkbox input,
+.form-radio input {
+  width: 20px;
+  height: 20px;
+  min-height: auto;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.form-checkbox label,
+.form-radio label {
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HELP TEXT
+═══════════════════════════════════════════════════════════════════ */
+
+.form-help {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: -4px;
+}
+
+.form-success {
+  font-size: 12px;
+  color: #22c55e;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-success::before {
+  content: '✓';
+  font-weight: bold;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM SECTIONS
+═══════════════════════════════════════════════════════════════════ */
+
+.form-section {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.form-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INLINE FORM (Search, quick inputs)
+═══════════════════════════════════════════════════════════════════ */
+
+.form-inline {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .form-inline {
+    flex-direction: column;
+  }
+
+  .form-inline .form-field,
+  .form-inline input {
+    width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PREVENT ZOOM ON INPUT FOCUS (iOS)
+═══════════════════════════════════════════════════════════════════ */
+
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+  /* iOS only */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LOADING STATE
+═══════════════════════════════════════════════════════════════════ */
+
+.form-input:disabled,
+.form-input.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRINT STYLES
+═══════════════════════════════════════════════════════════════════ */
+
+@media print {
+  .form-field {
+    page-break-inside: avoid;
+  }
+
+  .form-input:focus {
+    outline: 1px solid #000;
+  }
+}

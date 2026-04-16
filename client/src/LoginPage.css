@@ -1,0 +1,532 @@
+/* ── Global Reset ─────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* ── Full-page background ──────────────────────────── */
+.wlm-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #1a1a2e;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  padding: 20px 20px 16px;
+  gap: 16px;
+}
+
+/* ── Glassmorphism card ───────────────────────────────── */
+.wlm-card {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  width: 100%;
+  max-width: 780px;
+  min-height: 420px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════
+   LEFT PANEL
+══════════════════════════════════════════════════════ */
+.wlm-left {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* ── Logo image ── */
+.avatar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+.wlm-logo-wrap {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.wlm-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.18));
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.wlm-logo-img.wlm-logo-loaded {
+  opacity: 1;
+}
+
+/* ── Decorative floating shapes ── */
+.shape {
+  position: absolute;
+  display: block;
+  border-radius: 2px;
+}
+
+/* Hollow circle – top right of left panel */
+.circle-outline.top-right {
+  top: 60px;
+  right: 30px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2.5px solid #4ade80;
+  background: transparent;
+}
+
+/* Hollow triangle – bottom left */
+.triangle-outline.bottom-left {
+  bottom: 80px;
+  left: 30px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid transparent;
+  border-bottom-color: transparent;
+  /* Use outline triangle via pseudo approach */
+  border: none;
+  width: 16px;
+  height: 14px;
+  background: transparent;
+  --size: 14px;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  border: 2px solid #4ade80;
+  clip-path: none;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 16px solid #4ade80;
+  opacity: 0.5;
+  filter: drop-shadow(0 0 0 2px white);
+}
+
+/* Small play / arrow shape – mid-right area */
+.diamond-outline.mid-right {
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 12px solid #4ade80;
+  opacity: 0.7;
+}
+
+/* Tiny circle – bottom right */
+.circle-sm.bottom-right {
+  bottom: 55px;
+  right: 55px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2.5px solid #60a5fa;
+  background: transparent;
+}
+
+/* ══════════════════════════════════════════════════════
+   RIGHT PANEL
+══════════════════════════════════════════════════════ */
+.wlm-right {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 52px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Site title */
+.wlm-site-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(20, 20, 60, 0.7);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+/* "Member Login" heading */
+.wlm-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a3e;
+  margin-bottom: 28px;
+  text-shadow: 0 1px 4px rgba(255,255,255,0.6);
+}
+
+/* ── Form ── */
+.wlm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Input group */
+.wlm-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wlm-input-icon {
+  position: absolute;
+  left: 14px;
+  color: rgba(20, 20, 60, 0.55);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.wlm-input {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-family: 'Poppins', sans-serif;
+  color: #1a1a3e;
+  outline: none;
+  transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.wlm-input::placeholder {
+  color: rgba(20, 20, 60, 0.4);
+}
+
+.wlm-input:focus {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4), inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Eye toggle button */
+.wlm-eye-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: rgba(20, 20, 60, 0.45);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.wlm-eye-btn:hover {
+  color: #1a1a3e;
+}
+
+/* ── Login button ── */
+.wlm-login-btn {
+  margin-top: 4px;
+  padding: 13px;
+  background: #22c55e;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: 'Poppins', sans-serif;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+}
+
+.wlm-login-btn:hover {
+  background: #16a34a;
+  box-shadow: 0 6px 18px rgba(34, 197, 94, 0.45);
+}
+
+.wlm-login-btn:active {
+  transform: scale(0.98);
+}
+
+/* ── Inline error ── */
+.wlm-error {
+  font-size: 11.5px;
+  color: #dc2626;
+  text-align: center;
+  margin-top: -4px;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-5px); }
+  75%       { transform: translateX(5px); }
+}
+
+/* ── Role hint panel ── */
+.wlm-role-hint {
+  margin-top: 16px;
+  background: rgba(99,102,241,0.07);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wlm-hint-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wlm-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 58px;
+  justify-content: center;
+}
+.wlm-hint-admin {
+  background: rgba(250,204,21,0.15);
+  color: #facc15;
+  border: 1px solid rgba(250,204,21,0.3);
+}
+.wlm-hint-faculty {
+  background: rgba(99,102,241,0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.3);
+}
+.wlm-hint-creds {
+  font-size: 11px;
+  color: #475569;
+}
+.wlm-hint-creds b {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* ── Forgot link ── */
+.wlm-forgot {
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: rgba(20, 20, 60, 0.6);
+  text-align: center;
+}
+
+.wlm-forgot-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: rgba(20, 20, 60, 0.85);
+  font-size: 11.5px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.wlm-forgot-link:hover {
+  color: #1a1a3e;
+  text-decoration: underline;
+}
+
+/* ── Developer credit ── */
+.wlm-dev-credit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  user-select: none;
+}
+
+.wlm-dev-label {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  animation: wlm-label-blink 2.4s ease-in-out infinite;
+}
+
+.wlm-dev-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  cursor: pointer;
+  background: linear-gradient(
+    90deg,
+    #ff6ec7, #ff9a3c, #ffe033, #6bff7e, #3cf0ff, #a78bfa, #ff6ec7
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation:
+    wlm-name-shine 3s linear infinite,
+    wlm-name-glow  2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.7));
+}
+
+@keyframes wlm-name-shine {
+  0%   { background-position: 0% center; }
+  100% { background-position: 250% center; }
+}
+
+@keyframes wlm-name-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 110, 199, 0.8)) drop-shadow(0 0 12px rgba(59, 240, 255, 0.5)); }
+  50%       { filter: drop-shadow(0 0 14px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 24px rgba(107, 255, 126, 0.6)); }
+}
+
+@keyframes wlm-label-blink {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 1; }
+}
+
+/* ── Modal overlay ── */
+.wlm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.wlm-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 36px 40px;
+  width: 100%;
+  max-width: 380px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.wlm-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #a0aec0;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.wlm-modal-close:hover {
+  color: #4a5568;
+}
+
+.wlm-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 8px;
+}
+
+.wlm-modal-desc {
+  font-size: 12.5px;
+  color: #718096;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.wlm-modal-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding-top: 8px;
+}
+
+.wlm-modal-success p {
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .wlm-card {
+    flex-direction: column;
+  }
+
+  .wlm-left {
+    padding: 36px 20px 24px;
+  }
+
+  .wlm-logo-wrap {
+    width: 140px;
+    height: 140px;
+  }
+
+  .wlm-right {
+    padding: 28px 28px 40px;
+  }
+
+  .wlm-title {
+    font-size: 20px;
+  }
+}

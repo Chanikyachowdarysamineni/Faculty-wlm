@@ -1,0 +1,72 @@
+/* ExportButtons.css */
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.export-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+}
+
+.export-btn:active {
+  transform: translateY(0);
+}
+
+/* CSV Button - Green */
+.export-csv {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+.export-csv:hover {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+/* Excel Button - Blue */
+.export-excel {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.export-excel:hover {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+
+/* Print Button - Orange */
+.export-print {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+.export-print:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .export-buttons {
+    gap: 6px;
+  }
+
+  .export-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}

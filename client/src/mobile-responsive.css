@@ -1,0 +1,896 @@
+/**
+ * mobile-responsive.css
+ * 
+ * Comprehensive mobile responsive design for all dashboards and pages
+ * Breakpoints:
+ * - Mobile: < 480px (small phones)
+ * - Mobile+: 480-640px (large phones)
+ * - Tablet: 640-1024px (tablets & landscape)
+ * - Desktop: > 1024px
+ * 
+ * Priority: Mobile-first with media queries for larger screens
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   DASHBOARD & SIDEBAR RESPONSIVE
+═══════════════════════════════════════════════════════════ */
+
+/* TABLET & UP (1024px+) */
+@media (min-width: 1025px) {
+  .dash-wrapper {
+    font-size: 14px;
+  }
+}
+
+/* TABLET - LANDSCAPE (768px - 1024px) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .dash-topbar {
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  .dash-sidebar {
+    width: 220px;
+  }
+
+  .dash-sidebar.collapsed {
+    width: 56px;
+  }
+
+  .dash-main {
+    padding: 28px 24px 48px;
+  }
+
+  .dash-heading {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  .dash-cards {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .dash-card {
+    padding: 20px 18px;
+    gap: 12px;
+  }
+
+  .dash-card-value {
+    font-size: 26px;
+  }
+
+  .dash-card-label {
+    font-size: 11px;
+  }
+
+  .dash-tables {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .dash-panels-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+}
+
+/* MOBILE LANDSCAPE & TABLETS (640px - 768px) */
+@media (max-width: 768px) {
+  /* Sidebar overlay behavior */
+  .dash-sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    height: calc(100vh - 60px) !important;
+    width: 240px !important;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dash-sidebar.open,
+  .dash-sidebar:not(.collapsed) {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 60px 0 0 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 39;
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  /* Top bar adjustments */
+  .dash-topbar {
+    padding: 0 14px;
+    gap: 8px;
+    height: 60px;
+  }
+
+  .dash-brand {
+    display: flex;
+    gap: 8px;
+  }
+
+  .dash-site-name {
+    font-size: 12px;
+  }
+
+  /* Main content */
+  .dash-main {
+    padding: 24px 20px 40px;
+    max-width: 100%;
+  }
+
+  .dash-heading {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  /* Cards Grid */
+  .dash-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .dash-card {
+    padding: 16px;
+    gap: 10px;
+    border-radius: 10px;
+  }
+
+  .dash-card-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .dash-card-value {
+    font-size: 24px;
+    margin-bottom: 2px;
+  }
+
+  .dash-card-label {
+    font-size: 11px;
+  }
+
+  /* Tables */
+  .dash-tables {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .dash-table-card {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .dash-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dash-table {
+    min-width: 100%;
+  }
+
+  .dash-table th,
+  .dash-table td {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  /* Panels */
+  .dash-panels-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .dash-panel-card {
+    padding: 14px;
+  }
+
+  /* Buttons */
+  .dash-logout-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .sidebar-toggle-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Role picker */
+  .rp-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .rp-welcome {
+    font-size: 22px;
+  }
+
+  .rp-card {
+    padding: 18px 16px;
+  }
+}
+
+/* SMALL MOBILE (480px - 640px) */
+@media (max-width: 640px) {
+  .dash-wrapper {
+    height: 100vh;
+    font-size: 13px;
+  }
+
+  .dash-topbar {
+    height: 54px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .dash-logo-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar-toggle-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .dash-brand {
+    display: none;
+  }
+
+  .dash-sidebar {
+    top: 54px !important;
+    height: calc(100vh - 54px) !important;
+    width: 220px !important;
+  }
+
+  .sidebar-overlay {
+    top: 54px !important;
+  }
+
+  .dash-logout-btn {
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+
+  .dash-role-badge {
+    padding: 2px 8px;
+    font-size: 9px;
+  }
+
+  /* Main content */
+  .dash-main {
+    padding: 16px 12px 32px;
+  }
+
+  .dash-heading {
+    font-size: 17px;
+    margin-bottom: 14px;
+  }
+
+  .dash-sync-row {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 10px;
+  }
+
+  .dash-sync-pill {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .dash-sync-retry {
+    width: 100%;
+    text-align: center;
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  /* Cards */
+  .dash-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .dash-card {
+    padding: 13px 11px;
+    gap: 8px;
+    border-radius: 9px;
+  }
+
+  .dash-card-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .dash-card-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .dash-card-value {
+    font-size: 20px;
+    margin-bottom: 1px;
+  }
+
+  .dash-card-label {
+    font-size: 10px;
+  }
+
+  /* Tables */
+  .dash-tables {
+    gap: 12px;
+  }
+
+  .dash-table-card {
+    border-radius: 10px;
+  }
+
+  .dash-table-header {
+    padding: 10px 12px 8px;
+  }
+
+  .dash-table-title {
+    font-size: 12px;
+  }
+
+  .dash-table-badge {
+    font-size: 9px;
+  }
+
+  .dash-table-wrap {
+    max-height: 400px;
+  }
+
+  .dash-table th,
+  .dash-table td {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .dash-table th {
+    font-size: 9px;
+  }
+
+  .dash-count-badge {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  /* Panels */
+  .dash-panels-row {
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .dash-panel-card {
+    padding: 11px;
+    border-radius: 9px;
+  }
+
+  .dash-panel-head {
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .dash-panel-subtitle {
+    font-size: 10px;
+  }
+
+  .dash-pill {
+    padding: 4px 7px;
+    font-size: 9px;
+  }
+
+  .dash-mini-bar-wrap {
+    width: 90px;
+    margin-right: 5px;
+  }
+
+  .dash-mini-label {
+    font-size: 10px;
+  }
+
+  .dash-pending-meta {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .dash-alert-wrap {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .dash-live-warning,
+  .dash-live-note {
+    padding: 8px 10px;
+    font-size: 11px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+  }
+
+  .dash-overload-row {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+
+  .dash-over-badge {
+    padding: 2px 6px;
+    font-size: 9px;
+  }
+
+  /* Role picker */
+  .rp-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .rp-welcome {
+    font-size: 19px;
+  }
+
+  .rp-card {
+    padding: 16px 14px 12px;
+    border-radius: 14px;
+  }
+
+  .rp-card-title {
+    font-size: 15px;
+    margin-bottom: 5px;
+  }
+
+  .rp-card-desc {
+    font-size: 11px;
+    margin-bottom: 12px;
+  }
+
+  .rp-card-perks {
+    font-size: 10px;
+    margin-bottom: 14px;
+  }
+
+  .rp-footer {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .rp-logout-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+}
+
+/* EXTRA SMALL MOBILE (< 480px) */
+@media (max-width: 479px) {
+  .dash-topbar {
+    height: 50px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .dash-logo-mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sidebar-toggle-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .dash-breadcrumb {
+    display: none;
+  }
+
+  .dash-site-name {
+    font-size: 10px;
+  }
+
+  .dash-role-badge {
+    font-size: 8px;
+    padding: 2px 6px;
+  }
+
+  .dash-logout-btn {
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+
+  .dash-sidebar {
+    width: 200px !important;
+  }
+
+  .dash-main {
+    padding: 12px 10px 24px;
+  }
+
+  .dash-heading {
+    font-size: 15px;
+    margin-bottom: 12px;
+  }
+
+  .dash-cards {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .dash-card {
+    padding: 11px 10px;
+    gap: 7px;
+  }
+
+  .dash-card-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .dash-card-value {
+    font-size: 18px;
+  }
+
+  .dash-card-label {
+    font-size: 9px;
+  }
+
+  .dash-tables {
+    gap: 10px;
+  }
+
+  .dash-table-wrap {
+    max-height: 300px;
+    font-size: 10px;
+  }
+
+  .dash-table th,
+  .dash-table td {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  .dash-panel-card {
+    padding: 10px;
+  }
+
+  .dash-panel-head {
+    font-size: 11px;
+  }
+
+  .dash-pill {
+    padding: 3px 6px;
+    font-size: 8px;
+  }
+
+  /* Role picker */
+  .rp-blob-1, .rp-blob-2, .rp-blob-3 {
+    display: none;
+  }
+
+  .rp-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  .rp-welcome {
+    font-size: 16px;
+  }
+
+  .rp-card {
+    padding: 12px 10px 8px;
+  }
+
+  .rp-card-icon-wrap {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 10px;
+  }
+
+  .rp-card-title {
+    font-size: 13px;
+  }
+
+  .rp-card-desc {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  .rp-card-perks {
+    font-size: 9px;
+    gap: 5px;
+  }
+
+  .rp-card-perks li {
+    gap: 5px;
+  }
+
+  .rp-footer {
+    gap: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN DASHBOARD RESPONSIVE
+═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .dashboard-content {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    width: 240px;
+    height: calc(100vh - 60px);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 40;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    width: 100%;
+  }
+
+  .admin-overview {
+    padding: 20px 16px 40px;
+  }
+
+  .welcome-card {
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  .welcome-card h1 {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .admin-stats {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-overview {
+    padding: 16px 12px 32px;
+  }
+
+  .welcome-card {
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .welcome-card h1 {
+    font-size: 20px;
+  }
+
+  .admin-features h2 {
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .admin-info {
+    padding: 16px;
+    margin-top: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-overview {
+    padding: 12px 10px 24px;
+  }
+
+  .welcome-card {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .welcome-card h1 {
+    font-size: 18px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PAGES RESPONSIVE (Faculty, Courses, Workload, etc.)
+═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .fp-wrapper, .cp-wrapper, .wl-wrapper, .mwl-wrapper, .ap-wrapper, .ef-wrapper {
+    padding: 20px 16px 40px;
+    overflow-x: hidden;
+  }
+
+  .fp-topbar, .cp-topbar, .ap-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .fp-topbar-left, .fp-topbar-right {
+    width: 100%;
+  }
+
+  .fp-search {
+    width: 100%;
+  }
+
+  .fp-btn, .cp-btn, .ap-btn {
+    width: 100%;
+  }
+
+  .fp-heading, .cp-heading, .wl-heading, .ap-heading {
+    font-size: 18px;
+  }
+
+  .fp-table-wrap, .cp-table-wrap, .ap-table-wrap {
+    overflow-x: auto;
+  }
+
+  .fp-table, .cp-table, .ap-table {
+    min-width: max-content;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .fp-wrapper, .cp-wrapper, .wl-wrapper, .mwl-wrapper, .ap-wrapper, .ef-wrapper {
+    padding: 16px 12px 32px;
+  }
+
+  .fp-heading, .cp-heading, .wl-heading, .ap-heading {
+    font-size: 16px;
+  }
+
+  .fp-search {
+    width: 100%;
+    padding: 8px 28px 8px 30px;
+    font-size: 12px;
+  }
+
+  .fp-btn, .cp-btn, .ap-btn {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .fp-table th, .cp-table th, .ap-table th {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+
+  .fp-table td, .cp-table td, .ap-table td {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .fp-wrapper, .cp-wrapper, .wl-wrapper, .mwl-wrapper, .ap-wrapper, .ef-wrapper {
+    padding: 12px 10px 24px;
+  }
+
+  .fp-heading, .cp-heading, .wl-heading, .ap-heading {
+    font-size: 14px;
+  }
+
+  .fp-search {
+    font-size: 11px;
+    padding: 7px 26px 7px 28px;
+  }
+
+  .fp-btn, .cp-btn, .ap-btn {
+    font-size: 11px;
+    padding: 6px 10px;
+    min-height: 36px;
+  }
+
+  .fp-table, .cp-table, .ap-table {
+    font-size: 10px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORM & INPUT RESPONSIVE
+═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+
+  button, .btn {
+    font-size: 13px;
+    padding: 10px 14px;
+    min-height: 40px;
+  }
+
+  label {
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+}
+
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+
+  button, .btn {
+    font-size: 12px;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+
+  label {
+    font-size: 12px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-group {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  input, select, textarea {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 40px;
+    border-radius: 8px;
+  }
+
+  button, .btn {
+    font-size: 12px;
+    padding: 10px 12px;
+    min-height: 40px;
+    border-radius: 8px;
+    width: 100%;
+  }
+
+  label {
+    font-size: 12px;
+  }
+
+  textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+}
