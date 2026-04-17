@@ -9,8 +9,9 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 module.exports = function (app) {
   const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-  // ─ Production route: /csefaculty/deva → /deva ────────────
+  // ─ Production + local route: /csefaculty/deva → /deva ────────────
   // Used by production frontend at http://160.187.169.41/csefaculty/
+  // Also used for local development at localhost:3000/csefaculty/
   // Converts /csefaculty/deva/* to /deva/* on backend
   app.use(
     '/csefaculty/deva',
@@ -25,14 +26,13 @@ module.exports = function (app) {
         if (req.headers.authorization) {
           proxyReq.setHeader('Authorization', req.headers.authorization);
         }
-        console.log(`[Proxy] ${req.method} ${req.originalUrl} → ${proxyReq.path}`);
       },
-      logLevel: 'debug',
+      logLevel: 'warn',
     })
   );
 
   // ─ Direct /deva route ──────────────────────────────────
-  // For local development and testing - forwards directly to backend
+  // Fallback for direct /deva API calls during development
   app.use(
     '/deva',
     createProxyMiddleware({
@@ -44,7 +44,7 @@ module.exports = function (app) {
           proxyReq.setHeader('Authorization', req.headers.authorization);
         }
       },
-      logLevel: 'debug',
+      logLevel: 'warn',
     })
   );
 
@@ -63,8 +63,7 @@ module.exports = function (app) {
         if (req.headers.authorization) {
           proxyReq.setHeader('Authorization', req.headers.authorization);
         }
-      },
-    })
+      },      logLevel: 'warn',    })
   );
 };
 

@@ -1,5 +1,6 @@
 /**
  * Express server to serve React build with correct MIME types
+ * Serves from /csefaculty base path for production deployment
  * Required for Render deployment when using Web Service instead of Static hosting
  */
 
@@ -14,8 +15,8 @@ const BUILD_DIR = path.resolve(__dirname, 'build');
 // Middleware
 app.use(compression());
 
-// Serve static files with correct MIME types
-app.use(express.static(BUILD_DIR, {
+// Serve static files from /csefaculty base path with correct MIME types
+app.use('/csefaculty', express.static(BUILD_DIR, {
   setHeaders: (res, filePath) => {
     // CSS files
     if (filePath.endsWith('.css')) {
@@ -70,9 +71,19 @@ app.use(express.static(BUILD_DIR, {
   },
 }));
 
-// SPA routing - all other routes serve index.html
-app.get('*', (req, res) => {
+// SPA routing for /csefaculty/* paths - serve index.html for all routes
+app.get('/csefaculty/*', (req, res) => {
   res.sendFile(path.join(BUILD_DIR, 'index.html'));
+});
+
+// Redirect root to /csefaculty
+app.get('/', (req, res) => {
+  res.redirect(301, '/csefaculty/');
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Frontend server is running' });
 });
 
 // Error handling
@@ -83,6 +94,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Frontend server listening on port ${PORT}`);
-  console.log(`   URL: http://localhost:${PORT}`);
+  console.log(`   URL: http://localhost:${PORT}/csefaculty`);
   console.log(`   Build directory: ${BUILD_DIR}`);
 });

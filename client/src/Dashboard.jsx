@@ -192,6 +192,7 @@ const toPct = (value) => Math.max(0, Math.min(100, value));
 const AUTO_REFRESH_MS = 60000;
 
 const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
+  const publicUrl = process.env.PUBLIC_URL || '';
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashMode, setDashMode] = useState(null);
@@ -872,7 +873,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         <div className="rp-container">
           {/* Brand header */}
           <div className="rp-brand">
-            <img src="/logo.webp" alt="Logo" className="rp-brand-logo" />
+            <img src={`${publicUrl}/logo.webp`} alt="Logo" className="rp-brand-logo" />
             <div>
               <div className="rp-brand-name">Faculty Workload Management</div>
               <div className="rp-brand-sub">Vignan Foundation For Science Technology & Research � CSE Department</div>
@@ -969,7 +970,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         </button>
 
         <div className="dash-topbar-brand">
-          <img src="/logo.webp" alt="Logo" className="dash-logo-mark" />
+          <img src={`${publicUrl}/logo.webp`} alt="Logo" className="dash-logo-mark" />
           <div className="dash-brand">
             <span className="dash-site-name">Faculty Work Load Management</span>
             <span className="dash-breadcrumb">

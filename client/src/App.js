@@ -277,7 +277,7 @@ function App() {
   }, [handleLogout]);
 
   return (
-    <Router>
+    <Router basename="/csefaculty">
       <ErrorBoundary>
         <DataProvider>
           <AuthProvider 

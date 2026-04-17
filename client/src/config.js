@@ -26,9 +26,9 @@ const resolveApiBase = () => {
 	// In development, use relative paths so CRA's dev proxy handles the request
 	// (avoids CORS issues when connecting to the production server locally).
 	// This allows setupProxy.js to intercept and forward requests to the backend.
-	if (process.env.NODE_ENV === 'development') return '';
-	// Production uses HTTP-only (no HTTPS redirects)
-	return DEFAULT_API_BASE;
+	if (process.env.NODE_ENV === 'development') return '/csefaculty';
+	// Production uses HTTP-only at /csefaculty base path
+	return DEFAULT_API_BASE + '/csefaculty';
 };
 
 const API = resolveApiBase();
