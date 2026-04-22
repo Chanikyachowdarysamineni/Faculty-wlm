@@ -57,6 +57,29 @@ const FacultyFormPage = ({
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, []);
 
+  // Load master data (faculty and courses) from API
+  const loadMasterData = useCallback(async ({ silent = true } = {}) => {
+    if (!silent) setMasterLoading(true);
+    setReadApiError('');
+    try {
+      const headers = authHeaders();
+      const [fReq, cReq] = await Promise.allSettled([
+        fetchAllPages('/deva/faculty', {}, { headers }),
+        fetchAllPages('/deva/courses', {}, { headers }),
+      ]);
+      const facultyOk = fReq.status === 'fulfilled';
+      const coursesOk = cReq.status === 'fulfilled';
+      if (facultyOk) setFacultyList(Array.isArray(fReq.value.data) ? fReq.value.data : []);
+      if (coursesOk) setCourseList(Array.isArray(cReq.value.data) ? cReq.value.data : []);
+      setLastSyncedAt(new Date());
+    } catch (err) {
+      console.error('Master data load error:', err);
+      if (!silent) setReadApiError('Failed to load master data. Please check your connection.');
+    } finally {
+      if (!silent) setMasterLoading(false);
+    }
+  }, []);
+
   const foundFaculty = useMemo(
     () => facultyList.find(f => f.empId === empIdInput.trim()),
     [empIdInput, facultyList]

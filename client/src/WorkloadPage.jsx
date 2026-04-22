@@ -320,9 +320,9 @@ const WorkloadPage = ({ submissions }) => {
   const submission     = useMemo(() => submissions.find(s => s.empId === form.empId), [submissions, form.empId]);
   const prefCourses    = useMemo(() => {
     if (!submission || !submission.prefs?.length) return [];
-    return submission.prefs.map(cid => courseList.find(c => c.id === cid)).filter(Boolean);
+    return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid))).filter(Boolean);
   }, [submission, courseList]);
-  const selectedCourse = useMemo(() => courseList.find(c => c.id === +form.courseId), [form.courseId, courseList]);
+  const selectedCourse = useMemo(() => courseList.find(c => String(c.id) === String(form.courseId)), [form.courseId, courseList]);
   const sections       = sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
 
   const allocationPreviewRows = useMemo(() => {
@@ -418,14 +418,22 @@ const WorkloadPage = ({ submissions }) => {
     }
   };
 
-  // ── Course change: pre-fill course type and L/T/P values ──
+  // ── Course change: pre-fill course type, L/T/P, and AUTO-FETCH year from course ──
   const handleCourseChange = cid => {
     if (cid === '__other__') {
       setForm(prev => ({ ...prev, courseId: '__other__', courseType: 'Mandatory', manualL: '', manualT: '', manualP: '' }));
       return;
     }
     
-    const c = courseList.find(c => c.id === +cid);
+    // CRITICAL: Compare strings - API returns c.id as string
+    const c = courseList.find(c => String(c.id) === String(cid));
+    
+    // CRITICAL: Extract year from selected course and auto-populate
+    const courseYear = c?.year || 'I'; // Fallback to 'I' if no year found
+    
+    // Auto-select first available section for the determined year
+    const availableSections = sectionsConfig[courseYear] || YEAR_SECTIONS[courseYear] || ['1'];
+    const autoSection = availableSections?.[0] || '1';
     
     setForm(prev => ({
       ...prev,
@@ -434,7 +442,9 @@ const WorkloadPage = ({ submissions }) => {
       manualL:  c ? String(c.L) : '',
       manualT:  c ? String(c.T) : '',
       manualP:  c ? String(c.P) : '',
-      // Year is now manually selected by user
+      // AUTO-FETCH: Set year from course data and auto-select first section
+      year: courseYear,
+      section: autoSection,
     }));
   };
 
@@ -1219,7 +1229,7 @@ const WorkloadPage = ({ submissions }) => {
                     }}
                     autoComplete="off"
                   />
-                  {showFacultyDropdown && facultySearchInput && (
+                  {showFacultyDropdown && (
                     <div style={{
                       position: 'absolute',
                       top: '100%',
@@ -1229,13 +1239,18 @@ const WorkloadPage = ({ submissions }) => {
                       border: '1px solid #ddd',
                       borderTop: 'none',
                       borderRadius: '0 0 6px 6px',
-                      maxHeight: '200px',
+                      maxHeight: '250px',
                       overflowY: 'auto',
                       zIndex: 1000,
                       boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                     }}>
                       {filteredFaculty.length > 0 ? (
                         <>
+                          {facultySearchInput && (
+                            <div style={{ padding: '8px 12px', background: '#f3f4f6', fontSize: '11px', fontWeight: 600, color: '#666', borderBottom: '1px solid #e5e7eb' }}>
+                              Found {filteredFaculty.length} faculty
+                            </div>
+                          )}
                           {filteredFaculty.map(f => (
                             <div
                               key={f.empId}
@@ -1283,7 +1298,7 @@ const WorkloadPage = ({ submissions }) => {
                         </>
                       ) : (
                         <div style={{ padding: '10px 12px', color: '#999', fontSize: '12px' }}>
-                          No faculty found
+                          {facultySearchInput ? 'No faculty found' : 'Loading faculty...'}
                         </div>
                       )}
                     </div>
@@ -1570,18 +1585,25 @@ const WorkloadPage = ({ submissions }) => {
                 </>
               ) : (
                 // Manual year selection dropdown
-                <select
-                  value={form.year}
-                  onChange={e => setForm(p => ({
-                    ...p,
-                    year:    e.target.value,
-                    section: e.target.value !== '__other__'
-                      ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
-                      : p.section,
-                  }))}
-                >
-                  {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                <>
+                  <select
+                    value={form.year}
+                    onChange={e => setForm(p => ({
+                      ...p,
+                      year:    e.target.value,
+                      section: e.target.value !== '__other__'
+                        ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
+                        : p.section,
+                    }))}
+                  >
+                    {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {form.courseId && form.courseId !== '__other__' && selectedCourse && (
+                    <span className="wl-fsec-hint wl-fsec-info" style={{ marginTop: '4px' }}>
+                      ✓ Auto-fetched from {selectedCourse.subjectCode}
+                    </span>
+                  )}
+                </>
               )}
               {errors.year && <span className="wl-err">{errors.year}</span>}
             </div>
@@ -1865,9 +1887,9 @@ const WorkloadPage = ({ submissions }) => {
                           <td className="wl-td-num wl-td-manual">{w.manualT}</td>
                           <td className="wl-td-num wl-td-manual">{w.manualP}</td>
                           <td className="wl-td-num wl-td-total">{rowTotal}</td>
-                          <td className="wl-td-num">{w.capacityHours || '—'}</td>
+                          <td className="wl-td-num">{w.capacityHours > 0 ? w.capacityHours : '—'}</td>
                           <td style={{ color: isOverloaded ? '#dc2626' : '#16a34a', fontWeight: isOverloaded ? '600' : '400' }}>
-                            {!w.capacityHours ? '—' : (isOverloaded ? '⚠ OVERLOAD' : '✓ Normal')}
+                            {w.capacityHours > 0 ? (isOverloaded ? '⚠ OVERLOAD' : '✓ Normal') : '—'}
                           </td>
                           <td>
                             <div className="wl-actions">

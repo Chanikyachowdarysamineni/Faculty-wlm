@@ -548,6 +548,22 @@ router.post(
         L: 0, T: 0, P: 0, C: 0,
       };
 
+      // CRITICAL: Validate that the selected year matches the course's year
+      if (course && course.year) {
+        // Course has an explicit year - validate it matches the submitted year
+        const courseYear = normalizeYear(course.year);
+        if (courseYear !== normalizedYear) {
+          logger.warn('Year mismatch for course', { 
+            courseId, 
+            courseSubjectCode: course.subjectCode,
+            expectedYear: courseYear, 
+            submittedYear: normalizedYear, 
+            userId: req.user.id 
+          });
+          return sendError(res, `Course ${course.subjectCode} is for Year ${courseYear}, but you selected Year ${normalizedYear}. Please select the correct year.`, 400);
+        }
+      }
+
       // Backend validation for required fields (no nulls or missing)
       const requiredFields = [
         effectiveMember.empId, effectiveMember.name, effectiveMember.designation,
@@ -808,6 +824,23 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     if (!course && !courseNameOverride && nextCourseId > 0) {
       logger.warn('Course not found in workload update', { courseId: nextCourseId, userId: req.user.id });
       return sendNotFound(res, 'Course not found.');
+    }
+
+    // CRITICAL: Validate that the selected year matches the course's year
+    if (course && course.year) {
+      // Course has an explicit year - validate it matches the submitted year
+      const courseYear = normalizeYear(course.year);
+      const normalizedUpdateYear = normalizeYear(nextYear);
+      if (courseYear !== normalizedUpdateYear) {
+        logger.warn('Year mismatch for course in update', { 
+          courseId: nextCourseId, 
+          courseSubjectCode: course.subjectCode,
+          expectedYear: courseYear, 
+          submittedYear: normalizedUpdateYear, 
+          userId: req.user.id 
+        });
+        return sendError(res, `Course ${course.subjectCode} is for Year ${courseYear}, but you selected Year ${normalizedUpdateYear}. Please select the correct year.`, 400);
+      }
     }
 
     if (normalizedFacultyRole === 'Main Faculty') {
