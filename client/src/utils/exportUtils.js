@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -28,18 +28,35 @@ export const exportAsCSV = ({ fileName, columns, rows }) => {
 };
 
 export const exportAsExcel = ({ fileName, columns, rows, sheetName = 'Sheet1' }) => {
-  const mappedRows = rows.map((row) => {
-    const out = {};
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  
+  // Add headers
+  worksheet.columns = columns.map((c) => ({
+    header: c.header,
+    key: c.key,
+    width: 15,
+  }));
+  
+  // Add rows
+  rows.forEach((row) => {
+    const mappedRow = {};
     columns.forEach((c) => {
-      out[c.header] = safeValue(typeof c.value === 'function' ? c.value(row) : row[c.key]);
+      mappedRow[c.key] = safeValue(typeof c.value === 'function' ? c.value(row) : row[c.key]);
     });
-    return out;
+    worksheet.addRow(mappedRow);
   });
-
-  const worksheet = XLSX.utils.json_to_sheet(mappedRows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  XLSX.writeFile(workbook, fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`);
+  
+  // Style header row
+  worksheet.getRow(1).font = { bold: true };
+  
+  // Generate and download
+  workbook.xlsx.writeBuffer().then((buffer) => {
+    const blob = new Blob([buffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    downloadBlob(blob, fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`);
+  });
 };
 
 export const exportAsPDF = ({ fileName, title, columns, rows }) => {
