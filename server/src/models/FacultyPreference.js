@@ -51,7 +51,6 @@ const facultyPreferenceSchema = new mongoose.Schema(
 );
 
 // Index for efficient querying
-facultyPreferenceSchema.index({ empId: 1 }, { unique: true });
 facultyPreferenceSchema.index({ isSubmitted: 1 });
 
 module.exports = mongoose.model('FacultyPreference', facultyPreferenceSchema);

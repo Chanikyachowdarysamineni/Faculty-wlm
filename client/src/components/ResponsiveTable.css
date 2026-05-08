@@ -1,0 +1,297 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ * RESPONSIVE TABLE STYLES
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
+.responsive-table {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: var(--color-bg-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.responsive-table-empty {
+  padding: var(--space-2xl);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-base);
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-lg);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   DESKTOP TABLE VIEW
+════════════════════════════════════════════════════════════════════════ */
+
+.table-desktop {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.table-desktop thead {
+  background-color: var(--color-bg-secondary);
+}
+
+.table-desktop th {
+  padding: var(--space-md);
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.table-desktop td {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.table-desktop tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+.table-desktop tbody tr:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.table-desktop tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE TABLE VIEW - CARD LAYOUT
+════════════════════════════════════════════════════════════════════════ */
+
+.table-mobile {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.table-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.table-card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.table-card-label {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.table-card-value {
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+  word-break: break-word;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+════════════════════════════════════════════════════════════════════════ */
+
+/* Tablet: Horizontal scroll */
+@media (max-width: 1023px) {
+  .responsive-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-desktop {
+    min-width: 640px;
+  }
+}
+
+/* Mobile: Card layout */
+@media (max-width: 640px) {
+  .table-desktop {
+    display: none;
+  }
+
+  .table-mobile {
+    display: flex;
+  }
+
+  .responsive-table {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: transparent;
+  }
+
+  .table-card {
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* Very small devices: Adjust card layout */
+@media (max-width: 480px) {
+  .table-card {
+    padding: var(--space-md);
+    gap: var(--space-xs);
+  }
+
+  .table-card-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs);
+  }
+
+  .table-card-label {
+    font-size: var(--font-xs);
+    margin-bottom: var(--space-xs);
+  }
+
+  .table-card-value {
+    font-size: var(--font-sm);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   TABLE SCROLL INDICATOR
+════════════════════════════════════════════════════════════════════════ */
+
+.table-scroll-hint {
+  display: none;
+  text-align: center;
+  padding: var(--space-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+  background-color: var(--color-bg-secondary);
+}
+
+@media (max-width: 1023px) {
+  .responsive-table:not(:has(::-webkit-scrollbar)) .table-scroll-hint {
+    display: block;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   ACTION BUTTONS IN TABLES
+════════════════════════════════════════════════════════════════════════ */
+
+.table-actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.table-actions button {
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-sm);
+  min-height: 32px;
+}
+
+@media (max-width: 640px) {
+  .table-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .table-actions button {
+    flex: 1;
+    min-height: 40px;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SORTABLE TABLE HEADERS
+════════════════════════════════════════════════════════════════════════ */
+
+.table-sortable th {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-fast);
+}
+
+.table-sortable th:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.table-sort-indicator {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: var(--space-xs);
+  vertical-align: middle;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+}
+
+.table-sort-asc .table-sort-indicator {
+  border-bottom: 5px solid currentColor;
+}
+
+.table-sort-desc .table-sort-indicator {
+  border-top: 5px solid currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   STRIPED & HOVER EFFECTS
+════════════════════════════════════════════════════════════════════════ */
+
+.table-striped tbody tr:nth-child(odd) {
+  background-color: var(--color-bg-secondary);
+}
+
+.table-striped tbody tr:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.table-compact th,
+.table-compact td {
+  padding: var(--space-sm);
+  font-size: var(--font-xs);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   LOADING STATE
+════════════════════════════════════════════════════════════════════════ */
+
+.table-loading {
+  position: relative;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.table-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}

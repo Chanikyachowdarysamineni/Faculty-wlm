@@ -2,6 +2,22 @@
 
 A comprehensive web application for managing faculty workload allocation, course assignments, and workload preferences.
 
+## 🔒 HTTPS Support (Production-Ready)
+
+**All links are now HTTPS-configured for production deployment!**
+
+- ✅ All API endpoints use HTTPS
+- ✅ WebSocket connections use WSS (secure WebSocket)
+- ✅ SSL certificate configuration included
+- ✅ Security headers configured (HSTS, CSP, etc.)
+- ✅ Let's Encrypt support (auto-renewal)
+
+For production deployment, see:
+- **[HTTPS_SETUP_GUIDE.md](HTTPS_SETUP_GUIDE.md)** - Detailed HTTPS setup instructions
+- **[PRODUCTION_HTTPS_CHECKLIST.md](PRODUCTION_HTTPS_CHECKLIST.md)** - Pre-deployment checklist
+
+For local development with HTTP, use the dev configurations in `.env.development`
+
 ## ⚡ Quick Start with Docker
 
 **Fastest way to get running:**

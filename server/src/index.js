@@ -26,6 +26,9 @@ if (process.env.MONGO_URI?.includes('mongodb') && process.env.NODE_ENV !== 'prod
 }
 
 const express      = require('express');
+const http         = require('http');
+const https        = require('https');
+const fs           = require('fs');
 const cors         = require('cors');
 const morgan       = require('morgan');
 const helmet       = require('helmet');
@@ -121,21 +124,34 @@ const configuredOrigins = (process.env.CLIENT_ORIGIN || '')
   .filter(Boolean);
 
 const baselineAllowedOrigins = [
+  // HTTP (legacy)
   'http://faculty-workload-management-cse-client.onrender.com',
   'http://faculty-workload-management.onrender.com',
   'http://wlm-client.onrender.com',
   'http://faculty-workload-management-1.onrender.com',
-  // Production server
-  'http://160.187.169.41',
+  // HTTPS (production)
+  'https://faculty-workload-management-cse-client.onrender.com',
+  'https://faculty-workload-management.onrender.com',
+  'https://wlm-client.onrender.com',
+  'https://faculty-workload-management-1.onrender.com',
+  'https://160.187.169.41',
   // Always allow localhost for local development (all routes require JWT auth anyway)
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
   'http://localhost:3003',
+  'https://localhost:3000',
+  'https://localhost:3001',
+  'https://localhost:3002',
+  'https://localhost:3003',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'http://127.0.0.1:3002',
   'http://127.0.0.1:3003',
+  'https://127.0.0.1:3000',
+  'https://127.0.0.1:3001',
+  'https://127.0.0.1:3002',
+  'https://127.0.0.1:3003',
 ];
 
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...baselineAllowedOrigins]));
@@ -292,20 +308,62 @@ process.on('uncaughtException', (err) => {
     { upsert: true }
   );
 
-  const server = app.listen(PORT, () => {
-    console.log(`\n✅  WLM Server running on http://localhost:${PORT}`);
-    console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
-    console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
-    console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
-    console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
-    console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
-    console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
-    console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
-    console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
+  // Determine SSL certificate paths
+  const sslKeyPath = process.env.SSL_KEY_PATH || '/etc/ssl/private/your-domain.key';
+  const sslCertPath = process.env.SSL_CERT_PATH || '/etc/ssl/certs/your-domain.crt';
+  let hasSSL = fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath);
 
-    // Initialize WebSocket server
-    WebSocketHandler.initialize(server);
-  });
+  let server;
+
+  if (hasSSL) {
+    // Start HTTPS server with SSL certificates
+    try {
+      server = https.createServer(
+        {
+          key: fs.readFileSync(sslKeyPath),
+          cert: fs.readFileSync(sslCertPath),
+        },
+        app
+      );
+
+      server.listen(PORT, () => {
+        console.log(`\n✅  WLM Server running on https://localhost:${PORT}`);
+        console.log(`   Auth:        POST https://localhost:${PORT}/deva/auth/login`);
+        console.log(`   Faculty:     GET  https://localhost:${PORT}/deva/faculty`);
+        console.log(`   Courses:     GET  https://localhost:${PORT}/deva/courses`);
+        console.log(`   Submissions: GET  https://localhost:${PORT}/deva/submissions`);
+        console.log(`   Workloads:   GET  https://localhost:${PORT}/deva/workloads`);
+        console.log(`   Stats:       GET  https://localhost:${PORT}/deva/stats`);
+        console.log(`   Health:      GET  https://localhost:${PORT}/deva/health`);
+        console.log(`   WebSocket:   WSS  wss://localhost:${PORT}/ws\n`);
+
+        // Initialize WebSocket server
+        WebSocketHandler.initialize(server);
+      });
+    } catch (certErr) {
+      console.warn('⚠️  Failed to load SSL certificates:', certErr.message);
+      console.log('Falling back to HTTP server\n');
+      hasSSL = false;
+    }
+  }
+
+  // Start HTTP server if SSL not available
+  if (!hasSSL) {
+    server = app.listen(PORT, () => {
+      console.log(`\n✅  WLM Server running on http://localhost:${PORT} (development mode)`);
+      console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
+      console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
+      console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
+      console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
+      console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
+      console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
+      console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
+      console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
+
+      // Initialize WebSocket server
+      WebSocketHandler.initialize(server);
+    });
+  }
 
   // Render's load balancer holds connections for 75 s+; Node defaults to 5 s,
   // which makes Render send requests on already-closed sockets → ERR_CONNECTION_CLOSED.

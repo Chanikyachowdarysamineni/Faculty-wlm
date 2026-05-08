@@ -2,9 +2,12 @@
  * Express server to serve React build with correct MIME types
  * Serves from /csefaculty base path for production deployment
  * Required for Render deployment when using Web Service instead of Static hosting
+ * Now supports both HTTP and HTTPS
  */
 
 const express = require('express');
+const https = require('https');
+const fs = require('fs');
 const path = require('path');
 const compression = require('compression');
 
@@ -92,8 +95,31 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Frontend server listening on port ${PORT}`);
-  console.log(`   URL: http://localhost:${PORT}/csefaculty`);
-  console.log(`   Build directory: ${BUILD_DIR}`);
-});
+// Start server (HTTP or HTTPS based on SSL certificate availability)
+const sslKeyPath = process.env.SSL_KEY_PATH || '/etc/ssl/private/your-domain.key';
+const sslCertPath = process.env.SSL_CERT_PATH || '/etc/ssl/certs/your-domain.crt';
+
+if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+  // Start HTTPS server if certificates exist
+  const httpsOptions = {
+    key: fs.readFileSync(sslKeyPath),
+    cert: fs.readFileSync(sslCertPath),
+  };
+  
+  https.createServer(httpsOptions, app).listen(PORT, '0.0.0.0', () => {
+    console.log(`\n✅ Frontend server listening on port ${PORT} (HTTPS)`);
+    console.log(`   URL: https://localhost:${PORT}/csefaculty`);
+    console.log(`   Build directory: ${BUILD_DIR}\n`);
+  });
+} else {
+  // Fallback to HTTP if certificates not found
+  console.warn('\n⚠️  SSL certificates not found. Starting in HTTP mode.');
+  console.warn(`   Expected: ${sslKeyPath} and ${sslCertPath}`);
+  console.warn('   For HTTPS, set SSL_KEY_PATH and SSL_CERT_PATH environment variables\n');
+  
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Frontend server listening on port ${PORT} (HTTP)`);
+    console.log(`   URL: http://localhost:${PORT}/csefaculty`);
+    console.log(`   Build directory: ${BUILD_DIR}\n`);
+  });
+}

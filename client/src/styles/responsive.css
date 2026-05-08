@@ -1,0 +1,824 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ * COMPREHENSIVE MOBILE-FIRST RESPONSIVE DESIGN SYSTEM
+ * ════════════════════════════════════════════════════════════════════════
+ * 
+ * Responsive breakpoints:
+ * - Mobile (XS): 0-480px - Small phones
+ * - Mobile+ (SM): 480-640px - Large phones
+ * - Tablet (MD): 640-1024px - Tablets & landscape phones
+ * - Desktop (LG): 1024-1440px - Desktops
+ * - Wide (XL): 1440px+ - Large screens
+ * 
+ * Mobile-first approach: Start with mobile, add features for larger screens
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
+/* ════════════════════════════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES - Responsive Scales
+════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── RESPONSIVE TYPOGRAPHY ─────────────────────────────────────────── */
+  --font-xs: clamp(10px, 2vw, 12px);
+  --font-sm: clamp(12px, 2.5vw, 14px);
+  --font-base: clamp(13px, 3vw, 16px);
+  --font-lg: clamp(15px, 3.5vw, 18px);
+  --font-xl: clamp(18px, 4vw, 20px);
+  --font-2xl: clamp(20px, 4.5vw, 24px);
+  --font-3xl: clamp(24px, 5vw, 28px);
+  --font-4xl: clamp(28px, 6vw, 32px);
+
+  /* Line heights for different text sizes */
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.75;
+  --lh-loose: 2;
+
+  /* ─── RESPONSIVE SPACING ─────────────────────────────────────────────── */
+  --space-xs: clamp(4px, 1vw, 6px);
+  --space-sm: clamp(6px, 1.5vw, 10px);
+  --space-md: clamp(10px, 2vw, 14px);
+  --space-lg: clamp(14px, 2.5vw, 18px);
+  --space-xl: clamp(18px, 3vw, 24px);
+  --space-2xl: clamp(24px, 3.5vw, 32px);
+  --space-3xl: clamp(32px, 4vw, 40px);
+  --space-4xl: clamp(40px, 5vw, 48px);
+
+  /* ─── COMPONENT DIMENSIONS ───────────────────────────────────────────── */
+  --topbar-height: clamp(56px, 10vw, 64px);
+  --sidebar-width-tablet: 220px;
+  --sidebar-width-desktop: 280px;
+  --navbar-height: 60px;
+
+  /* Input heights (touch-friendly on mobile) */
+  --input-height: clamp(40px, 10vw, 44px);
+  --button-height: clamp(40px, 10vw, 44px);
+  --icon-btn-size: clamp(36px, 9vw, 40px);
+
+  /* ─── BORDER RADIUS ──────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* ─── TRANSITIONS & ANIMATIONS ───────────────────────────────────────── */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+
+  /* ─── Z-INDEX SCALE ──────────────────────────────────────────────────── */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal: 400;
+  --z-tooltip: 500;
+
+  /* ─── GAP & GRID ─────────────────────────────────────────────────────── */
+  --gap-xs: clamp(6px, 1vw, 8px);
+  --gap-sm: clamp(8px, 1.5vw, 12px);
+  --gap-md: clamp(12px, 2vw, 16px);
+  --gap-lg: clamp(16px, 2.5vw, 20px);
+
+  /* ─── COLORS ────────────────────────────────────────────────────────── */
+  --color-primary: #3b82f6;
+  --color-primary-dark: #1e40af;
+  --color-secondary: #8b5cf6;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+  
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8fafc;
+  --color-bg-tertiary: #f1f5f9;
+  
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-tertiary: #94a3b8;
+  
+  --color-border: #e2e8f0;
+  --color-border-dark: #cbd5e1;
+
+  /* ─── SHADOWS ────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+
+  /* ─── MAX CONTENT WIDTH ───────────────────────────────────────────────── */
+  --max-width: min(100vw, 1400px);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   GLOBAL RESET & BASE STYLES
+════════════════════════════════════════════════════════════════════════ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: var(--font-base);
+  line-height: var(--lh-normal);
+}
+
+/* Prevent font size increase on iOS */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE TYPOGRAPHY
+════════════════════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  margin-bottom: var(--space-lg);
+}
+
+h1 {
+  font-size: var(--font-4xl);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: var(--font-3xl);
+  letter-spacing: -0.015em;
+}
+
+h3 {
+  font-size: var(--font-2xl);
+}
+
+h4 {
+  font-size: var(--font-xl);
+}
+
+h5 {
+  font-size: var(--font-lg);
+}
+
+h6 {
+  font-size: var(--font-base);
+}
+
+p {
+  margin-bottom: var(--space-md);
+  line-height: var(--lh-normal);
+}
+
+small,
+.text-sm {
+  font-size: var(--font-sm);
+  line-height: var(--lh-normal);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   FLEXIBLE IMAGES & MEDIA
+════════════════════════════════════════════════════════════════════════ */
+
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+picture {
+  display: block;
+  overflow: hidden;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE CONTAINER & LAYOUT UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+/* Main container with responsive padding */
+.container,
+.page-wrapper,
+.dash-wrapper {
+  width: 100%;
+  max-width: var(--max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
+}
+
+/* Tablet and up */
+@media (min-width: 640px) {
+  .container,
+  .page-wrapper,
+  .dash-wrapper {
+    padding-left: var(--space-lg);
+    padding-right: var(--space-lg);
+  }
+}
+
+/* Desktop and up */
+@media (min-width: 1024px) {
+  .container,
+  .page-wrapper,
+  .dash-wrapper {
+    padding-left: var(--space-xl);
+    padding-right: var(--space-xl);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE FLEXBOX UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+/* Stack on mobile, row on tablet+ */
+.flex-col-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+@media (min-width: 640px) {
+  .flex-col-mobile {
+    flex-direction: row;
+  }
+}
+
+/* Responsive gap */
+.gap-xs { gap: var(--gap-xs); }
+.gap-sm { gap: var(--gap-sm); }
+.gap-md { gap: var(--gap-md); }
+.gap-lg { gap: var(--gap-lg); }
+
+/* Justify content */
+.justify-start { justify-content: flex-start; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-around { justify-content: space-around; }
+
+/* Align items */
+.items-start { align-items: flex-start; }
+.items-center { align-items: center; }
+.items-end { align-items: flex-end; }
+.items-stretch { align-items: stretch; }
+
+/* Flex basis */
+.flex-1 { flex: 1; }
+.flex-auto { flex: auto; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE GRID UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.grid {
+  display: grid;
+  gap: var(--gap-md);
+}
+
+/* Grid columns - mobile-first then scale up */
+.grid-cols-1 { grid-template-columns: 1fr; }
+.grid-cols-2-mobile { grid-template-columns: repeat(2, 1fr); }
+
+@media (min-width: 640px) {
+  .grid-cols-2-tablet { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  .grid-cols-3-desktop { grid-template-columns: repeat(3, 1fr); }
+  .grid-cols-4-desktop { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE SPACING UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.p-xs { padding: var(--space-xs); }
+.p-sm { padding: var(--space-sm); }
+.p-md { padding: var(--space-md); }
+.p-lg { padding: var(--space-lg); }
+.p-xl { padding: var(--space-xl); }
+
+.px-xs { padding-left: var(--space-xs); padding-right: var(--space-xs); }
+.px-sm { padding-left: var(--space-sm); padding-right: var(--space-sm); }
+.px-md { padding-left: var(--space-md); padding-right: var(--space-md); }
+.px-lg { padding-left: var(--space-lg); padding-right: var(--space-lg); }
+
+.py-xs { padding-top: var(--space-xs); padding-bottom: var(--space-xs); }
+.py-sm { padding-top: var(--space-sm); padding-bottom: var(--space-sm); }
+.py-md { padding-top: var(--space-md); padding-bottom: var(--space-md); }
+.py-lg { padding-top: var(--space-lg); padding-bottom: var(--space-lg); }
+
+.m-xs { margin: var(--space-xs); }
+.m-sm { margin: var(--space-sm); }
+.m-md { margin: var(--space-md); }
+.m-lg { margin: var(--space-lg); }
+
+.mx-auto { margin-left: auto; margin-right: auto; }
+.my-auto { margin-top: auto; margin-bottom: auto; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE SIZING UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.w-full { width: 100%; }
+.w-screen { width: 100vw; }
+.h-full { height: 100%; }
+.h-screen { height: 100vh; }
+
+.min-h-screen { min-height: 100vh; }
+.min-h-full { min-height: 100%; }
+
+.max-w-full { max-width: 100%; }
+.max-w-sm { max-width: 480px; }
+.max-w-md { max-width: 640px; }
+.max-w-lg { max-width: 1024px; }
+.max-w-xl { max-width: 1200px; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DISPLAY UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.block { display: block; }
+.inline-block { display: inline-block; }
+.inline { display: inline; }
+.hidden { display: none !important; }
+
+/* Mobile-first show/hide */
+.show-mobile { display: block; }
+.hide-mobile { display: none; }
+
+@media (min-width: 640px) {
+  .show-mobile { display: none; }
+  .hide-mobile { display: block; }
+}
+
+.show-tablet { display: none; }
+
+@media (min-width: 640px) {
+  .show-tablet { display: block; }
+}
+
+@media (min-width: 1024px) {
+  .show-tablet { display: none; }
+}
+
+.show-desktop { display: none; }
+
+@media (min-width: 1024px) {
+  .show-desktop { display: block; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE TEXT UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.text-xs { font-size: var(--font-xs); }
+.text-sm { font-size: var(--font-sm); }
+.text-base { font-size: var(--font-base); }
+.text-lg { font-size: var(--font-lg); }
+.text-xl { font-size: var(--font-xl); }
+
+.font-light { font-weight: 300; }
+.font-normal { font-weight: 400; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+.uppercase { text-transform: uppercase; }
+.lowercase { text-transform: lowercase; }
+.capitalize { text-transform: capitalize; }
+
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE FORM ELEMENTS
+════════════════════════════════════════════════════════════════════════ */
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-base);
+  transition: var(--transition-fast);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+button {
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-md);
+  border: none;
+  font-size: var(--font-base);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch-friendly buttons */
+@media (max-width: 640px) {
+  button {
+    padding: var(--space-md) var(--space-lg);
+    min-height: var(--button-height);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE TABLES
+════════════════════════════════════════════════════════════════════════ */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+th, td {
+  padding: var(--space-md);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  font-weight: 600;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Horizontal scroll for tables on mobile */
+@media (max-width: 640px) {
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive table {
+    min-width: 640px;
+  }
+}
+
+/* Stack table rows on very small screens */
+@media (max-width: 480px) {
+  .table-stack tr {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--color-border);
+    padding: var(--space-md);
+  }
+
+  .table-stack td {
+    padding: var(--space-sm) 0;
+    border: none;
+  }
+
+  .table-stack td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    margin-right: var(--space-sm);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE CARDS & BOXES
+════════════════════════════════════════════════════════════════════════ */
+
+.card {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-compact {
+  padding: var(--space-md);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE SIDEBAR & NAVIGATION
+════════════════════════════════════════════════════════════════════════ */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background-color: var(--color-bg-primary);
+  z-index: var(--z-fixed);
+  transform: translateX(-100%);
+  transition: transform var(--transition-normal);
+}
+
+.sidebar.active {
+  transform: translateX(0);
+}
+
+@media (min-width: 1024px) {
+  .sidebar {
+    position: relative;
+    width: var(--sidebar-width-desktop);
+    height: 100vh;
+    transform: translateX(0);
+  }
+}
+
+/* Sidebar overlay on mobile */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: calc(var(--z-fixed) - 1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+
+.sidebar.active ~ .sidebar-overlay,
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE MODAL & DIALOG
+════════════════════════════════════════════════════════════════════════ */
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+
+.modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp var(--transition-normal);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINT UTILITIES
+════════════════════════════════════════════════════════════════════════ */
+
+/* Mobile only (< 480px) */
+@media (max-width: 479px) {
+  .mobile-only { display: block; }
+  .not-mobile { display: none; }
+}
+
+/* Small phones (480px - 640px) */
+@media (min-width: 480px) and (max-width: 639px) {
+  .sm-up { display: block; }
+  .before-sm { display: none; }
+}
+
+/* Tablets (640px - 1024px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .md-up { display: block; }
+  .before-md { display: none; }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .lg-up { display: block; }
+  .before-lg { display: none; }
+}
+
+/* Wide screens (1440px+) */
+@media (min-width: 1440px) {
+  .xl-up { display: block; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE PRINT STYLES
+════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  body {
+    background-color: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-break {
+    page-break-after: always;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITY & TOUCH SUPPORT
+════════════════════════════════════════════════════════════════════════ */
+
+/* Increase touch target sizes */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  a,
+  [role="button"] {
+    min-width: 44px;
+    min-height: 44px;
+    padding: var(--space-md);
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
+
+  .card {
+    background-color: #334155;
+    border-color: #475569;
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: #334155;
+    color: #f1f5f9;
+    border-color: #475569;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   UTILITY ANIMATIONS
+════════════════════════════════════════════════════════════════════════ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideInTop {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideInBottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fadeIn { animation: fadeIn var(--transition-normal); }
+.animate-slideIn { animation: slideInBottom var(--transition-normal); }
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLING
+════════════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-dark);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-tertiary);
+}

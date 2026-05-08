@@ -2,15 +2,15 @@
 // Frontend now serves from /csefaculty/ prefix for consistency with production.
 // This avoids CORS issues when running the React app locally against the
 // deployed backend. Only active during `npm start` (development mode).
-// Routes are HTTP-only for production compatibility.
+// Routes are HTTPS for production compatibility.
 
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function (app) {
-  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const backendUrl = process.env.REACT_APP_API_URL || 'https://localhost:5000';
 
   // ─ Production + local route: /csefaculty/deva → /deva ────────────
-  // Used by production frontend at http://160.187.169.41/csefaculty/
+  // Used by production frontend at https://160.187.169.41/csefaculty/
   // Also used for local development at localhost:3000/csefaculty/
   // Converts /csefaculty/deva/* to /deva/* on backend
   app.use(

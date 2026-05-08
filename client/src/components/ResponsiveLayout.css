@@ -1,0 +1,356 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ * RESPONSIVE LAYOUT STYLES
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
+.responsive-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--color-bg-secondary);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE TOPBAR
+════════════════════════════════════════════════════════════════════════ */
+
+.responsive-topbar {
+  position: sticky;
+  top: 0;
+  height: var(--topbar-height);
+  background-color: var(--color-bg-primary);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-md);
+  z-index: var(--z-sticky);
+  transition: box-shadow var(--transition-fast);
+}
+
+.responsive-topbar.scrolled {
+  box-shadow: var(--shadow-md);
+}
+
+@media (min-width: 1024px) {
+  .responsive-topbar {
+    padding-left: var(--space-lg);
+    padding-right: var(--space-lg);
+  }
+}
+
+.topbar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--space-md);
+}
+
+.topbar-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Hide hamburger on desktop */
+@media (min-width: 1024px) {
+  .hamburger-btn {
+    display: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   HAMBURGER BUTTON
+════════════════════════════════════════════════════════════════════════ */
+
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 44px;
+  height: 44px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--transition-fast);
+}
+
+.hamburger-btn:active {
+  transform: scale(0.95);
+}
+
+.hamburger-line {
+  width: 100%;
+  height: 2px;
+  background-color: var(--color-text-primary);
+  border-radius: 1px;
+  transition: all var(--transition-fast);
+  transform-origin: center;
+}
+
+.hamburger-btn.open .hamburger-line:nth-child(1) {
+  transform: rotate(45deg) translate(8px, 8px);
+}
+
+.hamburger-btn.open .hamburger-line:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-btn.open .hamburger-line:nth-child(3) {
+  transform: rotate(-45deg) translate(7px, -7px);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MAIN LAYOUT
+════════════════════════════════════════════════════════════════════════ */
+
+.responsive-main-layout {
+  display: flex;
+  flex: 1;
+  position: relative;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE SIDEBAR
+════════════════════════════════════════════════════════════════════════ */
+
+.responsive-sidebar {
+  /* Mobile: Fixed, full-width, off-canvas */
+  position: fixed;
+  top: var(--topbar-height);
+  left: 0;
+  width: 100%;
+  max-width: 280px;
+  height: calc(100vh - var(--topbar-height));
+  background-color: var(--color-bg-primary);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: var(--z-fixed);
+  transform: translateX(-100%);
+  transition: transform var(--transition-normal);
+  box-shadow: var(--shadow-lg);
+}
+
+.responsive-sidebar.active {
+  transform: translateX(0);
+}
+
+/* Tablet: Visible sidebar */
+@media (min-width: 640px) {
+  .responsive-sidebar {
+    max-width: var(--sidebar-width-tablet);
+    position: relative;
+    top: 0;
+    transform: translateX(0);
+    box-shadow: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+/* Desktop: Fixed width sidebar */
+@media (min-width: 1024px) {
+  .responsive-sidebar {
+    max-width: var(--sidebar-width-desktop);
+    position: relative;
+    top: auto;
+    height: auto;
+    border-bottom: none;
+  }
+}
+
+/* Sidebar overlay on mobile */
+.sidebar-overlay {
+  position: fixed;
+  top: var(--topbar-height);
+  left: 0;
+  width: 100%;
+  height: calc(100vh - var(--topbar-height));
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: calc(var(--z-fixed) - 1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-normal);
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hide overlay on tablet and up */
+@media (min-width: 640px) {
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MAIN CONTENT AREA
+════════════════════════════════════════════════════════════════════════ */
+
+.responsive-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  background-color: var(--color-bg-secondary);
+}
+
+/* Responsive padding for content */
+.responsive-content {
+  padding-top: var(--space-lg);
+  padding-bottom: var(--space-lg);
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
+}
+
+@media (min-width: 640px) {
+  .responsive-content {
+    padding-left: var(--space-lg);
+    padding-right: var(--space-lg);
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-content {
+    padding-left: var(--space-xl);
+    padding-right: var(--space-xl);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SIDEBAR NAVIGATION ITEMS
+════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  font-size: var(--font-base);
+  text-align: left;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sidebar-nav-item:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.sidebar-nav-item.active {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--color-primary);
+  font-weight: 600;
+  border-left: 3px solid var(--color-primary);
+}
+
+.sidebar-nav-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-md);
+}
+
+.sidebar-nav-item-text {
+  flex: 1;
+  font-size: var(--font-base);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BEHAVIOR ADJUSTMENTS
+════════════════════════════════════════════════════════════════════════ */
+
+/* Ensure main layout spans full height */
+@media (max-height: 600px) {
+  .responsive-main-layout {
+    min-height: 100vh;
+  }
+}
+
+/* Landscape mode on mobile - reduce top bar height */
+@media (max-height: 500px) {
+  .responsive-topbar {
+    height: 50px;
+  }
+
+  .responsive-sidebar {
+    top: 50px;
+    height: calc(100vh - 50px);
+  }
+
+  .sidebar-overlay {
+    top: 50px;
+    height: calc(100vh - 50px);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLING FOR SIDEBAR
+════════════════════════════════════════════════════════════════════════ */
+
+.responsive-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.responsive-sidebar::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.responsive-sidebar::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.responsive-sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-border-dark);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITY
+════════════════════════════════════════════════════════════════════════ */
+
+.hamburger-btn:focus,
+.sidebar-nav-item:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .responsive-sidebar,
+  .sidebar-overlay,
+  .hamburger-btn,
+  .sidebar-nav-item {
+    transition: none;
+  }
+}

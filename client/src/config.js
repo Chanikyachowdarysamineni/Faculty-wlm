@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = 'http://160.187.169.41';
+const DEFAULT_API_BASE = 'https://160.187.169.41';
 
 const LEGACY_API_HOSTS = [
 	'http://wlm-server.onrender.com',
@@ -22,12 +22,13 @@ const normalizeApiBase = (value) => {
 const resolveApiBase = () => {
 	const envApi = normalizeApiBase(process.env.REACT_APP_API_URL);
 	if (envApi) return envApi;
-	if (process.env.REACT_APP_USE_LOCAL_API === 'true') return 'http://localhost:5000';
-	// In development, use relative paths so CRA's dev proxy handles the request
-	// (avoids CORS issues when connecting to the production server locally).
-	// This allows setupProxy.js to intercept and forward requests to the backend.
-	if (process.env.NODE_ENV === 'development') return '/csefaculty';
-	// Production uses HTTP-only at /csefaculty base path
+	// In development, connect directly to HTTP backend with proxy
+	if (process.env.NODE_ENV === 'development') {
+		if (process.env.REACT_APP_USE_LOCAL_API === 'true') return 'http://localhost:5000';
+		// Use setupProxy.js to intercept /csefaculty/* and forward to backend
+		return '/csefaculty';
+	}
+	// Production uses HTTPS at /csefaculty base path
 	return DEFAULT_API_BASE + '/csefaculty';
 };
 
