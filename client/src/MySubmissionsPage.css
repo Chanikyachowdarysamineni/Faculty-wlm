@@ -2,10 +2,15 @@
    MY SUBMISSIONS PAGE
 ════════════════════════════════════════════════ */
 .ms-wrapper {
-  padding: 28px 32px 72px;
+  padding: 28px 0 72px;
   font-family: 'Poppins', sans-serif;
-  max-width: 1000px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  background: linear-gradient(135deg, #f9fafb 0%, #f4f6fb 50%, #eff3f8 100%);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Page header ── */

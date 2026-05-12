@@ -124,18 +124,13 @@ const configuredOrigins = (process.env.CLIENT_ORIGIN || '')
   .filter(Boolean);
 
 const baselineAllowedOrigins = [
-  // HTTP (legacy)
-  'http://faculty-workload-management-cse-client.onrender.com',
-  'http://faculty-workload-management.onrender.com',
-  'http://wlm-client.onrender.com',
-  'http://faculty-workload-management-1.onrender.com',
-  // HTTPS (production)
+  // HTTPS (production secure)
   'https://faculty-workload-management-cse-client.onrender.com',
   'https://faculty-workload-management.onrender.com',
   'https://wlm-client.onrender.com',
   'https://faculty-workload-management-1.onrender.com',
   'https://160.187.169.41',
-  // Always allow localhost for local development (all routes require JWT auth anyway)
+  // Local development (localhost for testing)
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
@@ -152,6 +147,11 @@ const baselineAllowedOrigins = [
   'https://127.0.0.1:3001',
   'https://127.0.0.1:3002',
   'https://127.0.0.1:3003',
+  // Local network development (192.168.x.x)
+  'http://192.168.1.36:3000',
+  'http://192.168.1.36:3001',
+  'http://192.168.1.36:3002',
+  'http://192.168.1.36:3003',
 ];
 
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...baselineAllowedOrigins]));
@@ -163,23 +163,50 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'http:'],
+      imgSrc: ["'self'", 'data:', process.env.NODE_ENV === 'production' ? 'https:' : 'http:'],
+      connectSrc: ["'self'", process.env.NODE_ENV === 'production' ? 'https:' : 'http:'],
     },
   },
-  hsts: false,
+  hsts: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  } : false,
+  referrerPolicy: { policy: 'no-referrer' },
 }));
 
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    // Allow all local network development IPs (192.168.x.x) in development
+    if (process.env.NODE_ENV !== 'production' && origin?.match(/^https?:\/\/192\.168\.\d+\.\d+:\d+$/)) {
+      return cb(null, true);
+    }
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
 }));
 app.set('trust proxy', 1);
 
-// ── HTTP Only in Production (No HTTPS Redirect) ───────────────────
-// Using HTTP only - no redirect to HTTPS
+// ── HTTPS Enforcement Middleware (Production) ──────────────────────
+// Redirect HTTP to HTTPS and enforce secure headers
+if (process.env.NODE_ENV === 'production') {
+  // Redirect HTTP to HTTPS
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      res.redirect(301, `https://${req.header('host')}${req.url}`);
+    } else {
+      next();
+    }
+  });
+  
+  // Add HSTS (HTTP Strict Transport Security) header
+  app.use(helmet.hsts({
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true,
+  }));
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

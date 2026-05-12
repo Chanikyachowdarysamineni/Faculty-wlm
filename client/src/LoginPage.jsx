@@ -26,11 +26,14 @@ const LoginPage = ({ onLogin }) => {
     }
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/deva/auth/login`, {
+      const loginUrl = `${API}/deva/auth/login`;
+      console.log('[Login] Making request to:', loginUrl);
+      const res  = await fetch(loginUrl, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ employeeId: employeeId.trim(), password }),
       });
+      console.log('[Login] Response status:', res.status, 'URL:', res.url);
       const data = await res.json();
       if (!data.success) {
         setError(data.message || 'Login failed.');
@@ -43,7 +46,8 @@ const LoginPage = ({ onLogin }) => {
       } else {
         setError('Invalid login response. Please try again.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[Login] Error:', err.message, err);
       setError('Could not reach server. Please check your connection.');
     } finally {
       setLoading(false);

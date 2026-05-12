@@ -58,7 +58,7 @@ const AuditLogPage = () => {
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: '24px 32px', width: '100%', maxWidth: 'none', margin: '0' }}>
       <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 20, color: '#1e293b' }}>
         Audit Log Viewer
       </h2>

@@ -155,14 +155,14 @@ const AdminOverview = ({ user }) => {
   const fetchDashboardData = async () => {
     try {
       // Fetch faculty count
-      const facultyRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/deva'}/faculty`);
+      const facultyRes = await fetch(`${process.env.REACT_APP_API_URL || 'https://160.187.169.41/deva'}/faculty`);
       if (facultyRes.ok) {
         const facultyData = await facultyRes.json();
         setFacultyCount(facultyData.length);
       }
 
       // Fetch workload to find overloaded faculty
-      const workloadRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/deva'}/workloads`);
+      const workloadRes = await fetch(`${process.env.REACT_APP_API_URL || 'https://160.187.169.41/deva'}/workloads`);
       if (workloadRes.ok) {
         const workloadData = await workloadRes.json();
         const overloaded = workloadData.filter(w => w.totalLoad > w.maxLoad);

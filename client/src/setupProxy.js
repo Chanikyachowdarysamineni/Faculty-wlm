@@ -7,7 +7,9 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function (app) {
-  const backendUrl = process.env.REACT_APP_API_URL || 'https://localhost:5000';
+  // Development: proxy /csefaculty/* requests to local HTTP backend
+  // This is only used during 'npm start' (React dev server, not production)
+  const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   // ─ Production + local route: /csefaculty/deva → /deva ────────────
   // Used by production frontend at https://160.187.169.41/csefaculty/

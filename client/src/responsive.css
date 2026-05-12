@@ -1,17 +1,27 @@
 /* Global responsive layer for all pages and screen types */
 
 :root {
-  --app-space-x: clamp(12px, 2vw, 32px);
-  --app-space-y: clamp(18px, 2.2vw, 34px);
+  --app-space-x: clamp(12px, 2vw, 28px);
+  --app-space-y: clamp(16px, 2vw, 28px);
   --app-title-size: clamp(18px, 2vw, 24px);
   --app-control-min-h: 38px;
+  --page-bg: linear-gradient(135deg, #f0f4f8 0%, #f4f6fb 50%, #f8f9fc 100%);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-  width: 100%;
+  width: 100vw;
+  height: 100vh;
   max-width: 100%;
+  margin: 0;
+  padding: 0;
   overflow-x: hidden;
 }
 
@@ -32,10 +42,34 @@ canvas {
 .pp-wrapper,
 .ap-wrapper,
 .efp-wrapper {
-  width: min(100%, 1720px);
-  margin-inline: auto;
-  padding-left: var(--app-space-x);
-  padding-right: var(--app-space-x);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Inner content padding helper */
+.dash-main > *,
+.wl-wrapper > *,
+.cp-wrapper > *,
+.ff-wrapper > *,
+.fp-wrapper > *,
+.ms-wrapper > *,
+.mwl-wrapper > *,
+.pp-wrapper > *,
+.ap-wrapper > *,
+.efp-wrapper > * {
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+.dash-main > .dash-heading,
+.fp-topbar,
+.cp-topbar,
+.wl-topbar,
+.ap-header {
+  padding-left: 32px;
+  padding-right: 32px;
 }
 
 .dash-heading,
@@ -551,10 +585,250 @@ canvas {
   }
 }
 
+/* ── Large desktop (1440px - 1920px) ── */
+@media (min-width: 1440px) and (max-width: 1920px) {
+  :root {
+    --app-space-x: 16px;
+    --app-space-y: 24px;
+    --app-title-size: 26px;
+    --app-control-min-h: 42px;
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    padding-left: var(--app-space-x);
+    padding-right: var(--app-space-x);
+  }
+
+  .wl-heading,
+  .cp-heading,
+  .fp-heading,
+  .ff-heading,
+  .ap-heading,
+  .ms-page-title,
+  .mwl-title,
+  .pp-name,
+  .efp-title,
+  .dash-heading {
+    font-size: var(--app-title-size);
+    margin-bottom: 22px;
+  }
+
+  .wl-topbar,
+  .cp-topbar,
+  .fp-topbar,
+  .ff-topbar,
+  .ap-topbar {
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search,
+  .ap-search,
+  .ms-search,
+  .mwl-search,
+  .pp-search,
+  .efp-search {
+    width: clamp(240px, 25%, 320px);
+  }
+
+  .wl-btn,
+  .cp-btn,
+  .fp-btn,
+  .ff-btn,
+  .ap-btn,
+  .ms-btn,
+  .mwl-btn,
+  .pp-btn,
+  .efp-btn {
+    padding: 9px 18px;
+    font-size: 13px;
+  }
+
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table,
+  .dash-table {
+    font-size: 13px;
+  }
+
+  .wl-form-row,
+  .wl-form-row-4,
+  .cp-form-row,
+  .fp-form-row,
+  .ff-id-row,
+  .ms-grid,
+  .mwl-summary,
+  .pp-details-grid,
+  .efp-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .wl-form-card,
+  .cp-form-card,
+  .fp-form-card,
+  .ff-card,
+  .pp-section,
+  .mwl-target-bar-wrap,
+  .ms-prefs-section,
+  .ms-edit-section,
+  .dash-table-card,
+  .ap-section-bar {
+    padding: 16px;
+  }
+}
+
+/* ── Extra large desktop (1921px - 2200px) ── */
+@media (min-width: 1921px) and (max-width: 2200px) {
+  :root {
+    --app-space-x: 24px;
+    --app-space-y: 32px;
+    --app-title-size: 30px;
+    --app-control-min-h: 46px;
+  }
+
+  .dash-main,
+  .wl-wrapper,
+  .cp-wrapper,
+  .ff-wrapper,
+  .fp-wrapper,
+  .ms-wrapper,
+  .mwl-wrapper,
+  .pp-wrapper,
+  .ap-wrapper,
+  .efp-wrapper {
+    padding-left: var(--app-space-x);
+    padding-right: var(--app-space-x);
+  }
+
+  .wl-heading,
+  .cp-heading,
+  .fp-heading,
+  .ff-heading,
+  .ap-heading,
+  .ms-page-title,
+  .mwl-title,
+  .pp-name,
+  .efp-title,
+  .dash-heading {
+    font-size: var(--app-title-size);
+    margin-bottom: 28px;
+  }
+
+  .wl-topbar,
+  .cp-topbar,
+  .fp-topbar,
+  .ff-topbar,
+  .ap-topbar {
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search,
+  .ap-search,
+  .ms-search,
+  .mwl-search,
+  .pp-search,
+  .efp-search {
+    width: clamp(280px, 28%, 360px);
+  }
+
+  .wl-btn,
+  .cp-btn,
+  .fp-btn,
+  .ff-btn,
+  .ap-btn,
+  .ms-btn,
+  .mwl-btn,
+  .pp-btn,
+  .efp-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    min-height: 42px;
+  }
+
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table,
+  .dash-table {
+    font-size: 14px;
+  }
+
+  .wl-table th,
+  .cp-table th,
+  .fp-table th,
+  .ff-table th,
+  .ap-table th,
+  .mwl-table th,
+  .efp-table th,
+  .dash-table th {
+    padding: 12px 16px;
+  }
+
+  .wl-table td,
+  .cp-table td,
+  .fp-table td,
+  .ff-table td,
+  .ap-table td,
+  .mwl-table td,
+  .efp-table td,
+  .dash-table td {
+    padding: 12px 16px;
+  }
+
+  .wl-form-row,
+  .wl-form-row-4,
+  .cp-form-row,
+  .fp-form-row,
+  .ff-id-row,
+  .ms-grid,
+  .mwl-summary,
+  .pp-details-grid,
+  .efp-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .wl-form-card,
+  .cp-form-card,
+  .fp-form-card,
+  .ff-card,
+  .pp-section,
+  .mwl-target-bar-wrap,
+  .ms-prefs-section,
+  .ms-edit-section,
+  .dash-table-card,
+  .ap-section-bar {
+    padding: 20px;
+  }
+}
+
+/* ── Ultra-wide displays (2200px+) ── */
 @media (min-width: 2200px) {
   :root {
-    --app-space-x: 54px;
-    --app-space-y: 46px;
+    --app-space-x: 32px;
+    --app-space-y: 36px;
     --app-title-size: 30px;
     --app-control-min-h: 48px;
   }
@@ -569,6 +843,115 @@ canvas {
   .pp-wrapper,
   .ap-wrapper,
   .efp-wrapper {
-    width: min(100%, 2300px);
+    padding-left: var(--app-space-x);
+    padding-right: var(--app-space-x);
+  }
+
+  .wl-heading,
+  .cp-heading,
+  .fp-heading,
+  .ff-heading,
+  .ap-heading,
+  .ms-page-title,
+  .mwl-title,
+  .pp-name,
+  .efp-title,
+  .dash-heading {
+    font-size: var(--app-title-size);
+    margin-bottom: 32px;
+  }
+
+  .wl-topbar,
+  .cp-topbar,
+  .fp-topbar,
+  .ff-topbar,
+  .ap-topbar {
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  .wl-search,
+  .cp-search,
+  .fp-search,
+  .ap-search,
+  .ms-search,
+  .mwl-search,
+  .pp-search,
+  .efp-search {
+    width: clamp(320px, 30%, 420px);
+  }
+
+  .wl-btn,
+  .cp-btn,
+  .fp-btn,
+  .ff-btn,
+  .ap-btn,
+  .ms-btn,
+  .mwl-btn,
+  .pp-btn,
+  .efp-btn {
+    padding: 12px 24px;
+    font-size: 15px;
+    min-height: 48px;
+  }
+
+  .wl-table,
+  .cp-table,
+  .fp-table,
+  .ff-table,
+  .ap-table,
+  .mwl-table,
+  .efp-table,
+  .dash-table {
+    font-size: 15px;
+  }
+
+  .wl-table th,
+  .cp-table th,
+  .fp-table th,
+  .ff-table th,
+  .ap-table th,
+  .mwl-table th,
+  .efp-table th,
+  .dash-table th {
+    padding: 14px 18px;
+    font-size: 13px;
+  }
+
+  .wl-table td,
+  .cp-table td,
+  .fp-table td,
+  .ff-table td,
+  .ap-table td,
+  .mwl-table td,
+  .efp-table td,
+  .dash-table td {
+    padding: 14px 18px;
+  }
+
+  .wl-form-row,
+  .wl-form-row-4,
+  .cp-form-row,
+  .fp-form-row,
+  .ff-id-row,
+  .ms-grid,
+  .mwl-summary,
+  .pp-details-grid,
+  .efp-stats {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .wl-form-card,
+  .cp-form-card,
+  .fp-form-card,
+  .ff-card,
+  .pp-section,
+  .mwl-target-bar-wrap,
+  .ms-prefs-section,
+  .ms-edit-section,
+  .dash-table-card,
+  .ap-section-bar {
+    padding: 24px;
   }
 }

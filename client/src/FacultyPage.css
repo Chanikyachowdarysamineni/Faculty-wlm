@@ -2,13 +2,18 @@
    FACULTY PAGE
 ═══════════════════════════════════════════════════ */
 .fp-wrapper {
-  padding: 28px 32px 60px;
+  padding: 28px 0 60px;
   font-family: 'Poppins', sans-serif;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  background: linear-gradient(135deg, #f9fafb 0%, #f4f6fb 50%, #eff3f8 100%);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ── Top action bar ── */
+/* ─ Top action bar ── */
 .fp-topbar {
   display: flex;
   align-items: center;
@@ -16,6 +21,7 @@
   flex-wrap: wrap;
   gap: 14px;
   margin-bottom: 20px;
+  padding: 0 32px;
 }
 
 .fp-topbar-left {
@@ -163,6 +169,8 @@
   box-shadow: 0 2px 16px rgba(0,0,0,0.07);
   overflow: hidden;
   overflow-x: auto;
+  margin: 0 32px;
+  margin-bottom: 20px;
 }
 
 /* ── Table ── */

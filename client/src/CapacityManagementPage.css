@@ -3,11 +3,16 @@
 ════════════════════════════════════════════════ */
 
 .cp-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 20px 0;
   font-family: 'Poppins', sans-serif;
   color: #1a202c;
+  background: linear-gradient(135deg, #fafbfc 0%, #f4f6fb 50%, #eff2f7 100%);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .cp-header {

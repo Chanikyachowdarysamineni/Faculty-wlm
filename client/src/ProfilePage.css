@@ -1,11 +1,16 @@
 /* ── Wrapper ───────────────────────────────────────────── */
 .pp-wrapper {
   flex: 1;
-  padding: 28px 32px 48px;
+  padding: 28px 0 48px;
   background: #0f172a;
-  min-height: 100vh;
+  min-height: 100%;
   color: #e2e8f0;
   font-family: 'Poppins', sans-serif;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .pp-error-banner {
