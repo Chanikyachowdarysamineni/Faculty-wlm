@@ -474,6 +474,337 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/workloads/faculty-hours/:empId (admin/faculty)
+// Get faculty workload summary with remaining hours capacity
+// MUST BE BEFORE /:id route to match correctly
+router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    const { empId } = req.params;
+    const isDualAccessAdmin = req.user?.canAccessAdmin === true;
+    const isFacultyOnly = req.user.role === 'faculty' && !isDualAccessAdmin;
+
+    // Faculty can only see their own hours; admin can see any
+    if (isFacultyOnly && String(req.user.id) !== String(empId)) {
+      logger.warn('Unauthorized attempt to access faculty hours', { empId, userId: req.user.id });
+      return sendError(res, 'Unauthorized. You can only view your own workload.', 403);
+    }
+
+    const summary = await getFacultyWorkloadSummary(empId);
+    logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.totalWorkingHours, utilizationPercent: summary.utilizationPercent }, userId: req.user.id });
+    sendSuccess(res, { data: summary }, 200);
+  } catch (err) {
+    if (err.message.includes('Faculty not found')) {
+      logger.warn('Faculty not found for hours check', { empId: req.params.empId, userId: req.user.id });
+      return sendNotFound(res, err.message);
+    }
+    logger.error('Error retrieving faculty workload hours', { empId: req.params.empId, error: err.message, userId: req.user.id });
+    next(err);
+  }
+});
+
+// GET /api/workloads/workload-report (admin only)
+// Get workload report for all faculty, optionally filtered by year
+router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    const { year } = req.query;
+    const yearFilter = year ? normalizeYear(year) : null;
+
+    const report = await getFacultyWorkloadReport(yearFilter);
+    const summary = {
+      totalFaculty: report.length,
+      overAllocatedCount: report.filter(f => f.isOverAllocated).length,
+      averageUtilization: (report.reduce((sum, f) => sum + f.utilizationPercent, 0) / report.length).toFixed(2),
+      yearFilter: yearFilter || 'all_years'
+    };
+
+    logger.info('Workload report generated', { summary, userId: req.user.id });
+    sendSuccess(res, { data: report, summary }, 200);
+  } catch (err) {
+    logger.error('Error generating workload report', { error: err.message, userId: req.user.id });
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/workloads/:id/periods
+ * Update workload periods (L/T/P hours) with validation for capacity
+ * Allows admin to fix faculty workload hours
+ * Admin only
+ * MUST BE BEFORE /:id route to match correctly
+ */
+router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { manualL, manualT, manualP } = req.body;
+
+    // Validate input
+    const newL = Number(manualL);
+    const newT = Number(manualT);
+    const newP = Number(manualP);
+
+    if (isNaN(newL) || isNaN(newT) || isNaN(newP)) {
+      logger.warn('Invalid period values in update', { id, manualL, manualT, manualP, userId: req.user.id });
+      return sendError(res, 'Invalid period values. L, T, P must be numbers.', 400);
+    }
+
+    if (newL < 0 || newT < 0 || newP < 0) {
+      logger.warn('Negative period values in update', { id, manualL, manualT, manualP, userId: req.user.id });
+      return sendError(res, 'Period values cannot be negative.', 400);
+    }
+
+    const workload = await Workload.findById(id).lean();
+    if (!workload) {
+      logger.warn('Workload not found for period update', { id, userId: req.user.id });
+      return sendNotFound(res, 'Workload entry not found.');
+    }
+
+    const faculty = await Faculty.findOne({ empId: workload.empId }).lean();
+    if (!faculty) {
+      logger.warn('Faculty not found for period update validation', { empId: workload.empId, userId: req.user.id });
+      return sendNotFound(res, 'Faculty not found.');
+    }
+
+    const totalCapacity = Number(faculty.totalWorkingHours || 24);
+    
+    // Get current total hours excluding this workload
+    const otherWorkloads = await Workload.find({ 
+      empId: workload.empId, 
+      _id: { $ne: id } 
+    }).lean();
+
+    let currentTotalHours = 0;
+    otherWorkloads.forEach(w => {
+      const L = Number(w.manualL || w.fixedL || 0);
+      const T = Number(w.manualT || w.fixedT || 0);
+      const P = Number(w.manualP || w.fixedP || 0);
+      currentTotalHours += (L + T + P);
+    });
+
+    const newWorkloadHours = newL + newT + newP;
+    const updatedTotal = currentTotalHours + newWorkloadHours;
+    const excessHours = updatedTotal > totalCapacity ? updatedTotal - totalCapacity : 0;
+
+    const result = await Workload.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          manualL: newL,
+          manualT: newT,
+          manualP: newP,
+        }
+      },
+      { new: true }
+    ).lean();
+
+    await logAuditEvent({
+      req,
+      action: 'workload.periods.update',
+      entity: 'workload',
+      entityId: id,
+      metadata: {
+        empId: workload.empId,
+        previousL: workload.manualL || workload.fixedL,
+        previousT: workload.manualT || workload.fixedT,
+        previousP: workload.manualP || workload.fixedP,
+        newL,
+        newT,
+        newP,
+        isOverAllocated: updatedTotal > totalCapacity,
+        excessHours,
+        totalCapacity,
+      }
+    });
+
+    logger.info('Workload periods updated', {
+      id,
+      empId: workload.empId,
+      newL,
+      newT,
+      newP,
+      updatedTotal,
+      totalCapacity,
+      excessHours,
+      userId: req.user.id
+    });
+
+    sendSuccess(res, {
+      ...toClient(result),
+      capacityInfo: {
+        totalCapacity,
+        currentTotalHours: updatedTotal,
+        remainingHours: Math.max(0, totalCapacity - updatedTotal),
+        excessHours,
+        isOverAllocated: updatedTotal > totalCapacity,
+      }
+    }, 200);
+  } catch (err) {
+    logger.error('Error updating workload periods', { error: err.message, id: req.params.id, userId: req.user.id });
+    next(err);
+  }
+});
+
+/**
+ * PATCH /deva/workloads/faculty/:empId/capacity
+ * Update capacity hours for all workloads of a specific faculty
+ * MUST BE BEFORE /:id route to match correctly
+ */
+router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { empId } = req.params;
+    const { capacityHours } = req.body;
+
+    // Validate input
+    if (capacityHours === undefined || capacityHours === null) {
+      logger.warn('Missing capacityHours in request', { empId, userId: req.user.id });
+      return sendError(res, 'capacityHours is required.', 400);
+    }
+
+    const newCapacity = Number(capacityHours);
+    if (isNaN(newCapacity) || newCapacity <= 0) {
+      logger.warn('Invalid capacityHours value', { empId, capacityHours, userId: req.user.id });
+      return sendError(res, 'capacityHours must be a positive number.', 400);
+    }
+
+    // Update all workloads for this faculty with new capacity
+    const result = await Workload.updateMany(
+      { empId },
+      { $set: { capacityHours: newCapacity } }
+    );
+
+    if (result.matchedCount === 0) {
+      logger.warn('No workloads found for faculty capacity update', { empId, userId: req.user.id });
+      return sendNotFound(res, 'No workloads found for this faculty.');
+    }
+
+    logger.info('Faculty capacity updated', {
+      empId,
+      capacityHours: newCapacity,
+      modifiedCount: result.modifiedCount,
+      userId: req.user.id,
+    });
+
+    sendSuccess(res, {
+      message: `Capacity updated to ${newCapacity}h for ${result.modifiedCount} workload(s).`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    logger.error('Error updating faculty capacity', { error: err.message, userId: req.user.id });
+    next(err);
+  }
+});
+
+/**
+ * PATCH /deva/workloads/faculty-visibility/:empId
+ * Toggle visibility for ALL workloads of a specific faculty
+ * MUST BE BEFORE /:id/visibility route to match correctly
+ */
+router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { empId } = req.params;
+    const { isVisible } = req.body;
+
+    // Validate input
+    if (isVisible === undefined || isVisible === null) {
+      logger.warn('Missing isVisible in request', { empId, userId: req.user.id });
+      return sendError(res, 'isVisible is required (true/false).', 400);
+    }
+
+    const boolIsVisible = Boolean(isVisible);
+
+    // Update all workloads for this faculty
+    const result = await Workload.updateMany(
+      { empId },
+      { $set: { isVisible: boolIsVisible } }
+    );
+
+    if (result.matchedCount === 0) {
+      logger.warn('No workloads found for faculty visibility toggle', { empId, userId: req.user.id });
+      return sendNotFound(res, 'No workloads found for this faculty.');
+    }
+
+    logger.info('Faculty workloads visibility toggled', {
+      empId,
+      isVisible: boolIsVisible,
+      modifiedCount: result.modifiedCount,
+      userId: req.user.id,
+    });
+
+    sendSuccess(res, {
+      message: `All workloads for ${empId} are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    logger.error('Error toggling faculty workloads visibility', { error: err.message, userId: req.user.id });
+    next(err);
+  }
+});
+
+/**
+ * PATCH /deva/workloads/:id/visibility
+ * Toggle visibility status of a specific workload
+ * MUST BE BEFORE final /:id route to match correctly
+ */
+router.patch('/:id/visibility', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { isVisible } = req.body;
+
+    // Validate input
+    if (isVisible === undefined || isVisible === null) {
+      logger.warn('Missing isVisible in request', { id, userId: req.user.id });
+      return sendError(res, 'isVisible is required (true/false).', 400);
+    }
+
+    const boolIsVisible = Boolean(isVisible);
+
+    // Update workload visibility
+    const result = await Workload.findByIdAndUpdate(
+      id,
+      { $set: { isVisible: boolIsVisible } },
+      { new: true }
+    );
+
+    if (!result) {
+      logger.warn('Workload not found for visibility toggle', { id, userId: req.user.id });
+      return sendNotFound(res, 'Workload entry not found.');
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'workload.visibility.toggle',
+      entity: 'workload',
+      entityId: id,
+      metadata: {
+        empId: result.empId,
+        isVisible: boolIsVisible,
+      }
+    });
+
+    logger.info('Workload visibility toggled', {
+      id,
+      empId: result.empId,
+      isVisible: boolIsVisible,
+      userId: req.user.id
+    });
+
+    sendSuccess(res, {
+      ...toClient(result),
+      message: `Workload is now ${boolIsVisible ? 'visible' : 'hidden'}.`
+    });
+  } catch (err) {
+    logger.error('Error toggling workload visibility', { error: err.message, id: req.params.id, userId: req.user.id });
+    next(err);
+  }
+});
+
 // GET /api/workloads/:id
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
@@ -1060,327 +1391,6 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
   } catch (err) { 
     logger.error('Error deleting workload', { error: err.message, id: req.params.id, userId: req.user.id });
     next(err); 
-  }
-});
-
-// GET /api/workloads/faculty-hours/:empId (admin/faculty)
-// Get faculty workload summary with remaining hours capacity
-router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
-  try {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-
-    const { empId } = req.params;
-    const isDualAccessAdmin = req.user?.canAccessAdmin === true;
-    const isFacultyOnly = req.user.role === 'faculty' && !isDualAccessAdmin;
-
-    // Faculty can only see their own hours; admin can see any
-    if (isFacultyOnly && String(req.user.id) !== String(empId)) {
-      logger.warn('Unauthorized attempt to access faculty hours', { empId, userId: req.user.id });
-      return sendError(res, 'Unauthorized. You can only view your own workload.', 403);
-    }
-
-    const summary = await getFacultyWorkloadSummary(empId);
-    logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.totalWorkingHours, utilizationPercent: summary.utilizationPercent }, userId: req.user.id });
-    sendSuccess(res, { data: summary }, 200);
-  } catch (err) {
-    if (err.message.includes('Faculty not found')) {
-      logger.warn('Faculty not found for hours check', { empId: req.params.empId, userId: req.user.id });
-      return sendNotFound(res, err.message);
-    }
-    logger.error('Error retrieving faculty workload hours', { empId: req.params.empId, error: err.message, userId: req.user.id });
-    next(err);
-  }
-});
-
-// GET /api/workloads/workload-report (admin only)
-// Get workload report for all faculty, optionally filtered by year
-router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-
-    const { year } = req.query;
-    const yearFilter = year ? normalizeYear(year) : null;
-
-    const report = await getFacultyWorkloadReport(yearFilter);
-    const summary = {
-      totalFaculty: report.length,
-      overAllocatedCount: report.filter(f => f.isOverAllocated).length,
-      averageUtilization: (report.reduce((sum, f) => sum + f.utilizationPercent, 0) / report.length).toFixed(2),
-      yearFilter: yearFilter || 'all_years'
-    };
-
-    logger.info('Workload report generated', { summary, userId: req.user.id });
-    sendSuccess(res, { data: report, summary }, 200);
-  } catch (err) {
-    logger.error('Error generating workload report', { error: err.message, userId: req.user.id });
-    next(err);
-  }
-});
-
-/**
- * PUT /api/workloads/:id/periods
- * Update workload periods (L/T/P hours) with validation for capacity
- * Allows admin to fix faculty workload hours
- * Admin only
- */
-router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { manualL, manualT, manualP } = req.body;
-
-    // Validate input
-    const newL = Number(manualL);
-    const newT = Number(manualT);
-    const newP = Number(manualP);
-
-    if (isNaN(newL) || isNaN(newT) || isNaN(newP)) {
-      logger.warn('Invalid period values in update', { id, manualL, manualT, manualP, userId: req.user.id });
-      return sendError(res, 'Invalid period values. L, T, P must be numbers.', 400);
-    }
-
-    if (newL < 0 || newT < 0 || newP < 0) {
-      logger.warn('Negative period values in update', { id, manualL, manualT, manualP, userId: req.user.id });
-      return sendError(res, 'Period values cannot be negative.', 400);
-    }
-
-    const workload = await Workload.findById(id).lean();
-    if (!workload) {
-      logger.warn('Workload not found for period update', { id, userId: req.user.id });
-      return sendNotFound(res, 'Workload entry not found.');
-    }
-
-    const faculty = await Faculty.findOne({ empId: workload.empId }).lean();
-    if (!faculty) {
-      logger.warn('Faculty not found for period update validation', { empId: workload.empId, userId: req.user.id });
-      return sendNotFound(res, 'Faculty not found.');
-    }
-
-    const totalCapacity = Number(faculty.totalWorkingHours || 24);
-    
-    // Get current total hours excluding this workload
-    const otherWorkloads = await Workload.find({ 
-      empId: workload.empId, 
-      _id: { $ne: id } 
-    }).lean();
-
-    let currentTotalHours = 0;
-    otherWorkloads.forEach(w => {
-      const L = Number(w.manualL || w.fixedL || 0);
-      const T = Number(w.manualT || w.fixedT || 0);
-      const P = Number(w.manualP || w.fixedP || 0);
-      currentTotalHours += (L + T + P);
-    });
-
-    const newWorkloadHours = newL + newT + newP;
-    const updatedTotal = currentTotalHours + newWorkloadHours;
-    const excessHours = updatedTotal > totalCapacity ? updatedTotal - totalCapacity : 0;
-
-    const result = await Workload.findByIdAndUpdate(
-      id,
-      {
-        $set: {
-          manualL: newL,
-          manualT: newT,
-          manualP: newP,
-        }
-      },
-      { new: true }
-    ).lean();
-
-    await logAuditEvent({
-      req,
-      action: 'workload.periods.update',
-      entity: 'workload',
-      entityId: id,
-      metadata: {
-        empId: workload.empId,
-        previousL: workload.manualL || workload.fixedL,
-        previousT: workload.manualT || workload.fixedT,
-        previousP: workload.manualP || workload.fixedP,
-        newL,
-        newT,
-        newP,
-        isOverAllocated: updatedTotal > totalCapacity,
-        excessHours,
-        totalCapacity,
-      }
-    });
-
-    logger.info('Workload periods updated', {
-      id,
-      empId: workload.empId,
-      newL,
-      newT,
-      newP,
-      updatedTotal,
-      totalCapacity,
-      excessHours,
-      userId: req.user.id
-    });
-
-    sendSuccess(res, {
-      ...toClient(result),
-      capacityInfo: {
-        totalCapacity,
-        currentTotalHours: updatedTotal,
-        remainingHours: Math.max(0, totalCapacity - updatedTotal),
-        excessHours,
-        isOverAllocated: updatedTotal > totalCapacity,
-      }
-    }, 200);
-  } catch (err) {
-    logger.error('Error updating workload periods', { error: err.message, id: req.params.id, userId: req.user.id });
-    next(err);
-  }
-});
-
-/**
- * PATCH /deva/workloads/faculty/:empId/capacity
- * Update capacity hours for all workloads of a specific faculty
- */
-router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { empId } = req.params;
-    const { capacityHours } = req.body;
-
-    // Validate input
-    if (capacityHours === undefined || capacityHours === null) {
-      logger.warn('Missing capacityHours in request', { empId, userId: req.user.id });
-      return sendError(res, 'capacityHours is required.', 400);
-    }
-
-    const newCapacity = Number(capacityHours);
-    if (isNaN(newCapacity) || newCapacity <= 0) {
-      logger.warn('Invalid capacityHours value', { empId, capacityHours, userId: req.user.id });
-      return sendError(res, 'capacityHours must be a positive number.', 400);
-    }
-
-    // Update all workloads for this faculty with new capacity
-    const result = await Workload.updateMany(
-      { empId },
-      { $set: { capacityHours: newCapacity } }
-    );
-
-    if (result.matchedCount === 0) {
-      logger.warn('No workloads found for faculty capacity update', { empId, userId: req.user.id });
-      return sendNotFound(res, 'No workloads found for this faculty.');
-    }
-
-    logger.info('Faculty capacity updated', {
-      empId,
-      capacityHours: newCapacity,
-      modifiedCount: result.modifiedCount,
-      userId: req.user.id,
-    });
-
-    sendSuccess(res, {
-      message: `Capacity updated to ${newCapacity}h for ${result.modifiedCount} workload(s).`,
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (err) {
-    logger.error('Error updating faculty capacity', { error: err.message, userId: req.user.id });
-    sendServerError(res, 'Failed to update capacity.');
-  }
-});
-
-/**
-/**
- * PATCH /deva/workloads/faculty-visibility/:empId
- * Toggle visibility for ALL workloads of a specific faculty
- * MUST BE BEFORE /:id/visibility route to match correctly
- */
-router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { empId } = req.params;
-    const { isVisible } = req.body;
-
-    // Validate input
-    if (isVisible === undefined || isVisible === null) {
-      logger.warn('Missing isVisible in request', { empId, userId: req.user.id });
-      return sendError(res, 'isVisible is required (true/false).', 400);
-    }
-
-    const boolIsVisible = Boolean(isVisible);
-
-    // Update all workloads for this faculty
-    const result = await Workload.updateMany(
-      { empId },
-      { $set: { isVisible: boolIsVisible } }
-    );
-
-    if (result.matchedCount === 0) {
-      logger.warn('No workloads found for faculty visibility toggle', { empId, userId: req.user.id });
-      return sendNotFound(res, 'No workloads found for this faculty.');
-    }
-
-    logger.info('Faculty workloads visibility toggled', {
-      empId,
-      isVisible: boolIsVisible,
-      modifiedCount: result.modifiedCount,
-      userId: req.user.id,
-    });
-
-    sendSuccess(res, {
-      message: `All workloads for ${empId} are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (err) {
-    logger.error('Error toggling faculty workloads visibility', { error: err.message, userId: req.user.id });
-    sendServerError(res, 'Failed to toggle visibility.');
-  }
-});
-
-/**
- * PATCH /deva/workloads/:id/visibility
- * Toggle visibility status of a specific workload
- */
-router.patch('/:id/visibility', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { isVisible } = req.body;
-
-    // Validate input
-    if (isVisible === undefined || isVisible === null) {
-      logger.warn('Missing isVisible in request', { id, userId: req.user.id });
-      return sendError(res, 'isVisible is required (true/false).', 400);
-    }
-
-    const boolIsVisible = Boolean(isVisible);
-
-    // Update workload visibility
-    const result = await Workload.findByIdAndUpdate(
-      id,
-      { $set: { isVisible: boolIsVisible } },
-      { new: true }
-    );
-
-    if (!result) {
-      logger.warn('Workload not found for visibility toggle', { id, userId: req.user.id });
-      return sendNotFound(res, 'Workload not found.');
-    }
-
-    logger.info('Workload visibility toggled', {
-      id,
-      isVisible: boolIsVisible,
-      empId: result.empId,
-      subjectCode: result.subjectCode,
-      userId: req.user.id,
-    });
-
-    sendSuccess(res, {
-      message: `Workload visibility ${boolIsVisible ? 'enabled' : 'disabled'}.`,
-      data: {
-        _id: result._id,
-        isVisible: result.isVisible,
-      },
-    });
-  } catch (err) {
-    logger.error('Error toggling workload visibility', { error: err.message, userId: req.user.id });
-    sendServerError(res, 'Failed to toggle visibility.');
   }
 });
 
