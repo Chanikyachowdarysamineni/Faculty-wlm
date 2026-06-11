@@ -152,7 +152,6 @@ const AdminOverview = ({ user }) => {
 
   // Filters
   const [yearFilter, setYearFilter] = useState('All');
-  const [sectionFilter, setSectionFilter] = useState('All');
 
   // UI state
   const [expandedCard, setExpandedCard] = useState(null); // 'overloaded', 'pending', 'perfect'
@@ -183,7 +182,6 @@ const AdminOverview = ({ user }) => {
     // 1. Filter workloads by year and section
     const filteredWorkloads = workloads.filter(w => {
       if (yearFilter !== 'All' && String(w.year) !== yearFilter) return false;
-      if (sectionFilter !== 'All' && String(w.section) !== sectionFilter) return false;
       return true;
     });
 
@@ -223,7 +221,7 @@ const AdminOverview = ({ user }) => {
     });
 
     return { overloaded, pending, perfect };
-  }, [faculties, workloads, yearFilter, sectionFilter]);
+  }, [faculties, workloads, yearFilter]);
 
   const handleCardClick = (cardType) => {
     setExpandedCard(expandedCard === cardType ? null : cardType);
@@ -256,17 +254,6 @@ const AdminOverview = ({ user }) => {
             <option value="III">III</option>
             <option value="IV">IV</option>
             <option value="M.Tech">M.Tech</option>
-          </select>
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Section</label>
-          <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
-            <option value="All">All Sections</option>
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-            <option value="D">D</option>
-            <option value="E">E</option>
           </select>
         </div>
       </div>

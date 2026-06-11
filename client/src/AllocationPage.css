@@ -1,4 +1,4 @@
-﻿/*
+/*
   AllocationPage.css — Faculty Workload Allocation Grid
   New design: L/T/P sub-rows × dynamic sections, auto-fill support
 */
@@ -268,7 +268,7 @@
   background: #9b1239;
 }
 .ap-th {
-  color: #fff;
+  color: #000;
   font-weight: 700;
   padding: 11px 10px;
   border: 1.5px solid #7f1d1d;

@@ -187,7 +187,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashMode, setDashMode] = useState(null);
   const [yearFilter, setYearFilter] = useState('All');
-  const [sectionFilter, setSectionFilter] = useState('All');
   const [expandedCard, setExpandedCard] = useState(null);
 
   // Helper to format session time
@@ -455,7 +454,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       setAnalytics(prev => ({ ...prev, loading: true }));
       try {
         const headers = authHeaders();
-        const res = await fetch(`${API}/deva/stats/dashboard-analytics?year=${encodeURIComponent(yearFilter)}&section=${encodeURIComponent(sectionFilter)}`, { headers });
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?year=${encodeURIComponent(yearFilter)}`, { headers });
         if (!res.ok) throw new Error('Analytics fetch failed');
         const json = await res.json();
         if (isMounted && json.success) {
@@ -475,7 +474,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     };
     fetchAnalytics();
     return () => { isMounted = false; };
-  }, [isAdmin, yearFilter, sectionFilter, authHeaders, dashboardLastSyncedAt]);
+  }, [isAdmin, yearFilter, authHeaders, dashboardLastSyncedAt]);
 
   const refreshMasterData = useCallback(async () => {
     if (!user?.id) return;
@@ -665,7 +664,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     const rawAllocations = dashboardData.allocations || [];
     const allocationDocs = rawAllocations.filter(a => {
       if (yearFilter !== 'All' && String(a.year) !== yearFilter) return false;
-      if (sectionFilter !== 'All' && String(a.section) !== sectionFilter) return false;
       return true;
     });
     const facultyMap = new Map((liveFaculty || []).map(f => [f.empId, f]));
@@ -753,7 +751,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       pendingTotalHours: pendingCourses.reduce((s, c) => s + c.pendingTotal, 0),
       pendingFacultyNeeded: pendingCourses.reduce((s, c) => s + c.missingTypes.length, 0),
     };
-  }, [isAdmin, dashboardData.allocations, liveFaculty, yearFilter, sectionFilter, analytics]);
+  }, [isAdmin, dashboardData.allocations, liveFaculty, yearFilter, analytics]);
 
   // Compute faculty-specific stats
   const getMyStats = useMemo(() => {
@@ -1207,27 +1205,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Year</label>
-              <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSectionFilter('All'); }} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
+              <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
                 <option value="All">All Years</option>
                 {sectionsConfig && Object.keys(sectionsConfig).map(year => (
                   <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Section</label>
-              <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
-                <option value="All">All Sections</option>
-                {sectionsConfig && yearFilter !== 'All' && sectionsConfig[yearFilter] && sectionsConfig[yearFilter].map(sec => (
-                  <option key={sec} value={sec}>{sec}</option>
-                ))}
-                {sectionsConfig && yearFilter === 'All' && Array.from(new Set(Object.values(sectionsConfig).flat())).sort((a, b) => {
-                  const numA = parseInt(a);
-                  const numB = parseInt(b);
-                  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-                  return a.localeCompare(b);
-                }).map(sec => (
-                  <option key={sec} value={sec}>{sec}</option>
                 ))}
               </select>
             </div>
