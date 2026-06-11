@@ -82,17 +82,6 @@ const normalizeCourseTypeKey = (courseType = '') => {
 
 const isRestrictedDeYear = (year = '') => ['I', 'II', 'III'].includes(String(year || '').trim());
 
-// AICTE workload norms → full weekly contact-hour target by designation
-const getWorkloadTarget = (designation = '') => {
-  const d = designation.toLowerCase();
-  if (d.includes('dean') || d.includes('hod')) return 14;
-  if (d.includes('professor') && !d.includes('asst') && !d.includes('assoc') && !d.includes('assistant')) return 14;
-  if (d.includes('assoc')) return 16;
-  if (d.includes('sr. asst') || d.includes('senior level')) return 16;
-  if (d.includes('contract') || d === 'cap' || d.includes('internal cap') || d === 'ta' || d.includes('teaching instructor')) return 18;
-  return 16; // default (Asst. Prof / Assistant Professor)
-};
-
 const emptyForm = {
   empId: '', empName: '', designation: '', mobile: '', facultyRole: 'Main Faculty',
   taAllocationRow: 'R2',
@@ -176,7 +165,7 @@ const WorkloadPage = ({ submissions }) => {
     const fetchAllocation = async () => {
       setAllocLoading(true);
       try {
-        const res = await fetch(`/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}`, { headers: authHeader() });
+        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}`, { headers: authHeader() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setAllocation(data.data[0]);
@@ -400,7 +389,7 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`/deva/workloads/faculty-hours/${empId}`, { 
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}`, { 
         headers: authHeader() 
       });
       const data = await res.json();
@@ -744,13 +733,13 @@ const WorkloadPage = ({ submissions }) => {
 
       let res;
       if (editTarget) {
-        res = await fetch(`/deva/workloads/${editTarget.id}`, {
+        res = await fetch(`${API}/deva/workloads/${editTarget.id}`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
           body:    JSON.stringify(payload),
         });
       } else {
-        res = await fetch(`/deva/workloads`, {
+        res = await fetch(`${API}/deva/workloads`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
           body:    JSON.stringify(payload),
@@ -835,7 +824,7 @@ const WorkloadPage = ({ submissions }) => {
     
     try {
       const newCapacity = Number(editCapacityValue);
-      const res = await fetch(`/deva/workloads/faculty/${editCapacityTarget}/capacity`, {
+      const res = await fetch(`${API}/deva/workloads/faculty/${editCapacityTarget}/capacity`, {
         method: 'PATCH',
         headers: { ...authJsonHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ capacityHours: newCapacity }),
@@ -858,7 +847,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Delete: calls server API ───────────────────────────
   const confirmDelete = async () => {
     try {
-      const res  = await fetch(`/deva/workloads/${deleteTarget.id}`, {
+      const res  = await fetch(`${API}/deva/workloads/${deleteTarget.id}`, {
         method: 'DELETE', headers: authHeader(),
       });
       const data = await res.json();
@@ -877,34 +866,31 @@ const WorkloadPage = ({ submissions }) => {
     // Global visibility toggle when empId is null
     if (empId === null) {
       setTogglingVisibility(true);
+      
+      // Optimistic UI update
+      const previousWorkloads = [...workloads];
+      setWorkloads(workloads.map(w => ({ ...w, isVisible: newVisibility })));
+      
       try {
-        // Update all workloads at once
-        const toUpdate = workloads.filter(w => w.isVisible !== newVisibility);
-        if (toUpdate.length === 0) {
-          showToast('✓ All workloads already in desired state.');
-          return;
+        const res = await fetch(`${API}/deva/workloads/bulk-visibility`, {
+          method: 'PATCH',
+          headers: { ...authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isVisible: newVisibility }),
+        });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to update visibility');
         }
 
-        // Call visibility endpoint for each faculty
-        const faculties = [...new Set(toUpdate.map(w => w.empId))];
-        for (const fId of faculties) {
-          const res = await fetch(`/deva/workloads/faculty-visibility/${fId}`, {
-            method: 'PATCH',
-            headers: { ...authHeader(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isVisible: newVisibility }),
-          });
-          
-          if (!res.ok) {
-            console.warn(`Failed to update visibility for ${fId}`);
-          }
-        }
-
-        // Refresh workloads
-        await fetchWorkloads();
+        // Background refresh to ensure perfect sync
+        fetchWorkloads();
         showToast(`✓ All workloads ${newVisibility ? 'visible' : 'hidden'}.`);
       } catch (err) {
+        // Revert optimistic update on failure
+        setWorkloads(previousWorkloads);
         console.error('Error toggling global visibility:', err);
-        showToast('⚠ Failed to update visibility.');
+        showToast(`⚠ Failed to update visibility: ${err.message}`);
       } finally {
         setTogglingVisibility(false);
       }
@@ -918,30 +904,36 @@ const WorkloadPage = ({ submissions }) => {
     }
 
     setTogglingVisibility(true);
+    
+    // Optimistic UI update
+    const previousWorkloads = [...workloads];
+    setWorkloads(workloads.map(w => w.empId === empId ? { ...w, isVisible: newVisibility } : w));
+    
     try {
-      const res = await fetch(`/deva/workloads/faculty-visibility/${empId}`, {
+      const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ isVisible: newVisibility }),
       });
       
       if (!res.ok) {
-        showToast('⚠ Failed to update workload visibility.');
-        return;
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to update workload visibility');
       }
 
       const data = await res.json();
       if (!data.success) {
-        showToast(`⚠ ${data.message || 'Update failed.'}`);
-        return;
+        throw new Error(data.message || 'Update failed.');
       }
 
-      // Update workloads list
-      await fetchWorkloads();
+      // Background refresh to ensure perfect sync
+      fetchWorkloads();
       showToast(`✓ All workloads ${newVisibility ? 'visible' : 'hidden'} from faculty.`);
     } catch (err) {
+      // Revert optimistic update on failure
+      setWorkloads(previousWorkloads);
       console.error('Error toggling faculty visibility:', err);
-      showToast('⚠ Failed to update visibility.');
+      showToast(`⚠ Failed to update visibility: ${err.message}`);
     } finally {
       setTogglingVisibility(false);
     }
@@ -1029,8 +1021,6 @@ const WorkloadPage = ({ submissions }) => {
     return workloads.filter(w => { const ok = !seen.has(w.empId); seen.add(w.empId); return ok; });
   }, [workloads]);
 
-  // ── Per-faculty workload summary (assigned L/T/P, target, pending) ──
-
   // ── Grouped per-faculty forms data ──
   const facultyForms = useMemo(() => {
     const map = {};
@@ -1066,8 +1056,9 @@ const WorkloadPage = ({ submissions }) => {
     });
 
     Object.keys(map).forEach((empId) => {
-      // Use actual capacity hours from workload, fallback to designation-based target
-      const target = map[empId].capacityHours || getWorkloadTarget(map[empId].designation);
+      // Use actual capacity hours from workload
+      const fm = facultyList.find(f => f.empId === empId);
+      const target = map[empId].capacityHours || Number(fm?.totalWorkingHours) || 24;
       const assigned = Number(map[empId].assigned.toFixed(2));
       const remaining = Number((target - assigned).toFixed(2));
       map[empId] = {
@@ -1520,9 +1511,9 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wl-cap-label">Practical Hours (P)</div>
                   <div className="wl-cap-value">{selectedCourse.P}</div>
                 </div>
-                <div className="wl-cap-card\">
-                  <div className="wl-cap-label\">Total Hours</div>
-                  <div className="wl-cap-value\" style={{ fontWeight: 600 }}>{(selectedCourse.L || 0) + (selectedCourse.T || 0) + (selectedCourse.P || 0)}h</div>
+                <div className="wl-cap-card">
+                  <div className="wl-cap-label">Total Hours</div>
+                  <div className="wl-cap-value" style={{ fontWeight: 600 }}>{(selectedCourse.L || 0) + (selectedCourse.T || 0) + (selectedCourse.P || 0)}h</div>
                 </div>
               </div>
             </div>
@@ -1970,10 +1961,11 @@ const WorkloadPage = ({ submissions }) => {
               const totalT = fac.rows.reduce((s, r) => s + (r.manualT || 0), 0);
               const totalP = fac.rows.reduce((s, r) => s + (r.manualP || 0), 0);
               const totalHrs = totalL + totalT + totalP;
-              // Use actual capacity hours, fallback to designation-based target
-              const target = fac.capacityHours || getWorkloadTarget(fac.designation);
+              
+              const facListEntry = facultyList.find(f => f.empId === fac.empId);
+              const target = fac.capacityHours || Number(facListEntry?.totalWorkingHours) || 24;
               const pct      = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
-              const status   = totalHrs > target ? 'Overloaded' : totalHrs >= target ? 'Full Workload Met' : `${target - totalHrs} hrs pending`;
+              
               return (
                 <div className="wlf-form-card" key={fac.empId}>
                   {/* Institution header */}

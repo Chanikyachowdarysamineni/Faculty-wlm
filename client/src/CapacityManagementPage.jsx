@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
+import API from './config';
 import Toast from './Toast';
 import './CapacityManagementPage.css';
 
@@ -138,7 +139,7 @@ const CapacityManagementPage = () => {
 
     setSaving(true);
     try {
-      const res = await fetch(`/deva/workloads/faculty/${form.empId}/capacity`, {
+      const res = await fetch(`${API}/deva/workloads/faculty/${form.empId}/capacity`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ capacityHours: Number(form.capacityHours) }),
@@ -164,7 +165,7 @@ const CapacityManagementPage = () => {
     if (!deleteTarget) return;
     setSaving(true);
     try {
-      const res = await fetch(`/deva/workloads/faculty/${deleteTarget.empId}/capacity`, {
+      const res = await fetch(`${API}/deva/workloads/faculty/${deleteTarget.empId}/capacity`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ capacityHours: 0 }),

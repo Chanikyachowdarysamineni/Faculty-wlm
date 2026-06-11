@@ -26,16 +26,6 @@ const YEARS_BTECH = ['I', 'II', 'III', 'IV'];
 
 const TYPE_LABEL = { L: 'Lecture', T: 'Tutorial', P: 'Practical' };
 
-const getWorkloadTarget = (designation = '') => {
-  const d = String(designation).toLowerCase();
-  if (d.includes('dean') || d.includes('hod')) return 14;
-  if (d.includes('professor') && !d.includes('asst') && !d.includes('assoc') && !d.includes('assistant')) return 14;
-  if (d.includes('assoc')) return 16;
-  if (d.includes('sr. asst') || d.includes('senior level')) return 16;
-  if (d.includes('contract') || d === 'cap' || d.includes('internal cap') || d === 'ta' || d.includes('teaching instructor')) return 18;
-  return 16;
-};
-
 const isTADesignation = (designation = '') => {
   const value = String(designation || '').trim().toLowerCase();
   return value === 'ta' || value.includes('teaching assistant');
@@ -104,10 +94,11 @@ const CellPicker = ({ courseId, section, type, rowIdx, empId, isAuto, isAdmin, o
         if (!isSupportingOrTA && !isCurrent) return false;
       }
 
+      const capacity = Number(f.totalWorkingHours) || 24;
       const info = facultyStatusMap[f.empId] || {
-        capacity: getWorkloadTarget(f.designation),
+        capacity: capacity,
         assignedHours: 0,
-        remaining: getWorkloadTarget(f.designation),
+        remaining: capacity,
       };
       const hasCapacity = (info.remaining || 0) > 0;
       const isCurrent = f.empId === empId;
@@ -119,10 +110,11 @@ const CellPicker = ({ courseId, section, type, rowIdx, empId, isAuto, isAdmin, o
   const shortN = chosen ? chosen.name.trim().split(/\s+/).slice(-2).join(' ') : '';
 
   const getStatusText = (emp) => {
+    const capacity = Number(emp.totalWorkingHours) || 24;
     const info = facultyStatusMap[emp.empId] || {
-      capacity: getWorkloadTarget(emp.designation),
+      capacity: capacity,
       assignedHours: 0,
-      remaining: getWorkloadTarget(emp.designation),
+      remaining: capacity,
     };
     if ((info.assignedHours || 0) > (info.capacity || 0)) return { label: 'Overloaded', tone: 'over' };
     if ((info.remaining || 0) <= 0) return { label: 'Fully Loaded', tone: 'full' };
@@ -356,10 +348,11 @@ const AllocationPage = ({ isAdmin = true }) => {
   const facultyStatusMap = useMemo(() => {
     const summary = {};
     facultyList.forEach((f) => {
+      const capacity = Number(f.totalWorkingHours) || 24;
       summary[f.empId] = {
-        capacity: getWorkloadTarget(f.designation),
+        capacity: capacity,
         assignedHours: 0,
-        remaining: getWorkloadTarget(f.designation),
+        remaining: capacity,
       };
     });
 
@@ -381,7 +374,10 @@ const AllocationPage = ({ isAdmin = true }) => {
           const split = hours / assignedEmpIds.length;
           assignedEmpIds.forEach((empId) => {
             if (!summary[empId]) {
-              summary[empId] = { capacity: getWorkloadTarget(''), assignedHours: 0, remaining: getWorkloadTarget('') };
+              // Try to find the faculty in list to get capacity, fallback to 24
+              const fac = facultyList.find(f => f.empId === empId);
+              const capacity = fac ? (Number(fac.totalWorkingHours) || 24) : 24;
+              summary[empId] = { capacity: capacity, assignedHours: 0, remaining: capacity };
             }
             summary[empId].assignedHours += split;
           });

@@ -177,16 +177,6 @@ const NAV_ITEMS = [
   },
 ];
 
-const getWorkloadTarget = (designation = '') => {
-  const d = String(designation).toLowerCase();
-  if (d.includes('dean') || d.includes('hod')) return 14;
-  if (d.includes('professor') && !d.includes('asst') && !d.includes('assoc') && !d.includes('assistant')) return 14;
-  if (d.includes('assoc')) return 16;
-  if (d.includes('sr. asst') || d.includes('senior level')) return 16;
-  if (d.includes('contract') || d === 'cap' || d.includes('internal cap') || d === 'ta' || d.includes('teaching instructor')) return 18;
-  return 16;
-};
-
 const toPct = (value) => Math.max(0, Math.min(100, value));
 
 const AUTO_REFRESH_MS = 60000;
@@ -196,6 +186,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashMode, setDashMode] = useState(null);
+  const [yearFilter, setYearFilter] = useState('All');
+  const [sectionFilter, setSectionFilter] = useState('All');
+  const [expandedCard, setExpandedCard] = useState(null);
 
   // Helper to format session time
   const formatSessionTime = (seconds) => {
@@ -241,6 +234,15 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     faculty: [],
     allocations: [],
     courses: [],
+  });
+  const [analytics, setAnalytics] = useState({
+    loading: false,
+    overloaded: [],
+    pending: [],
+    perfect: [],
+    fullyAllocatedCourses: [],
+    partiallyAllocatedCourses: [],
+    notAllocatedCourses: [],
   });
   const [dashboardLastSyncedAt, setDashboardLastSyncedAt] = useState(null);
   const [submissionsLastSyncedAt, setSubmissionsLastSyncedAt] = useState(null);
@@ -446,6 +448,35 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     return () => clearInterval(id);
   }, [isAdmin, activeNav, refreshDashboardData]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    let isMounted = true;
+    const fetchAnalytics = async () => {
+      setAnalytics(prev => ({ ...prev, loading: true }));
+      try {
+        const headers = authHeaders();
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?year=${encodeURIComponent(yearFilter)}&section=${encodeURIComponent(sectionFilter)}`, { headers });
+        if (!res.ok) throw new Error('Analytics fetch failed');
+        const json = await res.json();
+        if (isMounted && json.success) {
+          setAnalytics({
+            loading: false,
+            overloaded: json.data.overloaded || [],
+            pending: json.data.pending || [],
+            perfect: json.data.perfect || [],
+            fullyAllocatedCourses: json.data.fullyAllocatedCourses || [],
+            partiallyAllocatedCourses: json.data.partiallyAllocatedCourses || [],
+            notAllocatedCourses: json.data.notAllocatedCourses || []
+          });
+        }
+      } catch (err) {
+        if (isMounted) setAnalytics(prev => ({ ...prev, loading: false }));
+      }
+    };
+    fetchAnalytics();
+    return () => { isMounted = false; };
+  }, [isAdmin, yearFilter, sectionFilter, authHeaders, dashboardLastSyncedAt]);
+
   const refreshMasterData = useCallback(async () => {
     if (!user?.id) return;
     
@@ -631,24 +662,13 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       };
     }
 
-    const allocationDocs = dashboardData.allocations || [];
-    const facultyMap = new Map((liveFaculty || []).map(f => [f.empId, f]));
-
-    const facultyLoadMap = {};
-    (liveFaculty || []).forEach(f => {
-      const capacity = getWorkloadTarget(f.designation);
-      facultyLoadMap[f.empId] = {
-        empId: f.empId,
-        name: f.name,
-        designation: f.designation,
-        capacity,
-        assignedHours: 0,
-        lectureHours: 0,
-        tutorialHours: 0,
-        practicalHours: 0,
-        courseKeys: new Set(),
-      };
+    const rawAllocations = dashboardData.allocations || [];
+    const allocationDocs = rawAllocations.filter(a => {
+      if (yearFilter !== 'All' && String(a.year) !== yearFilter) return false;
+      if (sectionFilter !== 'All' && String(a.section) !== sectionFilter) return false;
+      return true;
     });
+    const facultyMap = new Map((liveFaculty || []).map(f => [f.empId, f]));
 
     const getSlots = (a, type) => {
       if (type === 'L') {
@@ -692,29 +712,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
         if (uniqueAssigned.length === 0) {
           pendingByType[type] = hours;
-        } else {
-          const split = hours / uniqueAssigned.length;
-          uniqueAssigned.forEach((member) => {
-            if (!facultyLoadMap[member.empId]) {
-              const fallbackCapacity = getWorkloadTarget('');
-              facultyLoadMap[member.empId] = {
-                empId: member.empId,
-                name: member.name,
-                designation: '',
-                capacity: fallbackCapacity,
-                assignedHours: 0,
-                lectureHours: 0,
-                tutorialHours: 0,
-                practicalHours: 0,
-                courseKeys: new Set(),
-              };
-            }
-            facultyLoadMap[member.empId].assignedHours += split;
-            if (type === 'L') facultyLoadMap[member.empId].lectureHours += split;
-            if (type === 'T') facultyLoadMap[member.empId].tutorialHours += split;
-            if (type === 'P') facultyLoadMap[member.empId].practicalHours += split;
-            facultyLoadMap[member.empId].courseKeys.add(`${a.courseId}__${a.section}`);
-          });
         }
       });
 
@@ -745,52 +742,18 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       };
     });
 
-    const facultySummary = Object.values(facultyLoadMap)
-      .map((f) => {
-        const assignedHours = Number(f.assignedHours.toFixed(2));
-        const pendingLoad = Number((f.capacity - assignedHours).toFixed(2));
-        const remainingLoad = Number(Math.max(0, pendingLoad).toFixed(2));
-        const pctRaw = f.capacity > 0 ? (assignedHours / f.capacity) * 100 : 0;
-        const loadPct = toPct(pctRaw);
-        const overloaded = assignedHours > f.capacity;
-        const fullyLoaded = !overloaded && remainingLoad === 0;
-        const nearCapacity = !overloaded && !fullyLoaded && loadPct >= 85;
-
-        return {
-          empId: f.empId,
-          name: f.name,
-          designation: f.designation,
-          capacity: f.capacity,
-          assignedHours,
-          pendingLoad,
-          overloadStatus: overloaded ? 'Overload' : 'Normal',
-          remainingLoad,
-          courseCount: f.courseKeys.size,
-          lectureHours: Number(f.lectureHours.toFixed(2)),
-          tutorialHours: Number(f.tutorialHours.toFixed(2)),
-          practicalHours: Number(f.practicalHours.toFixed(2)),
-          loadPct,
-          statusTone: overloaded ? 'over' : (fullyLoaded ? 'full' : (nearCapacity ? 'near' : 'normal')),
-        };
-      })
-      .sort((a, b) => b.assignedHours - a.assignedHours);
-
-    const availableFaculty = facultySummary.filter(f => f.remainingLoad > 0 && f.statusTone !== 'over');
-    const fullyLoadedFaculty = facultySummary.filter(f => f.statusTone === 'full');
-    const overloadedFaculty = facultySummary.filter(f => f.statusTone === 'over');
     const pendingCourses = courseRows.filter(c => c.pendingTotal > 0);
 
     return {
       courseRows,
-      facultySummary,
-      availableFaculty,
-      fullyLoadedFaculty,
-      overloadedFaculty,
+      availableFaculty: analytics.pending,
+      fullyLoadedFaculty: analytics.perfect,
+      overloadedFaculty: analytics.overloaded,
       pendingCourses,
       pendingTotalHours: pendingCourses.reduce((s, c) => s + c.pendingTotal, 0),
       pendingFacultyNeeded: pendingCourses.reduce((s, c) => s + c.missingTypes.length, 0),
     };
-  }, [isAdmin, dashboardData.allocations, liveFaculty]);
+  }, [isAdmin, dashboardData.allocations, liveFaculty, yearFilter, sectionFilter, analytics]);
 
   // Compute faculty-specific stats
   const getMyStats = useMemo(() => {
@@ -799,7 +762,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       return [
         {
           label: 'Total Faculty',
-          value: liveFaculty.length,
+          value: liveFaculty ? liveFaculty.length : 0,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -813,7 +776,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         },
         {
           label: 'Overloaded Faculty',
-          value: dashboardComputed.overloadedFaculty.length,
+          value: dashboardComputed.overloadedFaculty ? dashboardComputed.overloadedFaculty.length : 0,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -821,6 +784,58 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             </svg>
           ),
           color: '#ec4899', bg: '#fce7f3',
+        },
+        {
+          label: 'Pending Faculty',
+          value: dashboardComputed.availableFaculty ? dashboardComputed.availableFaculty.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          ),
+          color: '#ca8a04', bg: '#fef9c3',
+        },
+        {
+          label: 'Perfectly Assigned',
+          value: dashboardComputed.fullyLoadedFaculty ? dashboardComputed.fullyLoadedFaculty.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          ),
+          color: '#16a34a', bg: '#dcfce7',
+        },
+        {
+          label: 'Fully Allocated',
+          value: analytics.fullyAllocatedCourses ? analytics.fullyAllocatedCourses.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          ),
+          color: '#16a34a', bg: '#dcfce7',
+        },
+        {
+          label: 'Partially Allocated',
+          value: analytics.partiallyAllocatedCourses ? analytics.partiallyAllocatedCourses.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          ),
+          color: '#eab308', bg: '#fef08a',
+        },
+        {
+          label: 'Not Allocated',
+          value: analytics.notAllocatedCourses ? analytics.notAllocatedCourses.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          ),
+          color: '#ef4444', bg: '#fee2e2',
         },
       ];
     }
@@ -854,7 +869,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         color: '#3b82f6', bg: '#dbeafe',
       },
     ];
-  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty.length, liveFaculty.length]);
+  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, liveFaculty?.length, analytics]);
 
   const stats = getMyStats;
 
@@ -1187,6 +1202,38 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
 
 
+        {/* ── Filters ── */}
+        {isAdmin && (
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Year</label>
+              <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSectionFilter('All'); }} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
+                <option value="All">All Years</option>
+                {sectionsConfig && Object.keys(sectionsConfig).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Section</label>
+              <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
+                <option value="All">All Sections</option>
+                {sectionsConfig && yearFilter !== 'All' && sectionsConfig[yearFilter] && sectionsConfig[yearFilter].map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+                {sectionsConfig && yearFilter === 'All' && Array.from(new Set(Object.values(sectionsConfig).flat())).sort((a, b) => {
+                  const numA = parseInt(a);
+                  const numB = parseInt(b);
+                  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                  return a.localeCompare(b);
+                }).map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* ── Stat cards ── */}
         <div className="dash-cards">
           {stats.map((s) => (
@@ -1194,14 +1241,15 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
               className="dash-card"
               key={s.label}
               style={{
-                cursor: isAdmin && s.label === 'Overloaded Faculty' ? 'pointer' : 'default',
+                cursor: isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? 'pointer' : 'default',
+                border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
               }}
               onClick={() => {
-                if (isAdmin && s.label === 'Overloaded Faculty') {
-                  setShowOverloadedModal(true);
+                if (isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label)) {
+                  setExpandedCard(expandedCard === s.label ? null : s.label);
                 }
               }}
-              title={isAdmin && s.label === 'Overloaded Faculty' ? 'Click to view and manage overloaded faculty' : ''}
+              title={isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? `Click to view detailed list` : ''}
             >
               <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
                 {s.icon}
@@ -1214,32 +1262,95 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           ))}
         </div>
 
+        {/* Detailed List (Expanded) */}
+        {isAdmin && expandedCard && (() => {
+          let activeList = null;
+          let listType = 'faculty';
+          if (expandedCard === 'Overloaded Faculty') activeList = { title: 'Overloaded Faculty', data: dashboardComputed.overloadedFaculty || [], color: '#dc2626' };
+          if (expandedCard === 'Pending Faculty') activeList = { title: 'Pending Faculty', data: dashboardComputed.availableFaculty || [], color: '#ca8a04' };
+          if (expandedCard === 'Perfectly Assigned') activeList = { title: 'Perfectly Assigned Faculty', data: dashboardComputed.fullyLoadedFaculty || [], color: '#16a34a' };
+          if (expandedCard === 'Fully Allocated') { activeList = { title: 'Fully Allocated Courses', data: analytics.fullyAllocatedCourses || [], color: '#16a34a' }; listType = 'course'; }
+          if (expandedCard === 'Partially Allocated') { activeList = { title: 'Partially Allocated Courses', data: analytics.partiallyAllocatedCourses || [], color: '#eab308' }; listType = 'course'; }
+          if (expandedCard === 'Not Allocated') { activeList = { title: 'Not Allocated Courses', data: analytics.notAllocatedCourses || [], color: '#ef4444' }; listType = 'course'; }
+          
+          if (!activeList) return null;
+
+          return (
+            <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${activeList.color}`, paddingBottom: '12px', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, color: activeList.color }}>{activeList.title} ({activeList.data.length})</h3>
+                <button onClick={() => setExpandedCard(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#6b7280' }}>×</button>
+              </div>
+              {activeList.data.length === 0 ? (
+                <p style={{ color: '#6b7280', fontStyle: 'italic' }}>No records found in this category.</p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead>
+                      <tr style={{ background: '#f3f4f6', textAlign: 'left' }}>
+                        {listType === 'faculty' ? (
+                          <>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Emp ID</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Name</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Capacity</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Remaining</th>
+                          </>
+                        ) : (
+                          <>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Course ID</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Code</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Name</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Year</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Allocated Sections</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Pending Sections</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned Faculty</th>
+                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Status</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeList.data.map((item, i) => (
+                        <tr key={listType === 'faculty' ? item.empId : `${item.courseId}_${item.year}_${item.section}`} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb', color: '#000' }}>
+                          {listType === 'faculty' ? (
+                            <>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.empId}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.name}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.capacity}h</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{item.assignedHours}h</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: item.overloadStatus === 'Overload' ? '#dc2626' : item.pendingLoad > 0 ? '#ca8a04' : '#16a34a' }}>
+                                {item.pendingLoad > 0 ? `+${item.pendingLoad}h` : `${item.pendingLoad}h`}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.courseId}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectCode}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectName}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.year}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#16a34a' }}>{item.allocatedSections || '-'}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>{item.remainingSections || '-'}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.assignedFaculty}</td>
+                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>
+                                {item.status}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Overloaded Faculty Modal */}
         {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} />}
 
-        {isAdmin ? (
-          <>
-            <div className="dash-table-card" style={{ marginTop: '24px' }}>
-              <div className="dash-table-header">
-                <span className="dash-table-title">Overloaded Faculty Alert</span>
-                <span className="dash-table-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                  {dashboardComputed.overloadedFaculty.length} overloaded
-                </span>
-              </div>
-              <div className="dash-alert-wrap">
-                {dashboardComputed.overloadedFaculty.length === 0
-                  ? <span className="dash-muted">No overloads detected.</span>
-                  : dashboardComputed.overloadedFaculty.map(f => (
-                    <div key={f.empId} className="dash-overload-row">
-                      <strong>{f.name} ({f.empId})</strong>
-                      <span>Assigned {f.assignedHours}h / Capacity {f.capacity}h</span>
-                      <span className="dash-over-badge">Excess {Math.abs(f.pendingLoad).toFixed(2)}h</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </>
-        ) : (
+        {!isAdmin && (
           <>
             {/* Faculty Dashboard Content */}
 

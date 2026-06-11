@@ -6,15 +6,6 @@ const authHeader = () => ({
   ...authJsonHeaders(),
 });
 
-const getWorkloadTarget = (designation = '') => {
-  const d = designation.toLowerCase();
-  if (d.includes('dean') || d.includes('hod')) return 14;
-  if (d.includes('professor') && !d.includes('asst') && !d.includes('assoc') && !d.includes('assistant')) return 14;
-  if (d.includes('assoc')) return 16;
-  if (d.includes('sr. asst') || d.includes('senior level')) return 16;
-  if (d.includes('contract') || d === 'cap' || d.includes('internal cap') || d === 'ta' || d.includes('teaching instructor')) return 18;
-  return 16;
-};
 
 const TYPE_COLOR = { L: '#6b74e8', T: '#16a34a', P: '#f59e0b' };
 const TYPE_BG    = { L: '#eef0fd', T: '#dcfce7', P: '#fef9c3' };
@@ -83,8 +74,8 @@ const MyWorkloadPage = ({ currentUser }) => {
   const totalP = workloads.reduce((s, w) => s + (w.manualP ?? w.fixedP ?? 0), 0);
   const totalHrs = totalL + totalT + totalP;
   const designation = workloads[0]?.designation || '';
-  const target = getWorkloadTarget(designation);
-  const pct = target ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
+  const target = workloads[0]?.capacityHours || 24;
+  const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
 
   const grouped = workloads.reduce((acc, w) => {
     const key = w.year || 'Other';

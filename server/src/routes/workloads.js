@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/workloads.js
  *
  * GET    /api/workloads              — list (admin sees all; faculty sees own)
@@ -673,21 +673,28 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
       return sendError(res, 'capacityHours must be a positive number.', 400);
     }
 
-    // Update all workloads for this faculty with new capacity
+    // Update the Faculty collection so future assignments use the new capacity
+    const faculty = await Faculty.findOneAndUpdate(
+      { empId },
+      { $set: { totalWorkingHours: newCapacity } },
+      { new: true }
+    );
+
+    if (!faculty) {
+      logger.warn('Faculty not found for capacity update', { empId, userId: req.user.id });
+      return sendNotFound(res, 'Faculty not found. Cannot update capacity.');
+    }
+
+    // Update all existing workloads for this faculty with new capacity
     const result = await Workload.updateMany(
       { empId },
       { $set: { capacityHours: newCapacity } }
     );
 
-    if (result.matchedCount === 0) {
-      logger.warn('No workloads found for faculty capacity update', { empId, userId: req.user.id });
-      return sendNotFound(res, 'No workloads found for this faculty.');
-    }
-
     logger.info('Faculty capacity updated', {
       empId,
       capacityHours: newCapacity,
-      modifiedCount: result.modifiedCount,
+      modifiedWorkloads: result.modifiedCount,
       userId: req.user.id,
     });
 
@@ -697,6 +704,56 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
     });
   } catch (err) {
     logger.error('Error updating faculty capacity', { error: err.message, userId: req.user.id });
+    next(err);
+  }
+});
+
+/**
+ * PATCH /deva/workloads/bulk-visibility
+ * Global toggle: Set visibility for ALL workloads in the database
+ */
+router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { isVisible } = req.body;
+
+    if (isVisible === undefined || isVisible === null) {
+      logger.warn('Missing isVisible in bulk-visibility request', { userId: req.user.id });
+      return sendError(res, 'isVisible is required (true/false).', 400);
+    }
+
+    const boolIsVisible = Boolean(isVisible);
+
+    // Update ALL workloads
+    const result = await Workload.updateMany(
+      {},
+      { $set: { isVisible: boolIsVisible } }
+    );
+
+    await logAuditEvent({
+      req,
+      action: 'workload.bulk_visibility.toggle',
+      entity: 'workload',
+      entityId: 'all',
+      metadata: { 
+        isVisible: boolIsVisible, 
+        modifiedCount: result.modifiedCount,
+        matchedCount: result.matchedCount 
+      }
+    });
+
+    logger.info('Global workload visibility toggled', {
+      isVisible: boolIsVisible,
+      modifiedCount: result.modifiedCount,
+      userId: req.user.id
+    });
+
+    sendSuccess(res, {
+      message: `Global visibility updated: All ${result.matchedCount} workloads are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
+      modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount
+    });
+  } catch (err) {
+    logger.error('Error in global workload visibility toggle', { error: err.message, userId: req.user.id });
     next(err);
   }
 });
@@ -1014,7 +1071,7 @@ router.post(
         manualL: manualL ?? effectiveCourse.L,
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
-        capacityHours: Number(capacityHours) || 0,
+        capacityHours: Number(capacityHours) || (effectiveMember.totalWorkingHours ? Number(effectiveMember.totalWorkingHours) : 24),
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
       });
 
@@ -1395,4 +1452,5 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
 });
 
 module.exports = router;
+
 
