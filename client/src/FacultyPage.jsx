@@ -16,6 +16,7 @@ const DESIGNATION_OPTIONS = [
   'CAP',
   'Teaching Associate',
   'Teaching Instructor',
+  'Teaching Assistant',
 ];
 
 const FacultyPage = ({ isAdmin = false }) => {
