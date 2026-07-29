@@ -4,6 +4,8 @@ import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 
+
+
 const ProfilePage = ({ user, submissions = [], onLogout }) => {
   const { faculty: contextFaculty, setFaculty, courses: contextCourses } = useSharedData();
   
@@ -109,7 +111,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   }, [loadProfileData]);
 
   // Find this faculty member by their login employee ID
-  const profile = facultyList.find(f => f.empId === user.id);
+  const profile = facultyList.find(f => f.empId === user.id) || {};
 
   // Their preference submission (if any)
   const mySubmission = submissions.find(s => s.empId === user.id);
@@ -333,6 +335,59 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
                   : <span className="pp-na">—</span>}
               </span>
             </div>
+          </div>
+        </section>
+
+        {/* ── Work Capacity ─────────────────────── */}
+        <section className="pp-section">
+          <h2 className="pp-sec-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+            Work Capacity
+            {profile.status === 'Overloaded' && <span className="pp-badge" style={{ background: '#ef4444' }}>Overloaded</span>}
+            {profile.status === 'Red' && <span className="pp-badge" style={{ background: '#f97316' }}>High Utilization</span>}
+            {profile.status === 'Yellow' && <span className="pp-badge" style={{ background: '#eab308' }}>Moderate Utilization</span>}
+            {profile.status === 'Green' && <span className="pp-badge" style={{ background: '#22c55e' }}>Available</span>}
+          </h2>
+          
+          <div className="pp-detail-grid">
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Weekly Capacity Hours</span>
+              <span className="pp-dc-val pp-mono">{profile.weeklyCapacityHours || 30}</span>
+            </div>
+
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Current Allocated Hours</span>
+              <span className="pp-dc-val pp-mono">{profile.allocatedHours || 0}</span>
+            </div>
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Remaining Hours</span>
+              <span className="pp-dc-val pp-mono">{profile.remainingHours !== undefined ? profile.remainingHours : 30}</span>
+            </div>
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Utilization Percentage</span>
+              <span className="pp-dc-val pp-mono">{profile.utilizationPercentage || 0}%</span>
+            </div>
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Last Updated</span>
+              <span className="pp-dc-val">{profile.updatedAt ? new Date(profile.updatedAt).toLocaleString() : 'N/A'}</span>
+            </div>
+            <div className="pp-detail-cell">
+              <span className="pp-dc-label">Updated By</span>
+              <span className="pp-dc-val">{profile.updatedBy || 'System'}</span>
+            </div>
+          </div>
+          <div style={{ marginTop: '16px', background: '#f1f5f9', borderRadius: '4px', height: '12px', overflow: 'hidden' }}>
+            <div style={{
+              width: `${Math.min(profile.utilizationPercentage || 0, 100)}%`,
+              background: profile.status === 'Green' ? '#22c55e' : profile.status === 'Yellow' ? '#eab308' : '#ef4444',
+              height: '100%',
+              transition: 'width 0.3s ease, background 0.3s ease'
+            }} />
           </div>
         </section>
 

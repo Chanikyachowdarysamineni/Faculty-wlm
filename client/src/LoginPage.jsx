@@ -16,6 +16,12 @@ const LoginPage = ({ onLogin }) => {
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForceChange, setShowForceChange] = useState(false);
+  const [tempAuthData, setTempAuthData] = useState(null);
+  const [forceNewPassword, setForceNewPassword] = useState('');
+  const [forceConfirmPassword, setForceConfirmPassword] = useState('');
+  const [forceError, setForceError] = useState('');
+  const [forceLoading, setForceLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -38,11 +44,16 @@ const LoginPage = ({ onLogin }) => {
       if (!data.success) {
         setError(data.message || 'Login failed.');
       } else if (data.data && data.data.token && data.data.user) {
-        // Successfully logged in - store token and user info
-        localStorage.setItem('wlm_token', data.data.token);
-        localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
-        console.log('[Auth] Token stored successfully');
-        onLogin(data.data.user);
+        if (data.data.user.forcePasswordChange) {
+           setTempAuthData(data.data);
+           setShowForceChange(true);
+        } else {
+           // Successfully logged in - store token and user info
+           localStorage.setItem('wlm_token', data.data.token);
+           localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
+           console.log('[Auth] Token stored successfully');
+           onLogin(data.data.user);
+        }
       } else {
         setError('Invalid login response. Please try again.');
       }
@@ -51,6 +62,45 @@ const LoginPage = ({ onLogin }) => {
       setError('Could not reach server. Please check your connection.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForceChangeSubmit = async (e) => {
+    e.preventDefault();
+    setForceError('');
+    if (forceNewPassword !== forceConfirmPassword) {
+      setForceError('Passwords do not match.');
+      return;
+    }
+    setForceLoading(true);
+    try {
+      const res = await fetch(`${API}/deva/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tempAuthData.token}`
+        },
+        body: JSON.stringify({ currentPassword: password, newPassword: forceNewPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setForceError(data.message || 'Failed to change password.');
+      } else {
+        // Update token and proceed
+        const newToken = data.data?.token || tempAuthData.token;
+        localStorage.setItem('wlm_token', newToken);
+        
+        // Update user payload
+        const updatedUser = { ...tempAuthData.user, forcePasswordChange: false };
+        localStorage.setItem('wlm_user', JSON.stringify(updatedUser));
+        
+        setShowForceChange(false);
+        onLogin(updatedUser);
+      }
+    } catch (err) {
+      setForceError('Network error while changing password.');
+    } finally {
+      setForceLoading(false);
     }
   };
 
@@ -303,6 +353,44 @@ const LoginPage = ({ onLogin }) => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Force Password Change Modal (First Login) */}
+      {showForceChange && (
+        <div className="wlm-modal-overlay">
+          <div className="wlm-modal">
+            <h3 className="wlm-modal-title">Action Required</h3>
+            <p className="wlm-modal-desc" style={{ color: '#ef4444' }}>
+              You are logging in with a default password. You must change your password to continue.
+            </p>
+            <form onSubmit={handleForceChangeSubmit} style={{ marginTop: '12px', width: '100%' }}>
+              <div className="wlm-input-group" style={{ marginBottom: '10px' }}>
+                <input
+                  type="password"
+                  placeholder="New Password"
+                  value={forceNewPassword}
+                  onChange={(e) => setForceNewPassword(e.target.value)}
+                  className="wlm-input"
+                  required
+                />
+              </div>
+              <div className="wlm-input-group">
+                <input
+                  type="password"
+                  placeholder="Confirm New Password"
+                  value={forceConfirmPassword}
+                  onChange={(e) => setForceConfirmPassword(e.target.value)}
+                  className="wlm-input"
+                  required
+                />
+              </div>
+              {forceError && <p style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444' }}>{forceError}</p>}
+              <button type="submit" className="wlm-login-btn" style={{ marginTop: '16px', width: '100%' }} disabled={forceLoading}>
+                {forceLoading ? 'UPDATING...' : 'UPDATE PASSWORD'}
+              </button>
+            </form>
           </div>
         </div>
       )}

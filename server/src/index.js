@@ -46,6 +46,8 @@ const statsRoutes       = require('./routes/stats');
 const allocationsRoutes = require('./routes/allocations');
 const auditLogsRoutes   = require('./routes/auditLogs');
 const facultyPreferencesRoutes = require('./routes/faculty-preferences');
+const facultyCapacityRoutes = require('./routes/facultyCapacity');
+const designationsRoutes = require('./routes/designations');
 
 // ── Import WebSocket handler ────────────────────────────────
 const WebSocketHandler  = require('./websocket');
@@ -59,6 +61,7 @@ const CourseAllocation = require('./models/CourseAllocation');
 const AuditLog = require('./models/AuditLog');
 const Counter = require('./models/Counter');
 const PasswordResetToken = require('./models/PasswordResetToken');
+const { syncAuthAndRBAC } = require('./utils/authSync');
 
 const DEFAULT_SECTIONS = {
   I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
@@ -130,6 +133,9 @@ const baselineAllowedOrigins = [
   'https://wlm-client.onrender.com',
   'https://faculty-workload-management-1.onrender.com',
   'https://160.187.169.41',
+  'http://160.187.169.41',
+  'http://160.187.169.41:3000',
+  'https://160.187.169.41:3000',
   // Local development (localhost for testing)
   'http://localhost:3000',
   'http://localhost:3001',
@@ -247,6 +253,7 @@ app.get('/deva/health', (_req, res) => {
 
 // ── API routes ─────────────────────────────────────────────
 app.use('/deva/auth',                  authRoutes);
+app.use('/deva/designations',          designationsRoutes);
 app.use('/deva/faculty',               facultyRoutes);
 app.use('/deva/courses',               coursesRoutes);
 app.use('/deva/submissions',           submissionsRoutes);
@@ -256,6 +263,7 @@ app.use('/deva/stats',                 statsRoutes);
 app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/audit-logs',            auditLogsRoutes);
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
+app.use('/deva/faculty',               facultyCapacityRoutes);
 
 // ── 404 handler ────────────────────────────────────────────
 app.use((_req, res) => {
@@ -323,6 +331,17 @@ process.on('uncaughtException', (err) => {
   await backfillWorkloadCourseTypeKeys();
 
   // Ensure default settings exist
+  await Setting.findOneAndUpdate(
+    { key: 'workloadCalculation' },
+    { $setOnInsert: { key: 'workloadCalculation', value: 'auto' } },
+    { upsert: true }
+  );
+  
+  // Auto-repair missing auth records and initialize roles/designations
+  await syncAuthAndRBAC();
+
+  console.log('✅  App initialized successfully.');
+
   await Setting.findOneAndUpdate(
     { key: 'form_enabled' },
     { $setOnInsert: { key: 'form_enabled', value: 'true' } },

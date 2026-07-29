@@ -15,7 +15,8 @@ const facultySchema = new mongoose.Schema(
     mobile:      { type: String, default: '' },
     email:       { type: String, default: '' },
     passwordHash:{ type: String, default: null },
-    totalWorkingHours: { type: Number, default: 24, min: 0 }, // Total weekly teaching hours capacity (default 24 hours)
+    weeklyCapacityHours: { type: Number, default: 30, min: 0 },
+    updatedBy: { type: String, default: 'System' },
   },
   { timestamps: true, collection: 'faculty' }
 );

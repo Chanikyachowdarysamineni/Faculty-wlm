@@ -34,6 +34,66 @@ const getSectionsConfig = async () => {
   }
 };
 
+router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const User = require('../models/User');
+    
+    // 1. Delete Orphaned Workloads (empId not in Faculty)
+    const facultyDocs = await Faculty.find().select('empId').lean();
+    const validEmpIds = new Set(facultyDocs.map(f => String(f.empId).trim()));
+    
+    const workloads = await Workload.find().lean();
+    const orphanedWorkloadIds = workloads
+      .filter(w => !validEmpIds.has(String(w.empId).trim()))
+      .map(w => w._id);
+      
+    let deletedWorkloads = 0;
+    if (orphanedWorkloadIds.length > 0) {
+      const result = await Workload.deleteMany({ _id: { $in: orphanedWorkloadIds } });
+      deletedWorkloads = result.deletedCount;
+    }
+
+    // 2. Ensure all Faculty have a User account
+    const users = await User.find().select('empId').lean();
+    const existingUserEmpIds = new Set(users.map(u => String(u.empId).trim()));
+    
+    let createdUsers = 0;
+    for (const f of facultyDocs) {
+      const empId = String(f.empId).trim();
+      if (!existingUserEmpIds.has(empId)) {
+        const fullFaculty = await Faculty.findOne({ empId }).lean();
+        const bcrypt = require('bcryptjs');
+        const defaultPassword = String(fullFaculty.mobile || fullFaculty.empId).trim();
+        const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+        
+        await User.create({
+          empId,
+          name: fullFaculty.name || 'Unknown',
+          designation: fullFaculty.designation || 'Faculty',
+          mobile: fullFaculty.mobile || '',
+          email: fullFaculty.email || '',
+          passwordHash,
+          role: 'Faculty',
+          canAccessAdmin: false,
+          forcePasswordChange: true
+        });
+        createdUsers++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Database auto-repair completed successfully.',
+      data: {
+        deletedOrphanedWorkloads: deletedWorkloads,
+        createdMissingUsers: createdUsers
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const [

@@ -45,14 +45,21 @@ const resolveApiBase = () => {
 	// PRIORITY 2: Check environment variable
 	const envApi = normalizeApiBase(process.env.REACT_APP_API_URL);
 	if (envApi) {
-		console.log('[API Config] Using REACT_APP_API_URL:', envApi);
-		return envApi;
+		if (envApi.includes('localhost') && !isLocalhost()) {
+			console.warn(`[API Config] Warning: .env specifies ${envApi} but accessing remotely. Falling back to dynamic resolution.`);
+		} else {
+			console.log('[API Config] Using REACT_APP_API_URL:', envApi);
+			return envApi;
+		}
 	}
 	
 	// PRIORITY 3: Development mode
 	if (process.env.NODE_ENV === 'development') {
-		console.log('[API Config] Development mode, using HTTP://localhost:5000');
-		return 'http://localhost:5000';
+		const host = window.location.hostname;
+		const protocol = window.location.protocol;
+		const devApi = `${protocol}//${host}:5000`;
+		console.log(`[API Config] Development mode, using ${devApi}`);
+		return devApi;
 	}
 	
 	// PRIORITY 4: Production - use relative paths for nginx proxy

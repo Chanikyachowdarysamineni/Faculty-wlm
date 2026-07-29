@@ -10,7 +10,8 @@ const userSchema = new mongoose.Schema(
     mobile:        { type: String, default: '' },
     email:         { type: String, default: '' },
     passwordHash:  { type: String, required: true },
-    role:          { type: String, enum: ['admin', 'faculty'], default: 'faculty' },
+    role:          { type: String, default: 'faculty' }, // Now references dynamic Role name
+    forcePasswordChange: { type: Boolean, default: true },
     // true only for the one faculty who can also access the admin dashboard
     canAccessAdmin: { type: Boolean, default: false },
     failedLoginAttempts: { type: Number, default: 0 },

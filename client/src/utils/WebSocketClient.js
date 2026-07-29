@@ -20,8 +20,9 @@ class WebSocketClient {
     let backendUrl;
 
     if (process.env.NODE_ENV === 'development') {
-      // Development: Direct HTTP connection to localhost:5000 (WebSocket unencrypted)
-      backendUrl = 'ws://localhost:5000';
+      // Development: Use current hostname with port 5000
+      const host = window.location.hostname;
+      backendUrl = `ws://${host}:5000`;
     } else {
       // Production: Match page protocol (HTTPS → WSS, HTTP → WS)
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

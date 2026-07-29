@@ -8,6 +8,7 @@ export const DataProvider = ({ children }) => {
   const [courses, setCourses] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [sectionsConfig, setSectionsConfig] = useState(null);
+  const [designations, setDesignations] = useState([]);
 
   const value = {
     faculty,
@@ -18,6 +19,8 @@ export const DataProvider = ({ children }) => {
     setAllocations,
     sectionsConfig,
     setSectionsConfig,
+    designations,
+    setDesignations,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

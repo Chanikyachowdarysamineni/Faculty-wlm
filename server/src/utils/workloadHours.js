@@ -13,12 +13,15 @@ const Faculty = require('../models/Faculty');
  * Hours are calculated based on: Lecture (L) + Tutorial (T) + Practical (P) hours
  * @param {String} empId - Employee ID
  * @param {String} excludeWorkloadId - Optional: workload ID to exclude from calculation (for updates)
+ * @param {Object} session - Optional mongoose session
  * @returns {Object} { totalHours, breakdown, workloads }
  */
-const calculateFacultyWorkload = async (empId, excludeWorkloadId = null) => {
+const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null) => {
   try {
     const query = { empId: String(empId || '').trim() };
-    const workloads = await Workload.find(query).lean();
+    const dbQuery = Workload.find(query).lean();
+    if (session) dbQuery.session(session);
+    const workloads = await dbQuery.exec();
 
     let totalHours = 0;
     const breakdown = {
@@ -75,31 +78,36 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null) => {
 /**
  * Get faculty workload summary with remaining hours
  * @param {String} empId - Employee ID
- * @returns {Object} { empId, name, totalWorkingHours, currentLoad, remainingHours, utilizationPercent, assignments }
+ * @param {String} excludeWorkloadId - Optional: workload ID to exclude from calculation
+ * @param {Object} session - Optional mongoose session
+ * @returns {Object} { empId, name, weeklyCapacityHours, currentLoad, remainingHours, utilizationPercent, assignments }
  */
-const getFacultyWorkloadSummary = async (empId) => {
+const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null) => {
   try {
-    const faculty = await Faculty.findOne({ empId: String(empId || '').trim() }).lean();
+    const query = Faculty.findOne({ empId: String(empId || '').trim() }).lean();
+    if (session) query.session(session);
+    
+    const faculty = await query.exec();
     if (!faculty) {
       throw new Error(`Faculty not found: ${empId}`);
     }
 
-    const totalWorkingHours = Number(faculty.totalWorkingHours || 24);
-    const workloadData = await calculateFacultyWorkload(empId);
+    const weeklyCapacityHours = Number(faculty.weeklyCapacityHours || 30);
+    const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session);
 
     const currentLoad = workloadData.totalHours;
-    const remainingHours = Math.max(0, totalWorkingHours - currentLoad);
-    const utilizationPercent = totalWorkingHours > 0 ? ((currentLoad / totalWorkingHours) * 100).toFixed(2) : 0;
+    const remainingHours = Math.max(0, weeklyCapacityHours - currentLoad);
+    const utilizationPercent = weeklyCapacityHours > 0 ? ((currentLoad / weeklyCapacityHours) * 100).toFixed(2) : 0;
 
     return {
       empId: faculty.empId,
       name: faculty.name,
       designation: faculty.designation,
-      totalWorkingHours,
+      weeklyCapacityHours,
       currentLoad,
       remainingHours,
       utilizationPercent: parseFloat(utilizationPercent),
-      isOverAllocated: currentLoad > totalWorkingHours,
+      isOverAllocated: currentLoad > weeklyCapacityHours,
       breakdown: workloadData.breakdown,
       assignmentCount: workloadData.assignmentCount,
       assignments: workloadData.breakdown.assignments
@@ -117,14 +125,15 @@ const getFacultyWorkloadSummary = async (empId) => {
  * @param {Number} tutorialHours - Tutorial hours to add
  * @param {Number} practicalHours - Practical hours to add
  * @param {String} excludeWorkloadId - Optional: workload ID to exclude (for updates)
+ * @param {Object} session - Optional mongoose session
  * @returns {Object} { canAssign: Boolean, reason: String, summary: Object }
  */
-const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null) => {
+const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null, session = null) => {
   try {
-    const summary = await getFacultyWorkloadSummary(empId);
+    const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session);
     const additionalHours = Number(lectureHours || 0) + Number(tutorialHours || 0) + Number(practicalHours || 0);
     const newTotal = summary.currentLoad + additionalHours;
-    const capacity = summary.totalWorkingHours;
+    const capacity = summary.weeklyCapacityHours;
 
     const canAssign = newTotal <= capacity;
     let reason = '';
@@ -174,7 +183,7 @@ const getFacultyWorkloadReport = async (year = null) => {
         name: faculty.name,
         designation: faculty.designation,
         department: faculty.department,
-        totalCapacity: summary.totalWorkingHours,
+        totalCapacity: summary.weeklyCapacityHours,
         currentLoad: summary.currentLoad,
         remainingHours: summary.remainingHours,
         utilizationPercent: summary.utilizationPercent,

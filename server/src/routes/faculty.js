@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/faculty.js
  *
  * GET    /api/faculty          — list all faculty
@@ -37,9 +37,105 @@ const toClient = (doc) => ({
   mobile:      String(doc.mobile || '').trim() || 'N/A',
   designation: String(doc.designation || '').trim() || 'N/A',
   department:  String(doc.department || '').trim() || 'CSE',
+  weeklyCapacityHours: doc.weeklyCapacityHours || 30,
+  lectureHours: doc.lectureHours || 0,
+  tutorialHours: doc.tutorialHours || 0,
+  practicalHours: doc.practicalHours || 0,
+  allocatedHours: doc.allocatedHours || 0,
+  remainingHours: doc.remainingHours ?? 30,
+  utilizationPercentage: doc.utilizationPercentage || 0,
+  status: doc.status || 'Available',
   createdAt:   doc.createdAt?.toISOString() || null,
   updatedAt:   doc.updatedAt?.toISOString() || null,
 });
+
+const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null) => {
+  const pipeline = [
+    { $match: matchFilter }
+  ];
+
+  if (sort) pipeline.push({ $sort: sort });
+  if (skip) pipeline.push({ $skip: skip });
+  if (limit) pipeline.push({ $limit: limit });
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: 'workloads',
+        localField: 'empId',
+        foreignField: 'empId',
+        as: 'workloads'
+      }
+    },
+    {
+      $addFields: {
+        weeklyCapacityHours: { $ifNull: ["$weeklyCapacityHours", 30] },
+        lectureHours: {
+          $reduce: {
+            input: '$workloads',
+            initialValue: 0,
+            in: { $add: ["$$value", { $ifNull: ["$$this.manualL", { $ifNull: ["$$this.fixedL", 0] }] }] }
+          }
+        },
+        tutorialHours: {
+          $reduce: {
+            input: '$workloads',
+            initialValue: 0,
+            in: { $add: ["$$value", { $ifNull: ["$$this.manualT", { $ifNull: ["$$this.fixedT", 0] }] }] }
+          }
+        },
+        practicalHours: {
+          $reduce: {
+            input: '$workloads',
+            initialValue: 0,
+            in: { $add: ["$$value", { $ifNull: ["$$this.manualP", { $ifNull: ["$$this.fixedP", 0] }] }] }
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        allocatedHours: { $add: ["$lectureHours", "$tutorialHours", "$practicalHours"] }
+      }
+    },
+    {
+      $addFields: {
+        remainingHours: {
+          $max: [0, { $subtract: ["$weeklyCapacityHours", "$allocatedHours"] }]
+        },
+        utilizationPercentage: {
+          $cond: {
+            if: { $gt: ["$weeklyCapacityHours", 0] },
+            then: { $round: [{ $multiply: [{ $divide: ["$allocatedHours", "$weeklyCapacityHours"] }, 100] }, 2] },
+            else: 0
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        status: {
+          $switch: {
+            branches: [
+              { case: { $gte: ["$utilizationPercentage", 101] }, then: 'Overloaded' },
+              { case: { $gte: ["$utilizationPercentage", 100] }, then: 'Full' },
+              { case: { $gte: ["$utilizationPercentage", 80] }, then: 'Nearly Full' }
+            ],
+            default: 'Available'
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        workloads: 0,
+        passwordHash: 0
+      }
+    }
+  );
+
+  return pipeline;
+};
 
 // GET /api/faculty
 router.get('/', requireAuth, validatePagination, async (req, res, next) => {
@@ -57,12 +153,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     }
     const [total, docs] = await Promise.all([
       Faculty.countDocuments(filter),
-      Faculty.find(filter)
-        .select('slNo empId name email mobile designation department createdAt updatedAt')
-        .sort({ slNo: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit))
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
     sendPaginated(res, docs.map(toClient), { total, page, limit }, 200);
@@ -75,7 +166,9 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 // GET /api/faculty/:empId
 router.get('/:empId', requireAuth, async (req, res, next) => {
   try {
-    const doc = await Faculty.findOne({ empId: req.params.empId }).lean();
+    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1);
+    const docs = await Faculty.aggregate(pipeline);
+    const doc = docs[0];
     if (!doc) {
       logger.warn('Faculty member not found', { empId: req.params.empId, userId: req.user.id });
       return sendNotFound(res, 'Faculty member not found.');
@@ -94,65 +187,74 @@ router.post(
   requireAuth, requireAdmin,
   validateFacultyCreate,
   async (req, res, next) => {
+    const mongoose = require('mongoose');
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         logger.warn('Faculty creation validation failed', { userId: req.user.id, errors: errors.array() });
+        await session.abortTransaction();
+        session.endSession();
         return sendValidationError(res, errors.array());
       }
 
       const { empId, name, department = 'CSE', designation, mobile = '', email = '' } = req.body;
 
-      const existing = await Faculty.findOne({ empId: empId.trim() });
+      const existing = await Faculty.findOne({ empId: empId.trim() }).session(session);
       if (existing) {
         logger.warn('Faculty with duplicate empId attempted', { empId, userId: req.user.id });
+        await session.abortTransaction();
+        session.endSession();
         return sendConflict(res, 'Employee ID already exists.');
       }
 
-      const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).lean();
+      const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).session(session).lean();
       const slNo   = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
 
-      const doc = await Faculty.create({
+      const createdDocs = await Faculty.create([{
         slNo,
         empId: empId.trim(),
         name: name.trim(),
         department: String(department || 'CSE').trim() || 'CSE',
         designation: designation.trim(),
+        weeklyCapacityHours: req.body.weeklyCapacityHours !== undefined ? Number(req.body.weeklyCapacityHours) : 30,
         mobile,
         email,
-      });
+      }], { session });
+      const doc = createdDocs[0];
 
-      // ── Create User account for faculty with mobile as password ──
-      if (mobile && mobile.trim()) {
-        try {
-          const passwordHash = bcrypt.hashSync(mobile.trim(), 10);
-          await User.findOneAndUpdate(
-            { empId: empId.trim() },
-            {
-              $set: {
-                empId: empId.trim(),
-                name: name.trim(),
-                designation: designation.trim(),
-                mobile: mobile.trim(),
-                email: email.trim(),
-                passwordHash,
-                role: 'faculty',
-                canAccessAdmin: false,
-              }
-            },
-            { upsert: true, new: true, runValidators: true }
-          );
-          logger.info('User account created for faculty', { empId: doc.empId });
-        } catch (userErr) {
-          logger.warn('Failed to create user account for faculty', { empId: doc.empId, error: userErr.message });
-          // Don't fail the faculty creation if user account creation fails
-        }
-      }
+      // ── Create User account for faculty with mobile as default password ──
+      const defaultPassword = mobile.trim() ? mobile.trim() : empId.trim();
+      const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+      
+      await User.create([{
+        empId: empId.trim(),
+        name: name.trim(),
+        designation: designation.trim(),
+        mobile: mobile.trim(),
+        email: email.trim(),
+        passwordHash,
+        role: 'Faculty',
+        canAccessAdmin: false,
+        forcePasswordChange: true
+      }], { session });
+
+      logger.info('User account created for faculty', { empId: doc.empId });
+
+      await session.commitTransaction();
+      session.endSession();
 
       await logAuditEvent({ req, action: 'faculty.create', entity: 'faculty', entityId: doc.empId });
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
+      
+      // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
+      // For now, the creation is successful.
       sendCreated(res, toClient(doc));
     } catch (err) { 
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error creating faculty', { error: err.message, userId: req.user.id });
       next(err); 
     }
@@ -179,7 +281,7 @@ router.put(
         return sendValidationError(res, errors.array());
       }
 
-      const { name, department, designation, mobile, email, slNo } = req.body;
+      const { name, department, designation, mobile, email, slNo, weeklyCapacityHours } = req.body;
       const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
       
@@ -214,6 +316,10 @@ router.put(
         if (slNo !== undefined) {
           allowedUpdates.slNo = Number(slNo);
           logger.debug('Setting slNo', { value: allowedUpdates.slNo });
+        }
+        if (weeklyCapacityHours !== undefined) {
+          allowedUpdates.weeklyCapacityHours = Number(weeklyCapacityHours);
+          logger.debug('Setting weeklyCapacityHours', { value: allowedUpdates.weeklyCapacityHours });
         }
       }
 

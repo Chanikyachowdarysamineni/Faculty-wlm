@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/auth.js
  *
  * POST /api/auth/login           — login (fetched from users collection)
@@ -124,6 +124,7 @@ router.post(
         role:           userRole,
         name:           user.name,
         canAccessAdmin: user.canAccessAdmin || isAdminUser,
+        forcePasswordChange: user.forcePasswordChange,
       };
       const token = signToken(payload);
 
@@ -266,12 +267,33 @@ router.put(
         return sendError(res, 'Current password is incorrect.', 401);
       }
 
+      if (user.mobile && req.body.newPassword === user.mobile.trim()) {
+        logger.warn('Change password attempt using mobile number', { empId: req.user.id });
+        return sendError(res, 'New password cannot be your mobile number.', 400);
+      }
+
       const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
       const passwordHash = bcrypt.hashSync(req.body.newPassword, BCRYPT_ROUNDS);
-      await User.updateOne({ _id: user._id }, { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null } });
+      await User.updateOne(
+        { _id: user._id }, 
+        { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null, forcePasswordChange: false } }
+      );
+      
+      // Update token so the client knows forcePasswordChange is false now
+      const userRole = user.role;
+      const isAdminUser = isAdminEmployeeId(user.empId);
+      const payload = {
+        id:             user.empId,
+        role:           userRole,
+        name:           user.name,
+        canAccessAdmin: user.canAccessAdmin || isAdminUser,
+        forcePasswordChange: false,
+      };
+      const newToken = signToken(payload);
+
       logger.info('Password changed successfully', { empId: user.empId });
       await logAuditEvent({ req, action: 'auth.password.changed', entity: 'user', entityId: user.empId });
-      return sendSuccess(res, null, 200, { message: 'Password changed successfully.' });
+      return sendSuccess(res, { token: newToken }, 200, { message: 'Password changed successfully.' });
     } catch (err) {
       logger.error('Change password error', { error: err.message });
       next(err);

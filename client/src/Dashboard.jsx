@@ -16,6 +16,7 @@ import { fetchAllPages, fetchJsonWithRetry }    from './utils/apiFetchAll';
 import { fetchSectionsConfig } from './utils/sectionsApi';
 import { logAuthDiagnostics } from './utils/authDiagnostics';
 import { useSharedData } from './DataContext';
+import wsClient from './utils/WebSocketClient';
 import './Dashboard.css';
 
 const NAV_ITEMS = [
@@ -224,9 +225,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     return headers;
   }, []);
 
-  // Use shared data context
   const { setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig } = useSharedData();
-
   const [dashboardData, setDashboardData] = useState({
     loading: false,
     error: '',
@@ -251,6 +250,20 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const [sectionYear, setSectionYear] = useState('I');
   const [masterData, setMasterData] = useState({ faculty: [], courses: [] });
   const [showOverloadedModal, setShowOverloadedModal] = useState(false);
+
+  // Listen to WebSocket for real-time workload updates
+  useEffect(() => {
+    const handleWsMessage = (data) => {
+      if (data && data.type === 'workload_updated') {
+        console.log('[Dashboard] Detected workload_updated via socket, refreshing dashboard...');
+        refreshDashboardData();
+      }
+    };
+    wsClient.on('message', handleWsMessage);
+    return () => {
+      wsClient.off('message', handleWsMessage);
+    };
+  }, [authHeaders]);
 
   const formatSyncedAt = useCallback((date) => {
     if (!date) return 'Not synced yet';
@@ -755,9 +768,78 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
   // Compute faculty-specific stats
   const getMyStats = useMemo(() => {
+      // Capacity Calculations
+      let totalCapacity = 0;
+      let totalAllocated = 0;
+      let overloadedCount = 0;
+      let availableCount = 0;
+
+      (liveFaculty || []).forEach(f => {
+        totalCapacity += (f.weeklyCapacityHours || 30);
+        totalAllocated += (f.allocatedHours || 0);
+        if (f.status === 'Overloaded') overloadedCount++;
+        if (f.status === 'Available') availableCount++;
+      });
+      
+      const remainingCapacity = totalCapacity - totalAllocated;
+      const avgUtilization = totalCapacity > 0 ? ((totalAllocated / totalCapacity) * 100).toFixed(1) : 0;
+
     if (isAdmin) {
-      // Admin stats
-      return [
+      const summaryStats = [
+        {
+          label: 'Total Weekly Capacity',
+          value: totalCapacity,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          ),
+          color: '#3b82f6', bg: '#eff6ff',
+        },
+        {
+          label: 'Total Allocated Hours',
+          value: totalAllocated,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          ),
+          color: '#8b5cf6', bg: '#f5f3ff',
+        },
+        {
+          label: 'Remaining Capacity',
+          value: remainingCapacity,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          ),
+          color: '#22c55e', bg: '#f0fdf4',
+        },
+        {
+          label: 'Average Utilization',
+          value: `${avgUtilization}%`,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+            </svg>
+          ),
+          color: '#eab308', bg: '#fefce8',
+        },
+        {
+          label: 'Available Faculty',
+          value: availableCount,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          ),
+          color: '#10b981', bg: '#ecfdf5',
+        },
+      ];
+
+      const analyticsStats = [
         {
           label: 'Total Faculty',
           value: liveFaculty ? liveFaculty.length : 0,
@@ -836,12 +918,14 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           color: '#ef4444', bg: '#fee2e2',
         },
       ];
+
+      return { summaryStats, analyticsStats };
     }
 
     // Faculty stats - show faculty-specific metrics based on submissions and form status
     const myCourseCount = mySubmission?.courses ? mySubmission.courses.length : 0;
 
-    return [
+    const summaryStats = [
       {
         label: 'My Courses',
         value: myCourseCount,
@@ -867,9 +951,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         color: '#3b82f6', bg: '#dbeafe',
       },
     ];
+    return { summaryStats, analyticsStats: [] };
   }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, liveFaculty?.length, analytics]);
 
-  const stats = getMyStats;
+  const { summaryStats, analyticsStats } = getMyStats;
 
   // ─────────────────────────────────────────────────────────
   // Role picker — shown only for canAccessAdmin users before they choose
@@ -1215,33 +1300,80 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           </div>
         )}
 
-        {/* ── Stat cards ── */}
-        <div className="dash-cards">
-          {stats.map((s) => (
-            <div
-              className="dash-card"
-              key={s.label}
-              style={{
-                cursor: isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? 'pointer' : 'default',
-                border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
-              }}
-              onClick={() => {
-                if (isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label)) {
-                  setExpandedCard(expandedCard === s.label ? null : s.label);
-                }
-              }}
-              title={isAdmin && ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? `Click to view detailed list` : ''}
-            >
-              <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
-                {s.icon}
-              </div>
-              <div className="dash-card-info">
-                <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
-                <span className="dash-card-label">{s.label}</span>
-              </div>
+        {/* ── Summary Cards (New items below Header/Filters) ── */}
+        {isAdmin && (
+          <>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px' }}>Summary</h2>
+            <div className="dash-cards">
+              {summaryStats.map((s) => (
+                <div
+                  className="dash-card"
+                  key={s.label}
+                >
+                  <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                    {s.icon}
+                  </div>
+                  <div className="dash-card-info">
+                    <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                    <span className="dash-card-label">{s.label}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
+
+        {/* ── Analytics Section (Restored to previous layout) ── */}
+        {isAdmin && (
+          <>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Analytics</h2>
+            <div className="dash-cards">
+              {analyticsStats.map((s) => (
+                <div
+                  className="dash-card"
+                  key={s.label}
+                  style={{
+                    cursor: ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? 'pointer' : 'default',
+                    border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
+                  }}
+                  onClick={() => {
+                    if (['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label)) {
+                      setExpandedCard(expandedCard === s.label ? null : s.label);
+                    }
+                  }}
+                  title={['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? `Click to view detailed list` : ''}
+                >
+                  <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                    {s.icon}
+                  </div>
+                  <div className="dash-card-info">
+                    <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                    <span className="dash-card-label">{s.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {!isAdmin && (
+          <div className="dash-cards">
+            {summaryStats.map((s) => (
+              <div
+                className="dash-card"
+                key={s.label}
+              >
+                <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                  {s.icon}
+                </div>
+                <div className="dash-card-info">
+                  <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                  <span className="dash-card-label">{s.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Detailed List (Expanded) */}
         {isAdmin && expandedCard && (() => {
@@ -1327,6 +1459,32 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             </div>
           );
         })()}
+
+        {/* ── Features Section (Restored to previous layout) ── */}
+        {isAdmin && (
+          <>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Features</h2>
+            <div className="dash-table-card" style={{ marginTop: '0' }}>
+              <div className="dash-table-header">
+                <span className="dash-table-title">Overloaded Faculty Alert</span>
+                <span className="dash-table-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                  {dashboardComputed.overloadedFaculty.length} overloaded
+                </span>
+              </div>
+              <div className="dash-alert-wrap">
+                {dashboardComputed.overloadedFaculty.length === 0
+                  ? <span className="dash-muted">No overloads detected.</span>
+                  : dashboardComputed.overloadedFaculty.map(f => (
+                    <div key={f.empId} className="dash-overload-row">
+                      <strong>{f.name} ({f.empId})</strong>
+                      <span>Assigned {f.assignedHours}h / Capacity {f.capacity}h</span>
+                      <span className="dash-over-badge">Excess {Math.abs(f.pendingLoad).toFixed(2)}h</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Overloaded Faculty Modal */}
         {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} />}

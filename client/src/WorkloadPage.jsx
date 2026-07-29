@@ -92,6 +92,7 @@ const emptyForm = {
   // 'Other' free-text companions
   yearOther: '', sectionOther: '', courseTypeOther: '',
   empIdOther: '', empNameOther: '', designationOther: '', mobileOther: '', courseOther: '',
+  allowOverload: false,
 };
 
 // helper: auth header from localStorage token
@@ -476,8 +477,8 @@ const WorkloadPage = ({ submissions }) => {
   // ── Helper: Check if faculty already has capacity set ──
   const getFacultyExistingCapacity = (empId) => {
     if (!empId || empId === '__other__') return null;
-    const existing = workloads.find(w => w.empId === empId);
-    return existing ? Number(existing.capacityHours) : null;
+    const fac = facultyList.find(f => f.empId === empId);
+    return fac ? Number(fac.weeklyCapacityHours || 30) : null;
   };
 
   // ── Validation ──
@@ -545,6 +546,7 @@ const WorkloadPage = ({ submissions }) => {
       capacityHours: String(w.capacityHours || ''),
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
+      allowOverload: false,
     });
     setEditTarget(w);
     setErrors({});
@@ -635,7 +637,7 @@ const WorkloadPage = ({ submissions }) => {
       if (form.empId !== '__other__' && facultyWorkloadSummary) {
         const hoursToAssign = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
         const currentLoad = facultyWorkloadSummary.currentLoad;
-        const totalCapacity = facultyWorkloadSummary.totalWorkingHours;
+        const totalCapacity = facultyWorkloadSummary.weeklyCapacityHours;
         
         const adjustedCurrentLoad = currentLoad || 0;
         const newTotal = adjustedCurrentLoad + hoursToAssign;
@@ -658,8 +660,8 @@ const WorkloadPage = ({ submissions }) => {
       const capacityHours = Number(form.capacityHours) || 0;
       const assignedHours = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
       
-      if (capacityHours > 0 && assignedHours > capacityHours) {
-        const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacityHours}h) for this role. This workload would be marked as OVERLOADED.`;
+      if (capacityHours > 0 && assignedHours > capacityHours && !form.allowOverload) {
+        const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacityHours}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
         setErrors((prev) => ({
           ...prev,
           capacityHours: errorMsg,
@@ -703,6 +705,7 @@ const WorkloadPage = ({ submissions }) => {
         ...(selectedRole === 'TA' && {
           allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1,
         }),
+        allowOverload: form.allowOverload,
       };
 
       // Debug logging for payload diagnosis
@@ -1024,7 +1027,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Grouped per-faculty forms data ──
   const facultyForms = useMemo(() => {
     const map = {};
-    workloads.forEach(w => {
+    filtered.forEach(w => {
       if (!map[w.empId]) {
         const fm = facultyList.find(f => f.empId === w.empId);
         map[w.empId] = {
@@ -1040,7 +1043,7 @@ const WorkloadPage = ({ submissions }) => {
       map[w.empId].rows.push(w);
     });
     return Object.values(map).sort((a, b) => a.empName.localeCompare(b.empName));
-  }, [workloads]);
+  }, [filtered, facultyList]);
 
   const facultyLoadSummary = useMemo(() => {
     const map = {};
@@ -1058,7 +1061,7 @@ const WorkloadPage = ({ submissions }) => {
     Object.keys(map).forEach((empId) => {
       // Use actual capacity hours from workload
       const fm = facultyList.find(f => f.empId === empId);
-      const target = map[empId].capacityHours || Number(fm?.totalWorkingHours) || 24;
+      const target = Number(fm?.weeklyCapacityHours) || 30;
       const assigned = Number(map[empId].assigned.toFixed(2));
       const remaining = Number((target - assigned).toFixed(2));
       map[empId] = {
@@ -1075,7 +1078,7 @@ const WorkloadPage = ({ submissions }) => {
 
   const allFacultyWorkloadBlocks = useMemo(() => {
     const map = {};
-    workloads.forEach((w) => {
+    filtered.forEach((w) => {
       if (!map[w.empId]) {
         const fm = facultyList.find((f) => f.empId === w.empId);
         map[w.empId] = {
@@ -1090,7 +1093,7 @@ const WorkloadPage = ({ submissions }) => {
       map[w.empId].rows.push(w);
     });
     return Object.values(map).sort((a, b) => a.empName.localeCompare(b.empName));
-  }, [workloads, facultyList]);
+  }, [filtered, facultyList]);
 
   return (
     <div className="wl-wrapper">
@@ -1438,7 +1441,7 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wl-capacity-grid">
                     <div className="wl-cap-card">
                       <div className="wl-cap-label">Total Capacity</div>
-                      <div className="wl-cap-value" style={{ color: '#3b82f6' }}>{facultyWorkloadSummary.totalWorkingHours}h</div>
+                      <div className="wl-cap-value" style={{ color: '#3b82f6' }}>{facultyWorkloadSummary.weeklyCapacityHours}h</div>
                     </div>
                     <div className="wl-cap-card">
                       <div className="wl-cap-label">Currently Assigned</div>
@@ -1459,7 +1462,7 @@ const WorkloadPage = ({ submissions }) => {
                   </div>
                   {facultyWorkloadSummary.isOverAllocated && (
                     <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '10px 12px', borderRadius: 6, fontSize: '12px', marginTop: '8px' }}>
-                      ⚠ Faculty is already over-allocated by {Math.round(facultyWorkloadSummary.currentLoad - facultyWorkloadSummary.totalWorkingHours)}h
+                      ⚠ Faculty is already over-allocated by {Math.round(facultyWorkloadSummary.currentLoad - facultyWorkloadSummary.weeklyCapacityHours)}h
                     </div>
                   )}
                   {form.manualL && form.manualT && form.manualP && !editTarget && (
@@ -1750,6 +1753,18 @@ const WorkloadPage = ({ submissions }) => {
                   : `✓ Within capacity of ${form.capacityHours}h`}
               </div>
             )}
+            {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > Number(form.capacityHours) && (
+              <div style={{ marginTop: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.allowOverload}
+                    onChange={(e) => setForm({ ...form, allowOverload: e.target.checked })}
+                  />
+                  Allow Overload (bypass capacity check)
+                </label>
+              </div>
+            )}
           </div>
 
           {/* ── Form actions ── */}
@@ -1776,22 +1791,29 @@ const WorkloadPage = ({ submissions }) => {
           YEAR-WISE TABS (B.Tech only)
       ════════════════════════════════════════════════ */}
       {workloads.length > 0 && (
-        <div className="wl-year-tabs">
-          {['All', 'I', 'II', 'III', 'IV'].map(y => {
-            const count = y === 'All'
-              ? workloads.filter(w => w.year !== 'M.Tech').length
-              : workloads.filter(w => w.year === y).length;
-            return (
-              <button
-                key={y}
-                className={`wl-year-tab${activeYear === y ? ' wl-year-tab-active' : ''}`}
-                onClick={() => setActiveYear(y)}
-              >
-                {y === 'All' ? '📋 All Years' : `${y} Year`}
-                {count > 0 && <span className="wl-year-tab-badge">{count}</span>}
-              </button>
-            );
-          })}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="wl-year-tabs" style={{ marginBottom: 0 }}>
+            {['All', 'I', 'II', 'III', 'IV'].map(y => {
+              const count = y === 'All'
+                ? workloads.filter(w => w.year !== 'M.Tech').length
+                : workloads.filter(w => w.year === y).length;
+              return (
+                <button
+                  key={y}
+                  className={`wl-year-tab${activeYear === y ? ' wl-year-tab-active' : ''}`}
+                  onClick={() => setActiveYear(y)}
+                >
+                  {y === 'All' ? '📋 All Years' : `${y} Year`}
+                  {count > 0 && <span className="wl-year-tab-badge">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="wl-search-wrap" style={{ margin: 0, minWidth: '300px' }}>
+            <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input className="wl-search" placeholder="Search assigned faculty..." value={search} onChange={e => setSearch(e.target.value)} />
+            {search && <button className="wl-search-clear" onClick={() => setSearch('')}>✕</button>}
+          </div>
         </div>
       )}
 
@@ -1963,7 +1985,7 @@ const WorkloadPage = ({ submissions }) => {
               const totalHrs = totalL + totalT + totalP;
               
               const facListEntry = facultyList.find(f => f.empId === fac.empId);
-              const target = fac.capacityHours || Number(facListEntry?.totalWorkingHours) || 24;
+              const target = Number(facListEntry?.weeklyCapacityHours) || 30;
               const pct      = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
               
               return (

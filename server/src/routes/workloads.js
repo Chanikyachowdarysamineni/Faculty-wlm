@@ -15,6 +15,7 @@
 
 const express   = require('express');
 const { body, validationResult } = require('express-validator');
+const mongoose  = require('mongoose');
 const Workload  = require('../models/Workload');
 const Faculty   = require('../models/Faculty');
 const Course    = require('../models/Course');
@@ -27,6 +28,8 @@ const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated,
 const logger = require('../utils/logger');
 const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, validatePagination } = require('../middleware/validators');
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
+const { recalculateCapacity } = require('../utils/capacityUtils');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
@@ -888,6 +891,8 @@ router.post(
   requireAuth, requireAdmin,
   validateWorkloadCreate,
   async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -1018,8 +1023,8 @@ router.post(
       const hoursToAssign = lectureHours + tutorialHours + practicalHours;
 
       try {
-        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours);
-        if (!workloadCheck.canAssign) {
+        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours, null, session);
+        if (!workloadCheck.canAssign && !req.body.allowOverload) {
           logger.warn('Faculty workload capacity exceeded', { 
             empId: effectiveMember.empId, 
             empName: effectiveMember.name,
@@ -1047,13 +1052,13 @@ router.post(
         year: normalizedYear,
         section: normalizedSection,
         facultyRole: normalizedFacultyRole,
-      }).lean();
+      }).session(session).lean();
       if (duplicateRole) {
         logger.warn('Duplicate role assignment', { empId: effectiveMember.empId, courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, role: normalizedFacultyRole, userId: req.user.id });
         return sendConflict(res, ROLE_DUPLICATE_MSG);
       }
 
-      const doc = await Workload.create({
+      const createdDocs = await Workload.create([{
         empId: effectiveMember.empId,
         empName: effectiveMember.name,
         facultyRole: normalizedFacultyRole,
@@ -1071,9 +1076,10 @@ router.post(
         manualL: manualL ?? effectiveCourse.L,
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
-        capacityHours: Number(capacityHours) || (effectiveMember.totalWorkingHours ? Number(effectiveMember.totalWorkingHours) : 24),
+        capacityHours: Number(capacityHours) || (effectiveMember.weeklyCapacityHours ? Number(effectiveMember.weeklyCapacityHours) : 30),
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
-      });
+      }], { session });
+      const doc = createdDocs[0];
 
       if (normalizedFacultyRole === 'Main Faculty') {
         await syncMainFacultyToAllocation({
@@ -1100,8 +1106,15 @@ router.post(
 
       await logAuditEvent({ req, action: 'workload.create', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
       logger.info('Workload created', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+      
+      // Recalculate capacity
+      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
+
+      await session.commitTransaction();
+      wsHandler.broadcast({ type: 'workload_updated' });
       sendCreated(res, toClient(doc));
     } catch (err) {
+      await session.abortTransaction();
       if (isTaUniqueIndexError(err)) {
         logger.error('TA unique index error', { error: err.message, userId: req.user.id });
         return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
@@ -1116,12 +1129,16 @@ router.post(
       }
       logger.error('Error creating workload', { error: err.message, userId: req.user.id });
       next(err);
+    } finally {
+      session.endSession();
     }
   }
 );
 
 // PUT /api/workloads/:id  (admin)
 router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -1129,7 +1146,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       return sendValidationError(res, errors.array());
     }
 
-    const current = await Workload.findById(req.params.id).lean();
+    const current = await Workload.findById(req.params.id).session(session).lean();
     if (!current) {
       logger.warn('Workload entry not found for update', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
@@ -1238,7 +1255,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         year: nextYear,
         section: nextSection,
         facultyRole: 'Main Faculty',
-      }).lean();
+      }).session(session).lean();
       if (duplicateMain) {
         logger.warn('Main faculty duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
         return sendConflict(res, MAIN_FACULTY_DUPLICATE_MSG);
@@ -1252,7 +1269,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         year: nextYear,
         section: nextSection,
         facultyRole: 'TA',
-      }).lean();
+      }).session(session).lean();
       if (duplicateTa) {
         logger.warn('TA duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
         return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
@@ -1266,7 +1283,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       year: nextYear,
       section: nextSection,
       facultyRole: normalizedFacultyRole,
-    }).lean();
+    }).session(session).lean();
 
     if (duplicateRole) {
       logger.warn('Duplicate role in update', { id: req.params.id, empId: effectiveMember.empId, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, role: normalizedFacultyRole, userId: req.user.id });
@@ -1303,21 +1320,45 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       manualL: Number(updates.manualL ?? current.manualL ?? effectiveCourse.L ?? 0),
       manualT: Number(updates.manualT ?? current.manualT ?? effectiveCourse.T ?? 0),
       manualP: Number(updates.manualP ?? current.manualP ?? effectiveCourse.P ?? 0),
-      capacityHours: Number(updates.capacityHours ?? current.capacityHours ?? 0),
+      capacityHours: Number(updates.capacityHours ?? current.capacityHours ?? effectiveMember.weeklyCapacityHours ?? 30),
       allocationRow: nextAllocationRow,
     };
+
+    // CRITICAL: Validate workload hours capacity
+    try {
+      const workloadCheck = await canAssignWorkload(
+        effectiveMember.empId,
+        safeUpdates.manualL,
+        safeUpdates.manualT,
+        safeUpdates.manualP,
+        req.params.id,
+        session
+      );
+      if (!workloadCheck.canAssign && !req.body.allowOverload) {
+        logger.warn('Faculty workload capacity exceeded during update', {
+          id: req.params.id,
+          empId: effectiveMember.empId,
+          reason: workloadCheck.reason,
+          userId: req.user.id
+        });
+        return sendError(res, `Workload update failed: ${workloadCheck.reason}`, 400);
+      }
+    } catch (hourErr) {
+      logger.error('Error validating workload hours during update', { id: req.params.id, error: hourErr.message, userId: req.user.id });
+      return sendError(res, 'Error validating faculty capacity. Please contact support.', 500);
+    }
 
     if (normalizedFacultyRole === 'Main Faculty' && safeUpdates.courseTypeKey === 'DE' && isRestrictedDeYear(nextYear)) {
       const existingDe = await Workload.findOne(
         buildDeSectionConflictFilter({ year: nextYear, section: nextSection, excludeId: req.params.id })
-      ).lean();
+      ).session(session).lean();
       if (existingDe && existingDe.empId !== effectiveMember.empId) {
         logger.warn('DE constraint violation in update', { id: req.params.id, year: nextYear, section: nextSection, userId: req.user.id });
         return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
       }
     }
 
-    const doc = await Workload.findByIdAndUpdate(req.params.id, { $set: safeUpdates }, { new: true }).lean();
+    const doc = await Workload.findByIdAndUpdate(req.params.id, { $set: safeUpdates }, { new: true, session }).lean();
     if (!doc) {
       logger.warn('Workload not found after update', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
@@ -1388,10 +1429,20 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       });
     }
 
-    await logAuditEvent({ req, action: 'workload.update', entity: 'workload', entityId: String(req.params.id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
-    logger.info('Workload updated', { id: req.params.id, empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+    await logAuditEvent({ req, action: 'workload.update', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
+    logger.info('Workload updated', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+    
+    // Recalculate capacity for both old and new empId if they changed
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
+    if (current.empId !== doc.empId) {
+      await recalculateCapacity(current.empId, { updatedBy: req.user.empId, session });
+    }
+
+    await session.commitTransaction();
+    wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, toClient(doc), 200);
   } catch (err) {
+    await session.abortTransaction();
     if (isTaUniqueIndexError(err)) {
       logger.error('TA unique index error in update', { error: err.message, id: req.params.id, userId: req.user.id });
       return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
@@ -1406,11 +1457,15 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     }
     logger.error('Error updating workload', { error: err.message, id: req.params.id, userId: req.user.id });
     next(err);
+  } finally {
+    session.endSession();
   }
 });
 
 // DELETE /api/workloads/:id  (admin)
 router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -1418,7 +1473,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
       return sendValidationError(res, errors.array());
     }
 
-    const doc = await Workload.findByIdAndDelete(req.params.id);
+    const doc = await Workload.findByIdAndDelete(req.params.id, { session });
     if (!doc) {
       logger.warn('Workload entry not found for deletion', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
@@ -1442,12 +1497,21 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
       });
     }
 
-    await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(req.params.id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
-    logger.info('Workload deleted', { id: req.params.id, empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+    await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
+    logger.info('Workload deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+    
+    // Recalculate capacity
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
+
+    await session.commitTransaction();
+    wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, { message: 'Workload entry deleted.' }, 200);
-  } catch (err) { 
+  } catch (err) {
+    await session.abortTransaction();
     logger.error('Error deleting workload', { error: err.message, id: req.params.id, userId: req.user.id });
     next(err); 
+  } finally {
+    session.endSession();
   }
 });
 

@@ -2,25 +2,16 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+
 import './FacultyPage.css';
 
-const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '' };
-
-// Designation options extracted from faculty data
-const DESIGNATION_OPTIONS = [
-  'Professor & Dean, SOCI',
-  'Professor & HOD',
-  'Associate Professor',
-  'Assistant Professor',
-  'Assistant Professor (Contract)',
-  'CAP',
-  'Teaching Associate',
-  'Teaching Instructor',
-  'Teaching Assistant',
-];
+const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', weeklyCapacityHours: 30 };
 
 const FacultyPage = ({ isAdmin = false }) => {
-  const { faculty: contextFaculty, setFaculty } = useSharedData();
+  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations } = useSharedData();
+  
+  const [designations, setLocalDesignations] = useState([]);
+  // Local state
   
   const [list, setList]           = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -82,6 +73,28 @@ const FacultyPage = ({ isAdmin = false }) => {
     }
   }, [contextFaculty, deduplicateList]);
 
+  // Fetch designations
+  useEffect(() => {
+    const fetchDesignations = async () => {
+      try {
+        const res = await fetch(`${API}/deva/designations`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+           setLocalDesignations(data.data);
+           setDesignations(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch designations', err);
+      }
+    };
+    
+    if (contextDesignations && contextDesignations.length > 0) {
+      setLocalDesignations(contextDesignations);
+    } else {
+      fetchDesignations();
+    }
+  }, [contextDesignations, setDesignations, authHeaders]);
+
   // ── Drag-and-drop reorder ──────────────────────────────
   const handleDragStart = (e, idx) => {
     dragSrcIdx.current = idx;
@@ -123,6 +136,47 @@ const FacultyPage = ({ isAdmin = false }) => {
     }
   };
 
+  const autoSortByDesignation = async () => {
+    if (!window.confirm("This will overwrite the current manual ordering. Proceed?")) return;
+    const designationRank = {
+      'Professor & Head': 1,
+      'Professor': 2,
+      'Associate Professor': 3,
+      'Assistant Professor': 4,
+      'Teaching Assistant': 5
+    };
+    const getRank = (desig) => {
+      if (!desig) return 99;
+      for (const [key, rank] of Object.entries(designationRank)) {
+        if (desig.includes(key)) return rank;
+      }
+      return 99;
+    };
+    
+    const sorted = [...list].sort((a, b) => getRank(a.designation) - getRank(b.designation));
+    const reordered = sorted.map((f, i) => ({ ...f, slNo: i + 1 }));
+    setList(reordered);
+    setFaculty(reordered);
+    
+    setSyncing(true);
+    try {
+      await Promise.all(
+        reordered.map((f) =>
+          fetch(`${API}/deva/faculty/${encodeURIComponent(f.empId)}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ slNo: f.slNo })
+          })
+        )
+      );
+      showToast('✅ List reordered by designation!');
+    } catch (err) {
+      console.error('Sort error:', err);
+      showToast('❌ Failed to save new order.');
+    }
+    setSyncing(false);
+  };
+
   const handleDragEnd = () => {
     setDragOverIdx(null);
     dragSrcIdx.current = null;
@@ -136,15 +190,68 @@ const FacultyPage = ({ isAdmin = false }) => {
     setDragOverIdx(null);
   };
 
-  // ── Search filter ──────────────────────────────────────
+  // ── Search & Advanced Filters ────────────────────────
+  const mergedList = useMemo(() => {
+    return list;
+  }, [list]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return list;
-    return list.filter(
-      f =>
-        f.name.toLowerCase().includes(q) ||
-        f.empId.toLowerCase().includes(q)
-    );
+    if (!q) return mergedList;
+    
+    // Check for advanced filter syntax (e.g., "dept:cse", "l:4", "status:overloaded")
+    const filters = q.split(' ').reduce((acc, term) => {
+      const parts = term.split(':');
+      if (parts.length === 2 && parts[1]) {
+        acc.push({ key: parts[0], val: parts[1] });
+      } else {
+        acc.push({ key: 'any', val: term });
+      }
+      return acc;
+    }, []);
+
+    return mergedList.filter(f => {
+      let matches = true;
+      for (const filter of filters) {
+        const { key, val } = filter;
+        if (key === 'dept' || key === 'department') {
+          matches = matches && f.department?.toLowerCase().includes(val);
+        } else if (key === 'l' || key === 'lecture') {
+          matches = matches && Number(f.lectureHours) === Number(val);
+        } else if (key === 't' || key === 'tutorial') {
+          matches = matches && Number(f.tutorialHours) === Number(val);
+        } else if (key === 'p' || key === 'practical') {
+          matches = matches && Number(f.practicalHours) === Number(val);
+        } else if (key === 'alloc' || key === 'allocated') {
+          matches = matches && Number(f.allocatedHours) === Number(val);
+        } else if (key === 'rem' || key === 'remaining') {
+          matches = matches && Number(f.remainingHours) === Number(val);
+        } else if (key === 'status') {
+          if (val === 'available') {
+            matches = matches && f.status !== 'Overloaded' && f.status !== 'Red';
+          } else if (val === 'overloaded') {
+            matches = matches && (f.status === 'Overloaded' || f.utilizationPercentage > 100);
+          } else {
+            matches = matches && f.status?.toLowerCase().includes(val);
+          }
+        } else {
+          // 'any' text match
+          const textMatch = 
+            f.name?.toLowerCase().includes(val) ||
+            f.empId?.toLowerCase().includes(val) ||
+            f.department?.toLowerCase().includes(val) ||
+            f.designation?.toLowerCase().includes(val) ||
+            f.status?.toLowerCase().includes(val) ||
+            (val === 'available' && f.status !== 'Overloaded' && f.status !== 'Red') ||
+            (val === 'overloaded' && (f.status === 'Overloaded' || f.utilizationPercentage > 100)) ||
+            (val === 'lecture' && f.lectureHours > 0) ||
+            (val === 'tutorial' && f.tutorialHours > 0) ||
+            (val === 'practical' && f.practicalHours > 0);
+          matches = matches && textMatch;
+        }
+      }
+      return matches;
+    });
   }, [list, search]);
 
   // ── Toast helper ───────────────────────────────────────
@@ -178,6 +285,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       mobile: form.mobile || '',
       email: form.email || '',
       department: form.department || 'CSE',
+      weeklyCapacityHours: Number(form.weeklyCapacityHours) || 30,
     };
     try {
       setSyncing(true);
@@ -247,8 +355,13 @@ const FacultyPage = ({ isAdmin = false }) => {
 
   // ── Export CSV ─────────────────────────────────────────
   const exportCSV = () => {
-    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Designation', 'Mobile No', 'Email'];
-    const rows = list.map(f => [f.slNo, f.empId, `"${f.name}"`, `"${f.designation}"`, f.mobile, f.email]);
+    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Department', 'Designation', 'L', 'T', 'P', 'Allocated Hours', 'Weekly Capacity', 'Remaining Capacity', 'Utilization %', 'Status'];
+    const rows = mergedList.map(f => [
+      f.slNo || '', f.empId, `"${f.name}"`, `"${f.department || 'CSE'}"`, `"${f.designation}"`,
+      f.lectureHours, f.tutorialHours, f.practicalHours,
+      f.allocatedHours, f.weeklyCapacityHours, f.remainingHours,
+      f.utilizationPercentage, f.status
+    ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
@@ -256,6 +369,15 @@ const FacultyPage = ({ isAdmin = false }) => {
     a.href = url; a.download = 'faculty_list.csv'; a.click();
     URL.revokeObjectURL(url);
     showToast('Exported as faculty_list.csv');
+  };
+
+  const getDesigClass = (desig) => {
+    if (!desig) return '';
+    const d = desig.toLowerCase();
+    if (d.includes('head')) return 'desig-head';
+    if (d.includes('professor')) return 'desig-prof';
+    if (d.includes('assistant')) return 'desig-asst';
+    return '';
   };
 
   if (loading) {
@@ -269,7 +391,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       <div className="fp-topbar">
         <div className="fp-topbar-left">
           <h2 className="fp-heading">Faculty List</h2>
-          <span className="fp-count-badge">{list.length} Members</span>
+          <span className="fp-count-badge">{mergedList.length} Members</span>
         </div>
         <div className="fp-topbar-right">
           {/* Search */}
@@ -319,6 +441,16 @@ const FacultyPage = ({ isAdmin = false }) => {
               </>
             )}
           </button>
+
+          {!isDragMode && (
+            <button className="fp-btn fp-btn-reorder" onClick={autoSortByDesignation} title="Auto-sort list by designation priority" style={{ marginLeft: '10px' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+              </svg>
+              Auto-Sort
+            </button>
+          )}
 
           {/* Download */}
           {isAdmin && (
@@ -371,16 +503,23 @@ const FacultyPage = ({ isAdmin = false }) => {
               <th>Emp ID</th>
               <th>Name of the Faculty</th>
               <th>Designation</th>
-              <th>Mobile No</th>
-              <th>Email</th>
+              <th>Department</th>
+              <th title="Lecture Hours">L</th>
+              <th title="Tutorial Hours">T</th>
+              <th title="Practical Hours">P</th>
+              <th>Allocated</th>
+              <th>Capacity</th>
+              <th>Remaining</th>
+              <th>Util %</th>
+              <th>Status</th>
               {!isDragMode && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {(isDragMode ? list : filtered).length === 0 ? (
-              <tr><td colSpan={isDragMode ? 7 : 7} className="fp-empty">No records found.</td></tr>
+            {(isDragMode ? mergedList : filtered).length === 0 ? (
+              <tr><td colSpan={isDragMode ? 12 : 13} className="fp-empty">No records found.</td></tr>
             ) : (
-              (isDragMode ? list : filtered).map((f, i) => (
+              (isDragMode ? mergedList : filtered).map((f, i) => (
                 <tr
                   key={f.empId}
                   className={[
@@ -406,8 +545,21 @@ const FacultyPage = ({ isAdmin = false }) => {
                       {f.designation}
                     </span>
                   </td>
-                  <td>{f.mobile}</td>
-                  <td className="fp-td-email">{f.email || '—'}</td>
+                  <td>{f.department || 'CSE'}</td>
+                  <td>{f.lectureHours}</td>
+                  <td>{f.tutorialHours}</td>
+                  <td>{f.practicalHours}</td>
+                  <td>
+                    <strong style={{ color: f.status === 'Overloaded' ? '#dc2626' : 'inherit' }}>
+                      {f.allocatedHours}
+                    </strong>
+                  </td>
+                  <td>{f.weeklyCapacityHours}</td>
+                  <td>{f.remainingHours}</td>
+                  <td>{f.utilizationPercentage}%</td>
+                  <td style={{ fontWeight: 'bold', color: f.status === 'Available' ? '#22c55e' : f.status === 'Nearly Full' ? '#eab308' : f.status === 'Full' ? '#f97316' : '#ef4444' }}>
+                    {f.status}
+                  </td>
                   {!isDragMode && (
                     <td className="fp-td-actions">
                       <button className="fp-action-btn fp-edit" onClick={() => openEdit(f)} title="Edit">
@@ -462,7 +614,7 @@ const FacultyPage = ({ isAdmin = false }) => {
                   <select value={form.designation} onChange={e => setForm({...form, designation: e.target.value})}
                     required>
                     <option value="">Select Designation</option>
-                    {DESIGNATION_OPTIONS.map(d => (
+                    {designations.map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
@@ -476,6 +628,11 @@ const FacultyPage = ({ isAdmin = false }) => {
                   <label>Email</label>
                   <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
                     placeholder="e.g. john@example.com" />
+                </div>
+                <div className="fp-form-group">
+                  <label>Weekly Capacity (Hours) *</label>
+                  <input type="number" min="0" value={form.weeklyCapacityHours || ''} onChange={e => setForm({...form, weeklyCapacityHours: e.target.value})}
+                    placeholder="e.g. 30" required />
                 </div>
               </div>
               <div className="fp-modal-actions">

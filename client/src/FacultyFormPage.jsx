@@ -10,7 +10,7 @@ const FacultyFormPage = ({
   submissions, onSubmit, onUpdateSubmission, onDeleteSubmission,
   isAdmin, currentUser,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations } = useSharedData();
   
   // Auto-fill empId for logged-in faculty
   const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
@@ -33,6 +33,7 @@ const FacultyFormPage = ({
   const [prefsOther, setPrefsOther]   = useState(['', '', '', '', '']);
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
+  const [designations, setLocalDesignations] = useState([]);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
   const [submissionFilter, setSubmissionFilter] = useState('all'); // 'all' | 'submitted' | 'notsubmitted'
@@ -47,6 +48,28 @@ const FacultyFormPage = ({
     }
     setLastSyncedAt(new Date());
   }, [contextFaculty, contextCourses]);
+
+  // Fetch designations
+  useEffect(() => {
+    const fetchDesignations = async () => {
+      try {
+        const res = await fetch(`${API}/deva/designations`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+           setLocalDesignations(data.data);
+           if (setDesignations) setDesignations(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch designations', err);
+      }
+    };
+    
+    if (contextDesignations && contextDesignations.length > 0) {
+      setLocalDesignations(contextDesignations);
+    } else {
+      fetchDesignations();
+    }
+  }, [contextDesignations, setDesignations]);
 
   const authHeaders = () => ({
     ...authJsonHeaders(),
@@ -481,10 +504,16 @@ const FacultyFormPage = ({
                               disabled={!formEnabled && !editMode}
                               value={empOtherDetails.name}
                               onChange={e => setEmpOtherDetails(p => ({ ...p, name: e.target.value }))} />
-                            <input className="ff-other-input" placeholder="Designation"
+                            <select className="ff-other-input"
                               disabled={!formEnabled && !editMode}
                               value={empOtherDetails.designation}
-                              onChange={e => setEmpOtherDetails(p => ({ ...p, designation: e.target.value }))} />
+                              onChange={e => setEmpOtherDetails(p => ({ ...p, designation: e.target.value }))}
+                            >
+                              <option value="">Select Designation</option>
+                              {designations.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
                           </div>
                         )}
                       </>

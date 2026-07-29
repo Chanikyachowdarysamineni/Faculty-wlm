@@ -23,7 +23,6 @@ import ProfilePage from './ProfilePage';
 import MySubmissionsPage from './MySubmissionsPage';
 import ExtraFacultyPage from './ExtraFacultyPage';
 import AuditLogPage from './AuditLogPage';
-import CapacityManagementPage from './CapacityManagementPage';
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -118,11 +117,6 @@ export const protectedRoutes = [
     path: '/workload',
     element: <ProtectedRoute><WorkloadPage /></ProtectedRoute>,
     title: 'Workload Management'
-  },
-  {
-    path: '/capacity',
-    element: <ProtectedRoute roles={['admin']}><CapacityManagementPage /></ProtectedRoute>,
-    title: 'Capacity Management'
   },
   {
     path: '/my-workload',
