@@ -6,23 +6,25 @@
  * Import this in App.js and use with the Routes component.
  */
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Navigate } from 'react-router-dom';
+import LoadingIndicator from './LoadingIndicator';
 
-// Import page components
-import LoginPageComponent from './LoginPage';
-import Dashboard from './Dashboard';
-import AdminDashboard from './AdminDashboard';
-import FacultyPage from './FacultyPage';
-import CoursesPage from './CoursesPage';
-import WorkloadPage from './WorkloadPage';
-import MyWorkloadPage from './MyWorkloadPage';
-import AllocationPage from './AllocationPage';
-import SectionManagementPage from './SectionManagementPage';
-import ProfilePage from './ProfilePage';
-import MySubmissionsPage from './MySubmissionsPage';
-import ExtraFacultyPage from './ExtraFacultyPage';
-import AuditLogPage from './AuditLogPage';
+// Lazy load page components
+const LoginPageComponent = lazy(() => import('./LoginPage'));
+const Dashboard = lazy(() => import('./Dashboard'));
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const FacultyPage = lazy(() => import('./FacultyPage'));
+const CoursesPage = lazy(() => import('./CoursesPage'));
+const WorkloadPage = lazy(() => import('./WorkloadPage'));
+const MyWorkloadPage = lazy(() => import('./MyWorkloadPage'));
+const AllocationPage = lazy(() => import('./AllocationPage'));
+const SectionManagementPage = lazy(() => import('./SectionManagementPage'));
+const ProfilePage = lazy(() => import('./ProfilePage'));
+const MySubmissionsPage = lazy(() => import('./MySubmissionsPage'));
+const ExtraFacultyPage = lazy(() => import('./ExtraFacultyPage'));
+const AuditLogPage = lazy(() => import('./AuditLogPage'));
+
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -41,7 +43,11 @@ const LoginPageWrapper = () => {
     return <Navigate to="/" replace />;
   }
   
-  return <LoginPageComponent onLogin={onLogin} />;
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading login..." />}>
+      <LoginPageComponent onLogin={onLogin} />
+    </Suspense>
+  );
 };
 
 /**
@@ -49,7 +55,11 @@ const LoginPageWrapper = () => {
  */
 const DashboardWrapper = () => {
   const { currentUser, onLogout, remainingSeconds } = useAuth();
-  return <Dashboard user={currentUser} onLogout={onLogout} remainingSeconds={remainingSeconds} />;
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading dashboard..." />}>
+      <Dashboard user={currentUser} onLogout={onLogout} remainingSeconds={remainingSeconds} />
+    </Suspense>
+  );
 };
 
 /**
@@ -64,7 +74,11 @@ const AdminDashboardWrapper = () => {
     return <Navigate to="/" replace />;
   }
   
-  return <AdminDashboard />;
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading admin dashboard..." />}>
+      <AdminDashboard />
+    </Suspense>
+  );
 };
 
 /**
@@ -105,52 +119,52 @@ export const protectedRoutes = [
   },
   {
     path: '/faculty',
-    element: <ProtectedRoute><FacultyPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading faculty..." />}><FacultyPage /></Suspense></ProtectedRoute>,
     title: 'Faculty Management'
   },
   {
     path: '/courses',
-    element: <ProtectedRoute><CoursesPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading courses..." />}><CoursesPage /></Suspense></ProtectedRoute>,
     title: 'Courses Management'
   },
   {
     path: '/workload',
-    element: <ProtectedRoute><WorkloadPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading workload..." />}><WorkloadPage /></Suspense></ProtectedRoute>,
     title: 'Workload Management'
   },
   {
     path: '/my-workload',
-    element: <ProtectedRoute><MyWorkloadPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading my workload..." />}><MyWorkloadPage /></Suspense></ProtectedRoute>,
     title: 'My Workload'
   },
   {
     path: '/allocations',
-    element: <ProtectedRoute><AllocationPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading allocations..." />}><AllocationPage /></Suspense></ProtectedRoute>,
     title: 'Allocations'
   },
   {
     path: '/sections',
-    element: <ProtectedRoute><SectionManagementPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading sections..." />}><SectionManagementPage /></Suspense></ProtectedRoute>,
     title: 'Section Management'
   },
   {
     path: '/profile',
-    element: <ProtectedRoute><ProfilePage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading profile..." />}><ProfilePage /></Suspense></ProtectedRoute>,
     title: 'Profile'
   },
   {
     path: '/submissions',
-    element: <ProtectedRoute><MySubmissionsPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading submissions..." />}><MySubmissionsPage /></Suspense></ProtectedRoute>,
     title: 'Submissions'
   },
   {
     path: '/extra-faculty',
-    element: <ProtectedRoute><ExtraFacultyPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading extra faculty..." />}><ExtraFacultyPage /></Suspense></ProtectedRoute>,
     title: 'Extra Faculty'
   },
   {
     path: '/audit-logs',
-    element: <ProtectedRoute><AuditLogPage /></ProtectedRoute>,
+    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading logs..." />}><AuditLogPage /></Suspense></ProtectedRoute>,
     title: 'Audit Logs'
   },
 ];

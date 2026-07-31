@@ -227,7 +227,7 @@ router.post(
 
       // ── Create User account for faculty with mobile as default password ──
       const defaultPassword = mobile.trim() ? mobile.trim() : empId.trim();
-      const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
       
       await User.create([{
         empId: empId.trim(),
@@ -350,7 +350,7 @@ router.put(
         // If mobile changed, re-hash it as password
         if (allowedUpdates.mobile && allowedUpdates.mobile.trim()) {
           userUpdates.mobile = allowedUpdates.mobile;
-          userUpdates.passwordHash = bcrypt.hashSync(allowedUpdates.mobile.trim(), 10);
+          userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
         }
 
         if (Object.keys(userUpdates).length > 0) {

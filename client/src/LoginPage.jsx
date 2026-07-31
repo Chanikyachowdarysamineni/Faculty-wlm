@@ -25,6 +25,7 @@ const LoginPage = ({ onLogin }) => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     if (!employeeId.trim() || !password.trim()) {
       setError('Please enter your Employee ID and Password.');
@@ -67,6 +68,7 @@ const LoginPage = ({ onLogin }) => {
 
   const handleForceChangeSubmit = async (e) => {
     e.preventDefault();
+    if (forceLoading) return;
     setForceError('');
     if (forceNewPassword !== forceConfirmPassword) {
       setForceError('Passwords do not match.');
@@ -106,6 +108,7 @@ const LoginPage = ({ onLogin }) => {
 
   const handleForgotSubmit = async (e) => {
     e.preventDefault();
+    if (forgotSubmitted) return;
     try {
       const res = await fetch(`${API}/deva/auth/forgot-password`, {
         method:  'POST',
@@ -121,6 +124,7 @@ const LoginPage = ({ onLogin }) => {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
+    if (resetting) return;
     if (!resetToken.trim() || !newPassword.trim()) {
       setResetMessage('Please provide reset token and new password.');
       return;

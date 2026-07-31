@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
@@ -40,8 +41,7 @@
     "morgan": "^1.10.0",
     "nodemailer": "^8.0.2",
     "redis": "^4.6.14",
-    "ws": "^8.16.0",
-    "exceljs": "^4.4.0"
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

@@ -34,4 +34,10 @@ const facultySchema = new mongoose.Schema(
   { timestamps: true, collection: 'faculty' }
 );
 
+// Indexes for efficient filtering and sorting
+facultySchema.index({ department: 1 });
+facultySchema.index({ designation: 1 });
+facultySchema.index({ status: 1 });
+facultySchema.index({ name: 1 });
+
 module.exports = mongoose.model('Faculty', facultySchema);

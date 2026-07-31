@@ -79,7 +79,7 @@ router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) =>
     for (const f of missingUsers) {
       const empId = String(f.empId).trim();
       const defaultPassword = String(f.mobile || f.empId).trim();
-      const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
       
       await User.create({
         empId,

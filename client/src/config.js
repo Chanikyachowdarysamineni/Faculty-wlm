@@ -1,14 +1,3 @@
-const DEFAULT_API_BASE = 'https://160.187.169.41';
-
-const LEGACY_API_HOSTS = [
-	'http://wlm-server.onrender.com',
-	'https://wlm-server.onrender.com',
-	'http://faculty-workload-management.onrender.com',
-	'https://faculty-workload-management.onrender.com',
-	'http://faculty-workload-management-1.onrender.com',
-	'https://faculty-workload-management-1.onrender.com',
-];
-
 const SECTIONS_ENDPOINT_UNSUPPORTED_HOSTS = [];
 
 // CRITICAL: Detect localhost - always use HTTP, never HTTPS
@@ -31,7 +20,6 @@ const normalizeApiBase = (value) => {
 		return result;
 	}
 	
-	if (LEGACY_API_HOSTS.includes(withoutSlash)) return DEFAULT_API_BASE;
 	return withoutSlash;
 };
 

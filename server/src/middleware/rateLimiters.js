@@ -235,8 +235,8 @@ const loginLimiter = createLimiter({
     message: 'Login request could not be processed at this time.',
   },
   prefix: 'login',
-  // Campus/shared-WiFi safe mode: keep login open (no auth endpoint throttling).
-  skip: () => true,
+  // Enabled to actually enforce the 500 request limit
+  skip: () => false,
 });
 
 /**
@@ -263,8 +263,8 @@ const passwordResetLimiter = createLimiter({
     message: 'Password reset request could not be processed at this time.',
   },
   prefix: 'password-reset',
-  // Keep forgot/reset endpoints open to avoid shared-network false positives.
-  skip: () => true,
+  // Enabled to enforce the password reset limit
+  skip: () => false,
 });
 
 /**

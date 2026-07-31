@@ -1,4 +1,4 @@
-﻿/**
+/**
  * db.js — MongoDB connection via Mongoose
  */
 
@@ -20,7 +20,7 @@ const connect = async () => {
     serverSelectionTimeoutMS: 10000,   // fail fast if Atlas is unreachable (10 s)
     socketTimeoutMS:          45000,   // close sockets that hang longer than 45 s
     heartbeatFrequencyMS:     30000,   // check server every 30 s to detect drops
-    maxPoolSize:              10,
+    maxPoolSize:              50,
     minPoolSize:              2,
     family:                   4,       // force IPv4 — avoids IPv6 resolution delays
   });

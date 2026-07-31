@@ -23,4 +23,9 @@ const userSchema = new mongoose.Schema(
   { timestamps: true, collection: 'users' }
 );
 
+// Indexes for performance
+userSchema.index({ role: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ mobile: 1 });
+
 module.exports = mongoose.model('User', userSchema);

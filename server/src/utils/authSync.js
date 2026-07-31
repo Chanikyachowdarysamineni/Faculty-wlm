@@ -63,7 +63,7 @@ const syncAuthAndRBAC = async () => {
       const user = await User.findOne({ empId: faculty.empId });
       
       const defaultPassword = faculty.mobile ? String(faculty.mobile).trim() : String(faculty.empId).trim();
-      const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
       
       if (!user) {
         // Missing Auth record (e.g. for 03259, 01905, 02209)

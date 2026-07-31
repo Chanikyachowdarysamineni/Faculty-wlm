@@ -83,7 +83,7 @@ router.post(
         return sendError(res, 'Employee ID not found.', 401);
       }
 
-      const ok = bcrypt.compareSync(password, user.passwordHash);
+      const ok = await bcrypt.compare(password, user.passwordHash);
       if (!ok) {
         const failedAttempts = Number(user.failedLoginAttempts || 0) + 1;
         await User.updateOne(
@@ -231,7 +231,7 @@ router.post(
 
       // Update user password and clear locked status
       const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
-      const passwordHash = bcrypt.hashSync(req.body.newPassword, BCRYPT_ROUNDS);
+      const passwordHash = await bcrypt.hash(req.body.newPassword, BCRYPT_ROUNDS);
       await User.updateOne(
         { _id: user._id },
         { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null } }
@@ -262,7 +262,7 @@ router.put(
         return sendError(res, 'User not found.', 404);
       }
 
-      const ok = bcrypt.compareSync(req.body.currentPassword, user.passwordHash);
+      const ok = await bcrypt.compare(req.body.currentPassword, user.passwordHash);
       if (!ok) {
         logger.warn('Change password attempt with wrong current password', { empId: req.user.id });
         return sendError(res, 'Current password is incorrect.', 401);
@@ -274,7 +274,7 @@ router.put(
       }
 
       const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
-      const passwordHash = bcrypt.hashSync(req.body.newPassword, BCRYPT_ROUNDS);
+      const passwordHash = await bcrypt.hash(req.body.newPassword, BCRYPT_ROUNDS);
       await User.updateOne(
         { _id: user._id }, 
         { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null, forcePasswordChange: false } }

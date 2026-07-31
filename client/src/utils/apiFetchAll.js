@@ -8,7 +8,7 @@ const DEFAULT_RETRY_DELAY_MS = 350;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const shouldRetryStatus = (status) =>
-  status === 408 || status === 429 || (status >= 500 && status <= 599);
+  status === 408 || (status >= 500 && status <= 599);
 
 const parseJsonSafe = (text) => {
   try {

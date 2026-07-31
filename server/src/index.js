@@ -32,6 +32,7 @@ const fs           = require('fs');
 const cors         = require('cors');
 const morgan       = require('morgan');
 const helmet       = require('helmet');
+const compression  = require('compression');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeRedis, apiLimiter, strictLimiter } = require('./middleware/rateLimiters');
 
@@ -259,6 +260,10 @@ app.get('/deva/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ── Middleware ───────────────────────────────────────────────
+app.use(helmet());
+app.use(compression());
 
 // ── API routes ─────────────────────────────────────────────
 app.use('/deva/auth',                  authRoutes);
