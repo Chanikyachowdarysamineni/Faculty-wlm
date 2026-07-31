@@ -261,7 +261,7 @@ const WorkloadPage = ({ submissions }) => {
           manualL: Number(w.manualL || 0),
           manualT: Number(w.manualT || 0),
           manualP: Number(w.manualP || 0),
-          capacity: Number(w.capacity || 18),
+          capacity: Number(w.capacity),
           allocationRow: w.allocationRow ?? null,
         }));
         setWorkloads(normalized);
@@ -478,7 +478,7 @@ const WorkloadPage = ({ submissions }) => {
   const getFacultyExistingCapacity = (empId) => {
     if (!empId || empId === '__other__') return null;
     const fac = facultyList.find(f => f.empId === empId);
-    return fac ? Number(fac.capacity || 18) : null;
+    return fac ? Number(fac.capacity) : null;
   };
 
   // ── Validation ──
@@ -661,7 +661,7 @@ const WorkloadPage = ({ submissions }) => {
 
       // ── CAPACITY HOURS VALIDATION ──
       // Check if manual hours exceed the capacity set for this workload
-      const capacity = Number(facultyWorkloadSummary?.capacity) || 18;
+      const capacity = Number(facultyWorkloadSummary?.capacity);
       const assignedHours = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
       
       if (capacity > 0 && assignedHours > capacity && !form.allowOverload) {
@@ -1054,7 +1054,7 @@ const WorkloadPage = ({ submissions }) => {
 
     Object.keys(map).forEach((empId) => {
       const fm = facultyList.find(f => f.empId === empId);
-      const target = Number(fm?.capacity) || 18;
+      const target = Number(fm?.capacity);
       const assigned = Number(map[empId].assigned.toFixed(2));
       const remaining = Number((target - assigned).toFixed(2));
       map[empId] = {
@@ -1868,12 +1868,14 @@ const WorkloadPage = ({ submissions }) => {
                       <th className="wl-th-num" title="Manual Tutorial">✏ T</th>
                       <th className="wl-th-num" title="Manual Practical">✏ P</th>
                       <th className="wl-th-num" title="Total assigned hours">Total</th>
+                      <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {fac.rows.map((w, i) => {
-                      const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
+                          const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
+                          const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
                       return (
                         <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
                           <td className="wl-td-sl">{i + 1}</td>
@@ -1890,9 +1892,8 @@ const WorkloadPage = ({ submissions }) => {
                           <td className="wl-td-num wl-td-manual">{w.manualT}</td>
                           <td className="wl-td-num wl-td-manual">{w.manualP}</td>
                           <td className="wl-td-num wl-td-total">{rowTotal}</td>
-                          <td className="wl-td-num">{w.capacityHours > 0 ? w.capacityHours : '—'}</td>
-                          <td style={{ color: isOverloaded ? '#dc2626' : '#16a34a', fontWeight: isOverloaded ? '600' : '400' }}>
-                            {w.capacityHours > 0 ? (isOverloaded ? '⚠ OVERLOAD' : '✓ Normal') : '—'}
+                          <td style={{ color: rowIsOverloaded ? '#dc2626' : '#16a34a', fontWeight: rowIsOverloaded ? '600' : '400' }}>
+                            {rowIsOverloaded ? '⚠ OVERLOAD' : '✓ Normal'}
                           </td>
                           <td>
                             <div className="wl-actions">
@@ -1975,7 +1976,7 @@ const WorkloadPage = ({ submissions }) => {
               const totalHrs = totalL + totalT + totalP;
               
               const facListEntry = facultyList.find(f => f.empId === fac.empId);
-              const target = Number(facListEntry?.capacity) || 18;
+              const target = Number(facListEntry?.capacity);
               const pct      = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
               
               return (

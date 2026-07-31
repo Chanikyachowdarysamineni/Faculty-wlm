@@ -46,7 +46,8 @@ const recalculateCapacity = async (empId, options = {}) => {
   }
   allocated = lectureHours + tutorialHours + practicalHours;
 
-  const capacity = faculty.capacity || 18;
+  // Strict check: default to 18 only if completely missing. Allow 0.
+  const capacity = (faculty.capacity !== undefined && faculty.capacity !== null) ? Number(faculty.capacity) : 18;
   let remaining = capacity - allocated;
   // Rule 7: Do NOT allow negative remaining hours to be set to 0. Keep it negative to indicate overload.
 

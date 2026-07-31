@@ -324,8 +324,15 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
             name: { $first: '$empName' },
             designation: { $first: '$designation' },
             courseCount: { $sum: 1 },
-            assignedHours: { $sum: { $add: [{ $ifNull: ['$manualL', 0] }, { $ifNull: ['$manualT', 0] }, { $ifNull: ['$manualP', 0] }] } },
-            courseCount: { $sum: 1 }
+            assignedHours: { 
+              $sum: { 
+                $add: [
+                  { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }, 
+                  { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] }, 
+                  { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
+                ] 
+              } 
+            }
           }
         }
       ]),
@@ -348,7 +355,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
 
     facultyList.forEach(f => {
       const wData = workloadMap.get(f.empId) || { assignedHours: 0, courseCount: 0 };
-      const capacity = Number(f.capacity) || 18;
+      const capacity = Number(f.capacity);
       const assignedHours = wData.assignedHours;
       const pendingLoad = capacity - assignedHours;
 

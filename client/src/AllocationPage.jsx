@@ -94,7 +94,7 @@ const CellPicker = ({ courseId, section, type, rowIdx, empId, isAuto, isAdmin, o
         if (!isSupportingOrTA && !isCurrent) return false;
       }
 
-      const capacity = Number(f.capacity) || 18;
+      const capacity = Number(f.capacity);
       const info = facultyStatusMap[f.empId] || {
         capacity: capacity,
         assignedHours: 0,
@@ -110,7 +110,7 @@ const CellPicker = ({ courseId, section, type, rowIdx, empId, isAuto, isAdmin, o
   const shortN = chosen ? chosen.name.trim().split(/\s+/).slice(-2).join(' ') : '';
 
   const getStatusText = (emp) => {
-    const capacity = Number(emp.capacity) || 18;
+    const capacity = Number(emp.capacity);
     const info = facultyStatusMap[emp.empId] || {
       capacity: capacity,
       assignedHours: 0,
@@ -348,7 +348,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const facultyStatusMap = useMemo(() => {
     const summary = {};
     facultyList.forEach((f) => {
-      const capacity = Number(f.capacity) || 18;
+      const capacity = Number(f.capacity);
       summary[f.empId] = {
         capacity: capacity,
         assignedHours: 0,
@@ -376,7 +376,7 @@ const AllocationPage = ({ isAdmin = true }) => {
             if (!summary[empId]) {
               // Try to find the faculty in list to get capacity, fallback to 24
               const fac = facultyList.find(f => f.empId === empId);
-              const capacity = fac ? (Number(fac.capacity) || 18) : 18;
+              const capacity = fac ? Number(fac.capacity) : 0;
               summary[empId] = { capacity: capacity, assignedHours: 0, remaining: capacity };
             }
             summary[empId].assignedHours += split;

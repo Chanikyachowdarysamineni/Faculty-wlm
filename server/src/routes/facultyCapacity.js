@@ -23,9 +23,9 @@ router.get('/:empId/capacity', requireAuth, async (req, res, next) => {
     return res.json({
       success: true,
       data: {
-        capacity: faculty.capacity || 18,
+        capacity: faculty.capacity,
         allocated: faculty.allocated || 0,
-        remaining: faculty.remaining ?? 18,
+        remaining: faculty.remaining ?? (faculty.capacity - (faculty.allocated || 0)),
         workloadPercentage: faculty.workloadPercentage || 0,
         status: faculty.status || 'Available',
         updatedBy: faculty.updatedBy || 'System',
@@ -63,7 +63,7 @@ router.put(
       const faculty = await Faculty.findOne({ empId }).session(session);
       if (!faculty) throw new Error('Faculty not found');
 
-      const oldCapacity = faculty.capacity || 18;
+      const oldCapacity = faculty.capacity;
 
       faculty.capacity = capacity;
       faculty.updatedBy = req.user.empId;
@@ -106,7 +106,7 @@ router.post('/:empId/reset-capacity', requireAuth, requireAdmin, async (req, res
     const faculty = await Faculty.findOne({ empId }).session(session);
     if (!faculty) throw new Error('Faculty not found');
 
-    const oldCapacity = faculty.capacity || 18;
+    const oldCapacity = faculty.capacity;
 
     faculty.capacity = 18; // default
     faculty.updatedBy = req.user.empId;
@@ -163,7 +163,7 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
         continue;
       }
 
-      const oldCapacity = faculty.capacity || 18;
+      const oldCapacity = faculty.capacity;
 
       faculty.capacity = Number(capacity);
       faculty.updatedBy = req.user.empId;

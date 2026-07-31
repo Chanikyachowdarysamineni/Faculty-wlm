@@ -357,7 +357,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
           <div className="pp-detail-grid">
             <div className="pp-detail-cell">
               <span className="pp-dc-label">Weekly Capacity Hours</span>
-              <span className="pp-dc-val pp-mono">{profile.capacity || 18}</span>
+              <span className="pp-dc-val pp-mono">{profile.capacity}</span>
             </div>
 
             <div className="pp-detail-cell">
