@@ -37,13 +37,13 @@ const toClient = (doc) => ({
   mobile:      String(doc.mobile || '').trim() || 'N/A',
   designation: String(doc.designation || '').trim() || 'N/A',
   department:  String(doc.department || '').trim() || 'CSE',
-  weeklyCapacityHours: doc.weeklyCapacityHours || 30,
+  capacity:    doc.capacity ?? 18,
   lectureHours: doc.lectureHours || 0,
   tutorialHours: doc.tutorialHours || 0,
   practicalHours: doc.practicalHours || 0,
-  allocatedHours: doc.allocatedHours || 0,
-  remainingHours: doc.remainingHours ?? 30,
-  utilizationPercentage: doc.utilizationPercentage || 0,
+  allocated:   doc.allocated || 0,
+  remaining:   doc.remaining ?? 18,
+  workloadPercentage: doc.workloadPercentage || 0,
   status: doc.status || 'Available',
   createdAt:   doc.createdAt?.toISOString() || null,
   updatedAt:   doc.updatedAt?.toISOString() || null,
@@ -69,7 +69,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
     },
     {
       $addFields: {
-        weeklyCapacityHours: { $ifNull: ["$weeklyCapacityHours", 30] },
+        capacity: { $ifNull: ["$capacity", 18] },
         lectureHours: {
           $reduce: {
             input: '$workloads',
@@ -95,18 +95,18 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
     },
     {
       $addFields: {
-        allocatedHours: { $add: ["$lectureHours", "$tutorialHours", "$practicalHours"] }
+        allocated: { $add: ["$lectureHours", "$tutorialHours", "$practicalHours"] }
       }
     },
     {
       $addFields: {
-        remainingHours: {
-          $max: [0, { $subtract: ["$weeklyCapacityHours", "$allocatedHours"] }]
+        remaining: {
+          $subtract: ["$capacity", "$allocated"]
         },
-        utilizationPercentage: {
+        workloadPercentage: {
           $cond: {
-            if: { $gt: ["$weeklyCapacityHours", 0] },
-            then: { $round: [{ $multiply: [{ $divide: ["$allocatedHours", "$weeklyCapacityHours"] }, 100] }, 2] },
+            if: { $gt: ["$capacity", 0] },
+            then: { $round: [{ $multiply: [{ $divide: ["$allocated", "$capacity"] }, 100] }, 2] },
             else: 0
           }
         }
@@ -117,9 +117,9 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
         status: {
           $switch: {
             branches: [
-              { case: { $gte: ["$utilizationPercentage", 101] }, then: 'Overloaded' },
-              { case: { $gte: ["$utilizationPercentage", 100] }, then: 'Full' },
-              { case: { $gte: ["$utilizationPercentage", 80] }, then: 'Nearly Full' }
+              { case: { $lt: ["$remaining", 0] }, then: 'Overloaded' },
+              { case: { $eq: ["$remaining", 0] }, then: 'Full' },
+              { case: { $gte: ["$workloadPercentage", 80] }, then: 'Nearly Full' }
             ],
             default: 'Available'
           }
@@ -219,7 +219,7 @@ router.post(
         name: name.trim(),
         department: String(department || 'CSE').trim() || 'CSE',
         designation: designation.trim(),
-        weeklyCapacityHours: req.body.weeklyCapacityHours !== undefined ? Number(req.body.weeklyCapacityHours) : 30,
+        capacity: req.body.capacity !== undefined ? Number(req.body.capacity) : 18,
         mobile,
         email,
       }], { session });
@@ -281,7 +281,7 @@ router.put(
         return sendValidationError(res, errors.array());
       }
 
-      const { name, department, designation, mobile, email, slNo, weeklyCapacityHours } = req.body;
+      const { name, department, designation, mobile, email, slNo, capacity } = req.body;
       const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
       
@@ -317,9 +317,9 @@ router.put(
           allowedUpdates.slNo = Number(slNo);
           logger.debug('Setting slNo', { value: allowedUpdates.slNo });
         }
-        if (weeklyCapacityHours !== undefined) {
-          allowedUpdates.weeklyCapacityHours = Number(weeklyCapacityHours);
-          logger.debug('Setting weeklyCapacityHours', { value: allowedUpdates.weeklyCapacityHours });
+        if (capacity !== undefined) {
+          allowedUpdates.capacity = Number(capacity);
+          logger.debug('Setting capacity', { value: allowedUpdates.capacity });
         }
       }
 
@@ -416,8 +416,8 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
       counters.submissions = (await Submission.deleteMany({ empId })).deletedCount || 0;
       counters.users = (await User.deleteMany({ empId })).deletedCount || 0;
       
-      // Remove faculty from course allocations (both single lectures and slot arrays)
-      const allocDeleteResult = await CourseAllocation.deleteMany({
+      // Remove faculty from course allocations safely (zero out slots instead of deleting the whole document)
+      const allocations = await CourseAllocation.find({
         $or: [
           { 'lectureSlot.empId': empId },
           { lectureSlots: { $elemMatch: { empId } } },
@@ -425,7 +425,29 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
           { practicalSlots: { $elemMatch: { empId } } },
         ],
       });
-      counters.allocations = allocDeleteResult.deletedCount || 0;
+      
+      for (const alloc of allocations) {
+        if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
+          alloc.lectureSlot = { empId: '', empName: '', designation: '', hours: 0 };
+        }
+        alloc.lectureSlots.forEach(slot => {
+          if (slot.empId === empId) {
+            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
+          }
+        });
+        alloc.tutorialSlots.forEach(slot => {
+          if (slot.empId === empId) {
+            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
+          }
+        });
+        alloc.practicalSlots.forEach(slot => {
+          if (slot.empId === empId) {
+            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
+          }
+        });
+        await alloc.save();
+      }
+      counters.allocations = allocations.length;
     } catch (cleanupErr) {
       logger.error('Error during cascade delete cleanup', { error: cleanupErr.message, empId, userId: req.user.id, counters });
       // Continue with faculty deletion even if cleanup fails

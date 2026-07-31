@@ -166,7 +166,7 @@ export const fetchAllPages = async (path, params = {}, options = {}) => {
   const seenIds = new Set(); // Track IDs to prevent duplicates
 
   while (page <= pages && page <= maxPages) {
-    const query = toQueryString({ ...params, page });
+    const query = toQueryString({ ...params, page, _t: Date.now() });
     const url = `${API}${path}${query ? `?${query}` : ''}`;
     const result = await fetchJsonWithRetry(url, {
       headers,

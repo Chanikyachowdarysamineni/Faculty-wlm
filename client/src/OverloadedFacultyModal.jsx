@@ -122,7 +122,7 @@ const OverloadedFacultyModal = ({ isOpen, onClose }) => {
           newCurrentLoad += a.totalHours;
         });
 
-        const newRemainingHours = Math.max(0, selectedFaculty.totalCapacity - newCurrentLoad);
+        const newRemainingHours = selectedFaculty.totalCapacity - newCurrentLoad;
         const newExcessHours = Math.max(0, newCurrentLoad - selectedFaculty.totalCapacity);
 
         setSelectedFaculty(prev => ({
@@ -155,7 +155,7 @@ const OverloadedFacultyModal = ({ isOpen, onClose }) => {
     const newTotalHours = editingWorkload
       ? (faculty.currentLoad - editingWorkload.totalHours + editForm.manualL + editForm.manualT + editForm.manualP)
       : faculty.currentLoad;
-    const newRemainingHours = Math.max(0, faculty.totalCapacity - newTotalHours);
+    const newRemainingHours = faculty.totalCapacity - newTotalHours;
     const willBeOverloaded = newTotalHours > faculty.totalCapacity;
 
     return (
@@ -197,7 +197,7 @@ const OverloadedFacultyModal = ({ isOpen, onClose }) => {
                 </div>
                 <div className="ofm-stat-box ofm-stat-remaining">
                   <span className="ofm-stat-label">Remaining</span>
-                  <span className="ofm-stat-value">{Math.max(0, faculty.remainingHours)}h</span>
+                  <span className="ofm-stat-value">{faculty.remainingHours}h</span>
                 </div>
               </div>
             </div>
@@ -431,7 +431,7 @@ const OverloadedFacultyModal = ({ isOpen, onClose }) => {
                     </div>
                     <div className="ofm-stat">
                       <span className="ofm-stat-label">Remaining</span>
-                      <span className="ofm-stat-num">{Math.max(0, faculty.remainingHours)}h</span>
+                      <span className="ofm-stat-num">{faculty.remainingHours}h</span>
                     </div>
                   </div>
                   <span className="ofm-card-arrow">→</span>

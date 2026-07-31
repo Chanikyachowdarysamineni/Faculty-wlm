@@ -198,7 +198,7 @@ const AdminOverview = ({ user }) => {
     const perfect = [];
 
     faculties.forEach(f => {
-      const capacity = Number(f.weeklyCapacityHours || 30);
+      const capacity = Number(f.capacity || 18);
       const assigned = assignedMap[f.empId] || 0;
       const remaining = capacity - assigned;
 

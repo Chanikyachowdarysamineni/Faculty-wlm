@@ -74,7 +74,7 @@ const MyWorkloadPage = ({ currentUser }) => {
   const totalP = workloads.reduce((s, w) => s + (w.manualP ?? w.fixedP ?? 0), 0);
   const totalHrs = totalL + totalT + totalP;
   const designation = workloads[0]?.designation || '';
-  const target = workloads[0]?.capacityHours || 24;
+  const target = 18;
   const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
 
   const grouped = workloads.reduce((acc, w) => {

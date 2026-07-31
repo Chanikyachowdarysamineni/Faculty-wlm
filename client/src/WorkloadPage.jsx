@@ -88,7 +88,7 @@ const emptyForm = {
   courseId: '', year: 'I', section: '1',
   courseType: 'Mandatory',
   manualL: '', manualT: '', manualP: '',
-  capacityHours: '', // Max faculty workload capacity in hours
+  capacity: '', // Max faculty workload capacity in hours
   // 'Other' free-text companions
   yearOther: '', sectionOther: '', courseTypeOther: '',
   empIdOther: '', empNameOther: '', designationOther: '', mobileOther: '', courseOther: '',
@@ -261,7 +261,7 @@ const WorkloadPage = ({ submissions }) => {
           manualL: Number(w.manualL || 0),
           manualT: Number(w.manualT || 0),
           manualP: Number(w.manualP || 0),
-          capacityHours: Number(w.capacityHours || 0),
+          capacity: Number(w.capacity || 18),
           allocationRow: w.allocationRow ?? null,
         }));
         setWorkloads(normalized);
@@ -478,7 +478,7 @@ const WorkloadPage = ({ submissions }) => {
   const getFacultyExistingCapacity = (empId) => {
     if (!empId || empId === '__other__') return null;
     const fac = facultyList.find(f => f.empId === empId);
-    return fac ? Number(fac.weeklyCapacityHours || 30) : null;
+    return fac ? Number(fac.capacity || 18) : null;
   };
 
   // ── Validation ──
@@ -507,7 +507,7 @@ const WorkloadPage = ({ submissions }) => {
     if (selectedFaculty) {
       const existingCapacity = getFacultyExistingCapacity(selectedFaculty);
       if (existingCapacity !== null) {
-        emptyFormData.capacityHours = String(existingCapacity);
+        emptyFormData.capacity = String(existingCapacity);
       }
       emptyFormData.empId = selectedFaculty;
     }
@@ -543,7 +543,7 @@ const WorkloadPage = ({ submissions }) => {
       manualL:     String(w.manualL),
       manualT:     String(w.manualT),
       manualP:     String(w.manualP),
-      capacityHours: String(w.capacityHours || ''),
+
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
       allowOverload: false,
@@ -637,9 +637,13 @@ const WorkloadPage = ({ submissions }) => {
       if (form.empId !== '__other__' && facultyWorkloadSummary) {
         const hoursToAssign = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
         const currentLoad = facultyWorkloadSummary.currentLoad;
-        const totalCapacity = facultyWorkloadSummary.weeklyCapacityHours;
+        const totalCapacity = facultyWorkloadSummary.capacity;
         
-        const adjustedCurrentLoad = currentLoad || 0;
+        let adjustedCurrentLoad = currentLoad || 0;
+        if (editTarget) {
+          const oldHours = (Number(editTarget.manualL) || 0) + (Number(editTarget.manualT) || 0) + (Number(editTarget.manualP) || 0);
+          adjustedCurrentLoad = Math.max(0, adjustedCurrentLoad - oldHours);
+        }
         const newTotal = adjustedCurrentLoad + hoursToAssign;
 
         if (newTotal > totalCapacity) {
@@ -657,29 +661,21 @@ const WorkloadPage = ({ submissions }) => {
 
       // ── CAPACITY HOURS VALIDATION ──
       // Check if manual hours exceed the capacity set for this workload
-      const capacityHours = Number(form.capacityHours) || 0;
+      const capacity = Number(facultyWorkloadSummary?.capacity) || 18;
       const assignedHours = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
       
-      if (capacityHours > 0 && assignedHours > capacityHours && !form.allowOverload) {
-        const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacityHours}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
+      if (capacity > 0 && assignedHours > capacity && !form.allowOverload) {
+        const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacity}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
         setErrors((prev) => ({
           ...prev,
-          capacityHours: errorMsg,
+          capacity: errorMsg,
         }));
         showToast(`⚠ ${errorMsg}`);
         setSaving(false);
         return;
       }
 
-      // ── CAPACITY INHERITANCE ──
-      // If faculty already has capacity set and NOT editing, use existing capacity
-      let finalCapacityHours = parseInt(form.capacityHours) || 0;
-      if (!editTarget && form.empId !== '__other__') {
-        const existingCapacity = getFacultyExistingCapacity(form.empId);
-        if (existingCapacity !== null) {
-          finalCapacityHours = existingCapacity;
-        }
-      }
+
       
       const payload = {
         empId:    resolvedEmpId,
@@ -687,10 +683,10 @@ const WorkloadPage = ({ submissions }) => {
         facultyRole: selectedRole,
         year:     normalizedYear,  // Use normalized year (I, II, III, IV, or M.Tech)
         section:  String(resolvedSection).trim() || 'default',  // Fallback section
-        manualL:  parseInt(form.manualL) || 0,
-        manualT:  parseInt(form.manualT) || 0,
-        manualP:  parseInt(form.manualP) || 0,
-        capacityHours: finalCapacityHours,
+        manualL:  form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0),
+        manualT:  form.manualT !== '' ? parseInt(form.manualT) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.T || 0),
+        manualP:  form.manualP !== '' ? parseInt(form.manualP) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.P || 0),
+        // capacity is now purely derived from Faculty
         ...(form.empId    === '__other__' && {
           empNameOverride:     form.empNameOther.trim()     || 'Other Faculty',
           designationOverride: form.designationOther.trim() || 'Other',
@@ -760,7 +756,9 @@ const WorkloadPage = ({ submissions }) => {
         });
 
         // Handle 409 Conflict: Faculty already assigned - offer to edit
-        if (res.status === 409 && data?.message?.includes('already assigned')) {
+        // Only trigger this fallback for NEW assignments (!editTarget). 
+        // If it was a PUT request, it's a genuine error that should be shown without resetting the form.
+        if (!editTarget && res.status === 409 && data?.message?.includes('already assigned')) {
           const existingWorkload = workloads.find(w => 
             w.empId === form.empId && 
             w.courseId === Number(form.courseId) &&
@@ -783,7 +781,7 @@ const WorkloadPage = ({ submissions }) => {
               manualP: String(existingWorkload.manualP || ''),
               facultyRole: existingWorkload.facultyRole,
               allocationRow: existingWorkload.allocationRow || '',
-              capacityHours: String(existingWorkload.capacityHours || ''),
+
             });
             showToast('✓ This workload exists. Opening for editing...');
             setSaving(false);
@@ -804,7 +802,7 @@ const WorkloadPage = ({ submissions }) => {
         setForm(prev => ({
           ...prev,
           courseId: '', manualL: '', manualT: '', manualP: '',
-          // capacityHours IS KEPT for reuse
+
         }));
         setErrors({});
       } else {
@@ -830,7 +828,7 @@ const WorkloadPage = ({ submissions }) => {
       const res = await fetch(`${API}/deva/workloads/faculty/${editCapacityTarget}/capacity`, {
         method: 'PATCH',
         headers: { ...authJsonHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacityHours: newCapacity }),
+        body: JSON.stringify({ capacity: newCapacity }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -957,11 +955,9 @@ const WorkloadPage = ({ submissions }) => {
     { header: 'T', key: 'manualT' },
     { header: 'P', key: 'manualP' },
     { header: 'Total Assigned Load', value: (r) => (Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0)) },
-    { header: 'Capacity Hours', key: 'capacityHours' },
     { header: 'Status', value: (r) => {
-      if (!r.capacityHours || r.capacityHours === 0) return 'No Limit';
       const assigned = Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0);
-      return assigned > r.capacityHours ? 'OVERLOADED' : 'Normal';
+      return assigned > 18 ? 'OVERLOADED' : 'Normal';
     }},
   ];
 
@@ -1036,7 +1032,6 @@ const WorkloadPage = ({ submissions }) => {
           department:  w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
           mobile:      fm?.mobile || '',
-          capacityHours: Number(w.capacityHours) || 0, // Capture capacity from first workload
           rows:        [],
         };
       }
@@ -1052,16 +1047,14 @@ const WorkloadPage = ({ submissions }) => {
         map[w.empId] = {
           designation: w.designation || '',
           assigned: 0,
-          capacityHours: Number(w.capacityHours) || 0, // Get capacity from workload
         };
       }
       map[w.empId].assigned += Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0);
     });
 
     Object.keys(map).forEach((empId) => {
-      // Use actual capacity hours from workload
       const fm = facultyList.find(f => f.empId === empId);
-      const target = Number(fm?.weeklyCapacityHours) || 30;
+      const target = Number(fm?.capacity) || 18;
       const assigned = Number(map[empId].assigned.toFixed(2));
       const remaining = Number((target - assigned).toFixed(2));
       map[empId] = {
@@ -1441,7 +1434,7 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wl-capacity-grid">
                     <div className="wl-cap-card">
                       <div className="wl-cap-label">Total Capacity</div>
-                      <div className="wl-cap-value" style={{ color: '#3b82f6' }}>{facultyWorkloadSummary.weeklyCapacityHours}h</div>
+                      <div className="wl-cap-value" style={{ color: '#3b82f6' }}>{facultyWorkloadSummary.capacity}h</div>
                     </div>
                     <div className="wl-cap-card">
                       <div className="wl-cap-label">Currently Assigned</div>
@@ -1462,7 +1455,7 @@ const WorkloadPage = ({ submissions }) => {
                   </div>
                   {facultyWorkloadSummary.isOverAllocated && (
                     <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '10px 12px', borderRadius: 6, fontSize: '12px', marginTop: '8px' }}>
-                      ⚠ Faculty is already over-allocated by {Math.round(facultyWorkloadSummary.currentLoad - facultyWorkloadSummary.weeklyCapacityHours)}h
+                      ⚠ Faculty is already over-allocated by {Math.round(facultyWorkloadSummary.currentLoad - facultyWorkloadSummary.capacity)}h
                     </div>
                   )}
                   {form.manualL && form.manualT && form.manualP && !editTarget && (
@@ -1746,22 +1739,22 @@ const WorkloadPage = ({ submissions }) => {
           {/* ── Capacity Status Indicator ── */}
           <div style={{ fontSize: 12, color: '#666', padding: '4px 0', marginTop: '16px' }}>
             <div>✓ Assigned Hours: <strong>{(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0))}</strong>h</div>
-            {form.capacityHours && (
-              <div style={{ marginTop: '4px', color: (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > Number(form.capacityHours) ? '#dc2626' : '#16a34a' }}>
-                {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > Number(form.capacityHours) 
-                  ? `⚠ OVERLOAD: Exceeds capacity of ${form.capacityHours}h` 
-                  : `✓ Within capacity of ${form.capacityHours}h`}
+            {facultyWorkloadSummary && (
+              <div style={{ marginTop: '4px', color: (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target ? '#dc2626' : '#16a34a' }}>
+                {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target 
+                  ? `⚠ OVERLOAD: Exceeds capacity of ${facultyWorkloadSummary.target}h` 
+                  : `✓ Within capacity of ${facultyWorkloadSummary.target}h`}
               </div>
             )}
-            {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > Number(form.capacityHours) && (
+            {facultyWorkloadSummary && (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target && (
               <div style={{ marginTop: '8px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>
                   <input
                     type="checkbox"
                     checked={form.allowOverload}
-                    onChange={(e) => setForm({ ...form, allowOverload: e.target.checked })}
+                    onChange={(e) => setForm(prev => ({ ...prev, allowOverload: e.target.checked }))}
                   />
-                  Allow Overload (bypass capacity check)
+                  Allow Overload (Proceed anyway)
                 </label>
               </div>
             )}
@@ -1875,17 +1868,14 @@ const WorkloadPage = ({ submissions }) => {
                       <th className="wl-th-num" title="Manual Tutorial">✏ T</th>
                       <th className="wl-th-num" title="Manual Practical">✏ P</th>
                       <th className="wl-th-num" title="Total assigned hours">Total</th>
-                      <th className="wl-th-num" title="Capacity Hours">Capacity</th>
-                      <th title="Overload Status">Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {fac.rows.map((w, i) => {
                       const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
-                      const isOverloaded = w.capacityHours > 0 && rowTotal > w.capacityHours;
                       return (
-                        <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'} style={{ background: isOverloaded ? '#fee2e2' : undefined }}>
+                        <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
                           <td className="wl-td-sl">{i + 1}</td>
                           <td className="wl-td-code">{w.subjectCode}</td>
                           <td className="wl-td-sname">{w.subjectName}</td>
@@ -1985,7 +1975,7 @@ const WorkloadPage = ({ submissions }) => {
               const totalHrs = totalL + totalT + totalP;
               
               const facListEntry = facultyList.find(f => f.empId === fac.empId);
-              const target = Number(facListEntry?.weeklyCapacityHours) || 30;
+              const target = Number(facListEntry?.capacity) || 18;
               const pct      = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
               
               return (

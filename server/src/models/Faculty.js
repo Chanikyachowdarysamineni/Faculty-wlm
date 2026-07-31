@@ -15,7 +15,20 @@ const facultySchema = new mongoose.Schema(
     mobile:      { type: String, default: '' },
     email:       { type: String, default: '' },
     passwordHash:{ type: String, default: null },
-    weeklyCapacityHours: { type: Number, default: 30, min: 0 },
+    capacity: { 
+      type: Number, 
+      default: 18, 
+      min: [1, 'Capacity must be at least 1'], 
+      max: [60, 'Capacity cannot exceed 60'],
+      validate: {
+        validator: Number.isInteger,
+        message: '{VALUE} is not an integer value'
+      }
+    },
+    allocated: { type: Number, default: 0 },
+    remaining: { type: Number, default: 18 },
+    workloadPercentage: { type: Number, default: 0 },
+    status: { type: String, default: 'Available' },
     updatedBy: { type: String, default: 'System' },
   },
   { timestamps: true, collection: 'faculty' }

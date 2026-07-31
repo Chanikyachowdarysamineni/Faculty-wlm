@@ -23,11 +23,11 @@ router.get('/:empId/capacity', requireAuth, async (req, res, next) => {
     return res.json({
       success: true,
       data: {
-        weeklyCapacityHours: faculty.weeklyCapacityHours || 30,
-        allocatedHours: faculty.allocatedHours || 0,
-        remainingHours: faculty.remainingHours || 30,
-        utilizationPercentage: faculty.utilizationPercentage || 0,
-        status: faculty.status || 'Green',
+        capacity: faculty.capacity || 18,
+        allocated: faculty.allocated || 0,
+        remaining: faculty.remaining ?? 18,
+        workloadPercentage: faculty.workloadPercentage || 0,
+        status: faculty.status || 'Available',
         updatedBy: faculty.updatedBy || 'System',
         updatedAt: faculty.updatedAt
       }
@@ -43,7 +43,7 @@ router.put(
   requireAuth,
   requireAdmin,
   [
-    body('weeklyCapacityHours').isNumeric().withMessage('Must be a number').notEmpty(),
+    body('capacity').isNumeric().withMessage('Must be a number').notEmpty(),
     body('reason').optional().isString()
   ],
   async (req, res, next) => {
@@ -54,18 +54,18 @@ router.put(
     session.startTransaction();
     try {
       const empId = req.params.empId;
-      const { weeklyCapacityHours, reason } = req.body;
+      const { capacity, reason } = req.body;
 
-      if (weeklyCapacityHours < 0) {
-         throw new Error("Capacity cannot be negative.");
+      if (capacity < 1 || capacity > 60 || !Number.isInteger(Number(capacity))) {
+         throw new Error("Capacity must be an integer between 1 and 60.");
       }
 
       const faculty = await Faculty.findOne({ empId }).session(session);
       if (!faculty) throw new Error('Faculty not found');
 
-      const oldCapacity = faculty.weeklyCapacityHours || 30;
+      const oldCapacity = faculty.capacity || 18;
 
-      faculty.weeklyCapacityHours = weeklyCapacityHours;
+      faculty.capacity = capacity;
       faculty.updatedBy = req.user.empId;
       await faculty.save({ session });
 
@@ -76,7 +76,7 @@ router.put(
         empId,
         adminId: req.user.empId,
         oldCapacity,
-        newCapacity: weeklyCapacityHours,
+        newCapacity: capacity,
         action: 'UPDATE_CAPACITY',
         reason: reason || 'Manual Admin Update',
         ip: req.ip,
@@ -89,7 +89,7 @@ router.put(
     } catch (err) {
       await session.abortTransaction();
       if (err.message === 'Faculty not found') return sendError(res, err.message, 404);
-      if (err.message === 'Capacity cannot be negative.') return sendError(res, err.message, 400);
+      if (err.message === 'Capacity must be an integer between 1 and 60.') return sendError(res, err.message, 400);
       next(err);
     } finally {
       session.endSession();
@@ -106,9 +106,9 @@ router.post('/:empId/reset-capacity', requireAuth, requireAdmin, async (req, res
     const faculty = await Faculty.findOne({ empId }).session(session);
     if (!faculty) throw new Error('Faculty not found');
 
-    const oldCapacity = faculty.weeklyCapacityHours || 30;
+    const oldCapacity = faculty.capacity || 18;
 
-    faculty.weeklyCapacityHours = 30; // default
+    faculty.capacity = 18; // default
     faculty.updatedBy = req.user.empId;
     await faculty.save({ session });
 
@@ -118,7 +118,7 @@ router.post('/:empId/reset-capacity', requireAuth, requireAdmin, async (req, res
       empId,
       adminId: req.user.empId,
       oldCapacity,
-      newCapacity: 30,
+      newCapacity: 18,
       action: 'RESET_CAPACITY',
       reason: 'Admin Reset',
       ip: req.ip,
@@ -150,9 +150,9 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
     const errors = [];
 
     for (const item of req.body.data) {
-      const { empId, weeklyCapacityHours } = item;
+      const { empId, capacity } = item;
       
-      if (!empId || weeklyCapacityHours == null) {
+      if (!empId || capacity == null) {
         errors.push(`Missing data for entry: ${JSON.stringify(item)}`);
         continue;
       }
@@ -163,9 +163,9 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
         continue;
       }
 
-      const oldCapacity = faculty.weeklyCapacityHours || 30;
+      const oldCapacity = faculty.capacity || 18;
 
-      faculty.weeklyCapacityHours = Number(weeklyCapacityHours);
+      faculty.capacity = Number(capacity);
       faculty.updatedBy = req.user.empId;
       await faculty.save({ session });
 
@@ -175,7 +175,7 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
         empId,
         adminId: req.user.empId,
         oldCapacity,
-        newCapacity: faculty.weeklyCapacityHours,
+        newCapacity: faculty.capacity,
         action: 'BULK_UPDATE_CAPACITY',
         reason: 'Bulk Import',
         ip: req.ip,

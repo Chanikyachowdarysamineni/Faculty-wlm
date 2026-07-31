@@ -146,7 +146,6 @@ const toClient = (doc) => ({
   manualL:     Number(doc.manualL || 0),
   manualT:     Number(doc.manualT || 0),
   manualP:     Number(doc.manualP || 0),
-  capacityHours: Number(doc.capacityHours || 0),
   isVisible:   doc.isVisible === true,
   allocationRow: doc.allocationRow ?? null,
   assignedAt:  doc.createdAt?.toISOString() || null,
@@ -358,7 +357,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     const [total, docs] = await Promise.all([
       Workload.countDocuments(filter),
       Workload.find(filter)
-        .select('empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP capacityHours isVisible allocationRow createdAt')
+        .select('empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow createdAt')
         .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -497,7 +496,7 @@ router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
     }
 
     const summary = await getFacultyWorkloadSummary(empId);
-    logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.totalWorkingHours, utilizationPercent: summary.utilizationPercent }, userId: req.user.id });
+    logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.capacity, utilizationPercent: summary.workloadPercentage }, userId: req.user.id });
     sendSuccess(res, { data: summary }, 200);
   } catch (err) {
     if (err.message.includes('Faculty not found')) {
@@ -575,7 +574,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       return sendNotFound(res, 'Faculty not found.');
     }
 
-    const totalCapacity = Number(faculty.totalWorkingHours || 24);
+    const totalCapacity = Number(faculty.capacity || 18);
     
     // Get current total hours excluding this workload
     const otherWorkloads = await Workload.find({ 
@@ -662,24 +661,24 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
 router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const { capacityHours } = req.body;
+    const { capacity } = req.body;
 
     // Validate input
-    if (capacityHours === undefined || capacityHours === null) {
-      logger.warn('Missing capacityHours in request', { empId, userId: req.user.id });
-      return sendError(res, 'capacityHours is required.', 400);
+    if (capacity === undefined || capacity === null) {
+      logger.warn('Missing capacity in request', { empId, userId: req.user.id });
+      return sendError(res, 'capacity is required.', 400);
     }
 
-    const newCapacity = Number(capacityHours);
+    const newCapacity = Number(capacity);
     if (isNaN(newCapacity) || newCapacity <= 0) {
-      logger.warn('Invalid capacityHours value', { empId, capacityHours, userId: req.user.id });
-      return sendError(res, 'capacityHours must be a positive number.', 400);
+      logger.warn('Invalid capacity value', { empId, capacity, userId: req.user.id });
+      return sendError(res, 'capacity must be a positive number.', 400);
     }
 
     // Update the Faculty collection so future assignments use the new capacity
     const faculty = await Faculty.findOneAndUpdate(
       { empId },
-      { $set: { totalWorkingHours: newCapacity } },
+      { $set: { capacity: newCapacity } },
       { new: true }
     );
 
@@ -688,22 +687,19 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
       return sendNotFound(res, 'Faculty not found. Cannot update capacity.');
     }
 
-    // Update all existing workloads for this faculty with new capacity
-    const result = await Workload.updateMany(
-      { empId },
-      { $set: { capacityHours: newCapacity } }
-    );
+    // Workload no longer stores capacityHours, so we skip Workload.updateMany
+    const modifiedCount = 1;
 
     logger.info('Faculty capacity updated', {
       empId,
-      capacityHours: newCapacity,
-      modifiedWorkloads: result.modifiedCount,
+      capacity: newCapacity,
+      modifiedWorkloads: modifiedCount,
       userId: req.user.id,
     });
 
     sendSuccess(res, {
-      message: `Capacity updated to ${newCapacity}h for ${result.modifiedCount} workload(s).`,
-      modifiedCount: result.modifiedCount,
+      message: `Capacity updated to ${newCapacity}h.`,
+      modifiedCount,
     });
   } catch (err) {
     logger.error('Error updating faculty capacity', { error: err.message, userId: req.user.id });
@@ -900,7 +896,7 @@ router.post(
         return sendValidationError(res, errors.array());
       }
 
-          const { empId, courseId, year, section, manualL, manualT, manualP, capacityHours,
+          const { empId, courseId, year, section, manualL, manualT, manualP,
             facultyRole, allocationRow,
             empNameOverride, designationOverride, mobileOverride, courseNameOverride, courseTypeOverride } = req.body;
 
@@ -1076,7 +1072,6 @@ router.post(
         manualL: manualL ?? effectiveCourse.L,
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
-        capacityHours: Number(capacityHours) || (effectiveMember.weeklyCapacityHours ? Number(effectiveMember.weeklyCapacityHours) : 30),
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
       }], { session });
       const doc = createdDocs[0];
@@ -1248,9 +1243,11 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       }
     }
 
+    const targetId = new mongoose.Types.ObjectId(req.params.id);
+
     if (normalizedFacultyRole === 'Main Faculty') {
       const duplicateMain = await Workload.findOne({
-        _id: { $ne: req.params.id },
+        _id: { $ne: targetId },
         courseId: effectiveCourse.courseId,
         year: nextYear,
         section: nextSection,
@@ -1264,7 +1261,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
 
     if (normalizedFacultyRole === 'TA') {
       const duplicateTa = await Workload.findOne({
-        _id: { $ne: req.params.id },
+        _id: { $ne: targetId },
         courseId: effectiveCourse.courseId,
         year: nextYear,
         section: nextSection,
@@ -1277,7 +1274,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     }
 
     const duplicateRole = await Workload.findOne({
-      _id: { $ne: req.params.id },
+      _id: { $ne: targetId },
       empId: effectiveMember.empId,
       courseId: effectiveCourse.courseId,
       year: nextYear,
@@ -1320,7 +1317,6 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       manualL: Number(updates.manualL ?? current.manualL ?? effectiveCourse.L ?? 0),
       manualT: Number(updates.manualT ?? current.manualT ?? effectiveCourse.T ?? 0),
       manualP: Number(updates.manualP ?? current.manualP ?? effectiveCourse.P ?? 0),
-      capacityHours: Number(updates.capacityHours ?? current.capacityHours ?? effectiveMember.weeklyCapacityHours ?? 30),
       allocationRow: nextAllocationRow,
     };
 

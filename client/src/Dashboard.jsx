@@ -775,8 +775,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       let availableCount = 0;
 
       (liveFaculty || []).forEach(f => {
-        totalCapacity += (f.weeklyCapacityHours || 30);
-        totalAllocated += (f.allocatedHours || 0);
+        totalCapacity += (f.capacity || 18);
+        totalAllocated += (f.allocated || 0);
         if (f.status === 'Overloaded') overloadedCount++;
         if (f.status === 'Available') availableCount++;
       });

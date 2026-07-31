@@ -36,8 +36,7 @@ const workloadSchema = new mongoose.Schema(
     manualL:     { type: Number, default: 0 },
     manualT:     { type: Number, default: 0 },
     manualP:     { type: Number, default: 0 },
-    // Capacity in periods (hours) for faculty workload
-    capacityHours: { type: Number, default: 0 },
+
     // Visibility toggle: whether faculty can see this workload assignment
     isVisible: { type: Boolean, default: false },
     // For TA role: slot index in tutorialSlots/practicalSlots arrays (1=R2, 2=R3, 3=R4)

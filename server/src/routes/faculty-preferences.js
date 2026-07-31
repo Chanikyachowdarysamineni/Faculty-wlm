@@ -18,7 +18,7 @@ const FacultyPreference = require('../models/FacultyPreference');
 const Submission = require('../models/Submission');
 const Faculty = require('../models/Faculty');
 const Course = require('../models/Course');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendNotFound, sendCreated, sendConflict } = require('../utils/response');
 const { logAuditEvent } = require('../utils/audit');
 const logger = require('../utils/logger');
@@ -41,6 +41,7 @@ router.get(
   '/:empId',
   [param('empId').trim().isLength({ min: 1 }).withMessage('Employee ID required')],
   requireAuth,
+  requireSelfOrAdmin,
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -109,6 +110,7 @@ router.get(
   '/:empId/courses',
   [param('empId').trim().isLength({ min: 1 }).withMessage('Employee ID required')],
   requireAuth,
+  requireSelfOrAdmin,
   async (req, res) => {
     try {
       const errors = validationResult(req);

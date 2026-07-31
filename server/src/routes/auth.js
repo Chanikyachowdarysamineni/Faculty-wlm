@@ -17,6 +17,7 @@ const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const User     = require('../models/User');
 const PasswordResetToken = require('../models/PasswordResetToken');
+const TokenBlacklist = require('../models/TokenBlacklist');
 const { signToken } = require('../utils/jwt');
 const { requireAuth, validateActiveSession } = require('../middleware/auth');
 const { logAuditEvent, getIp } = require('../utils/audit');
@@ -327,7 +328,18 @@ router.post('/logout', requireAuth, async (req, res, next) => {
       return sendError(res, 'User not authenticated.', 401);
     }
 
-    // Log the logout event (no session token clearing needed for multi-session support)
+    // Log the logout event and blacklist the token
+    if (req.token && req.user && req.user.exp) {
+      // Decode exp which is in seconds, convert to Date
+      const expiresAt = new Date(req.user.exp * 1000);
+      try {
+        await TokenBlacklist.create({ token: req.token, expiresAt });
+      } catch (e) {
+        // Ignore duplicate key errors if already blacklisted
+        if (e.code !== 11000) throw e;
+      }
+    }
+
     logger.info('User logged out successfully', { empId: req.user.id });
     await logAuditEvent({ req, action: 'auth.logout', entity: 'user', entityId: req.user.id });
     return sendSuccess(res, null, 200, { message: 'Logged out successfully.' });

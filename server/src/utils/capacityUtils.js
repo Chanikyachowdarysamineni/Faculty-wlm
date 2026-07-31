@@ -7,15 +7,16 @@ const AuditLog = require('../models/AuditLog');
 const wsHandler = require('../websocket'); // Adjust path if needed
 
 /**
- * Recalculate status based on utilization percentage
+ * Recalculate status based on remaining hours and utilization percentage
+ * @param {Number} remaining - remaining hours
  * @param {Number} utilization - utilization percentage 
- * @returns {String} status - 'Green', 'Yellow', 'Red', 'Overloaded'
+ * @returns {String} status - 'Available', 'Nearly Full', 'Full', 'Overloaded'
  */
-const getStatus = (utilization) => {
-  if (utilization < 80) return 'Available';
-  if (utilization < 100) return 'Nearly Full';
-  if (utilization === 100) return 'Full';
-  return 'Overloaded';
+const getStatus = (remaining, utilization) => {
+  if (remaining < 0) return 'Overloaded';
+  if (remaining === 0) return 'Full';
+  if (utilization >= 80) return 'Nearly Full';
+  return 'Available';
 };
 
 /**
@@ -39,30 +40,27 @@ const recalculateCapacity = async (empId, options = {}) => {
   let allocated = 0;
 
   for (const w of workloads) {
-    lectureHours += Number(w.manualL) || 0;
-    tutorialHours += Number(w.manualT) || 0;
-    practicalHours += Number(w.manualP) || 0;
+    lectureHours += Number(w.manualL !== undefined && w.manualL !== null ? w.manualL : (w.fixedL || 0));
+    tutorialHours += Number(w.manualT !== undefined && w.manualT !== null ? w.manualT : (w.fixedT || 0));
+    practicalHours += Number(w.manualP !== undefined && w.manualP !== null ? w.manualP : (w.fixedP || 0));
   }
   allocated = lectureHours + tutorialHours + practicalHours;
 
-  const weeklyCapacity = faculty.weeklyCapacityHours || 30;
-  let remaining = weeklyCapacity - allocated;
-  if (remaining < 0) remaining = 0; // Never allow negative remaining hours
+  const capacity = faculty.capacity || 18;
+  let remaining = capacity - allocated;
+  // Rule 7: Do NOT allow negative remaining hours to be set to 0. Keep it negative to indicate overload.
 
-  let utilization = 0;
-  if (weeklyCapacity > 0) {
-    utilization = (allocated / weeklyCapacity) * 100;
+  let workloadPercentage = 0;
+  if (capacity > 0) {
+    workloadPercentage = (allocated / capacity) * 100;
   }
   
-  utilization = Math.round(utilization * 100) / 100; // Round to 2 decimals
-  const status = getStatus(utilization);
+  workloadPercentage = Math.round(workloadPercentage * 100) / 100; // Round to 2 decimals
+  const status = getStatus(remaining, workloadPercentage);
 
-  faculty.lectureHours = lectureHours;
-  faculty.tutorialHours = tutorialHours;
-  faculty.practicalHours = practicalHours;
-  faculty.allocatedHours = allocated;
-  faculty.remainingHours = remaining;
-  faculty.utilizationPercentage = utilization;
+  faculty.allocated = allocated;
+  faculty.remaining = remaining;
+  faculty.workloadPercentage = workloadPercentage;
   faculty.status = status;
   faculty.updatedBy = options.updatedBy || 'System';
 

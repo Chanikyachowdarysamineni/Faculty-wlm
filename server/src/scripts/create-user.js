@@ -71,7 +71,7 @@ const createUser = async (empId, name, password, designation, department, email 
     console.log(`   - name: ${faculty.name}`);
     console.log(`   - designation: ${faculty.designation}`);
     console.log(`   - department: ${faculty.department}`);
-    console.log(`   - totalWorkingHours: ${faculty.totalWorkingHours} (default)`);
+    console.log(`   - capacity: ${faculty.capacity} (default)`);
 
     console.log('\n🎉 Faculty user created successfully!\n');
     console.log('Login credentials:');

@@ -227,6 +227,15 @@ initializeRedis().catch((err) => {
 // Apply general API limiter to all /deva/ routes
 app.use('/deva/', apiLimiter);
 
+// Prevent client-side caching of all API responses
+app.use('/deva/', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Apply strict limiter to sensitive write operations
 app.use('/deva/workloads', (req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) {

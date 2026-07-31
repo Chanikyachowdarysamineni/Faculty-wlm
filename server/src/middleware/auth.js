@@ -6,12 +6,13 @@
 
 const { verifyToken } = require('../utils/jwt');
 const User = require('../models/User');
+const TokenBlacklist = require('../models/TokenBlacklist');
 
 /**
  * Require a valid Bearer token.
  * Attaches `req.user = { id, role, name? }` on success.
  */
-const requireAuth = (req, res, next) => {
+const requireAuth = async (req, res, next) => {
   const header = req.headers.authorization || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
 
@@ -22,6 +23,13 @@ const requireAuth = (req, res, next) => {
   try {
     req.user = verifyToken(token);
     req.token = token; // Store token for session validation
+
+    // Check if the token is blacklisted
+    const blacklisted = await TokenBlacklist.findOne({ token });
+    if (blacklisted) {
+      return res.status(401).json({ success: false, message: 'Session expired (logged out).' });
+    }
+
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
@@ -30,9 +38,7 @@ const requireAuth = (req, res, next) => {
 
 /**
  * Validate that the user exists (optional check for multi-session support).
- * JWT tokens are cryptographically signed, so we don't need to check a stored session token.
- * This allows multiple concurrent logins per user from different devices.
- * Can be used AFTER requireAuth for extra user validation if needed.
+ * Kept for backward compatibility, but TokenBlacklist is now checked in requireAuth.
  */
 const validateActiveSession = async (req, res, next) => {
   try {
@@ -40,8 +46,6 @@ const validateActiveSession = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'User not authenticated.' });
     }
 
-    // Light-weight validation: just verify user exists
-    // JWT signature validity is already verified by requireAuth
     const user = await User.findOne({ empId: req.user.id });
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found.' });

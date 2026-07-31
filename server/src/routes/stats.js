@@ -13,7 +13,7 @@ const Submission  = require('../models/Submission');
 const Workload    = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const Setting     = require('../models/Setting');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { getFacultyWorkloadSummary, getFacultyWorkloadReport } = require('../utils/workloadHours');
 
 const router = express.Router();
@@ -39,13 +39,20 @@ router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) =>
     const User = require('../models/User');
     
     // 1. Delete Orphaned Workloads (empId not in Faculty)
-    const facultyDocs = await Faculty.find().select('empId').lean();
-    const validEmpIds = new Set(facultyDocs.map(f => String(f.empId).trim()));
+    const orphanedWorkloads = await Workload.aggregate([
+      {
+        $lookup: {
+          from: 'faculty',
+          localField: 'empId',
+          foreignField: 'empId',
+          as: 'facultyData'
+        }
+      },
+      { $match: { facultyData: { $size: 0 } } },
+      { $project: { _id: 1 } }
+    ]);
     
-    const workloads = await Workload.find().lean();
-    const orphanedWorkloadIds = workloads
-      .filter(w => !validEmpIds.has(String(w.empId).trim()))
-      .map(w => w._id);
+    const orphanedWorkloadIds = orphanedWorkloads.map(w => w._id);
       
     let deletedWorkloads = 0;
     if (orphanedWorkloadIds.length > 0) {
@@ -54,31 +61,38 @@ router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) =>
     }
 
     // 2. Ensure all Faculty have a User account
-    const users = await User.find().select('empId').lean();
-    const existingUserEmpIds = new Set(users.map(u => String(u.empId).trim()));
+    const missingUsers = await Faculty.aggregate([
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'empId',
+          foreignField: 'empId',
+          as: 'userData'
+        }
+      },
+      { $match: { userData: { $size: 0 } } }
+    ]);
     
     let createdUsers = 0;
-    for (const f of facultyDocs) {
+    const bcrypt = require('bcryptjs');
+    
+    for (const f of missingUsers) {
       const empId = String(f.empId).trim();
-      if (!existingUserEmpIds.has(empId)) {
-        const fullFaculty = await Faculty.findOne({ empId }).lean();
-        const bcrypt = require('bcryptjs');
-        const defaultPassword = String(fullFaculty.mobile || fullFaculty.empId).trim();
-        const passwordHash = bcrypt.hashSync(defaultPassword, 10);
-        
-        await User.create({
-          empId,
-          name: fullFaculty.name || 'Unknown',
-          designation: fullFaculty.designation || 'Faculty',
-          mobile: fullFaculty.mobile || '',
-          email: fullFaculty.email || '',
-          passwordHash,
-          role: 'Faculty',
-          canAccessAdmin: false,
-          forcePasswordChange: true
-        });
-        createdUsers++;
-      }
+      const defaultPassword = String(f.mobile || f.empId).trim();
+      const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+      
+      await User.create({
+        empId,
+        name: f.name || 'Unknown',
+        designation: f.designation || 'Faculty',
+        mobile: f.mobile || '',
+        email: f.email || '',
+        passwordHash,
+        role: 'faculty', // Assuming role is lowercase 'faculty' based on auth defaults
+        canAccessAdmin: false,
+        forcePasswordChange: true
+      });
+      createdUsers++;
     }
 
     res.json({
@@ -309,7 +323,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
             _id: '$empId',
             name: { $first: '$empName' },
             designation: { $first: '$designation' },
-            capacityHours: { $first: '$capacityHours' },
+            courseCount: { $sum: 1 },
             assignedHours: { $sum: { $add: [{ $ifNull: ['$manualL', 0] }, { $ifNull: ['$manualT', 0] }, { $ifNull: ['$manualP', 0] }] } },
             courseCount: { $sum: 1 }
           }
@@ -323,7 +337,6 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
     const workloadMap = new Map();
     workloadAgg.forEach(w => {
       workloadMap.set(w._id, {
-        capacityHours: Number(w.capacityHours) || 0,
         assignedHours: Number(w.assignedHours) || 0,
         courseCount: Number(w.courseCount) || 0
       });
@@ -334,8 +347,8 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
     const perfect = [];
 
     facultyList.forEach(f => {
-      const wData = workloadMap.get(f.empId) || { capacityHours: 0, assignedHours: 0, courseCount: 0 };
-      const capacity = wData.capacityHours > 0 ? wData.capacityHours : (Number(f.totalWorkingHours) || 24);
+      const wData = workloadMap.get(f.empId) || { assignedHours: 0, courseCount: 0 };
+      const capacity = Number(f.capacity) || 18;
       const assignedHours = wData.assignedHours;
       const pendingLoad = capacity - assignedHours;
 
@@ -524,7 +537,7 @@ router.get('/overloaded-faculty', requireAuth, requireAdmin, async (req, res, ne
  * Retrieve detailed workload summary for a specific faculty member
  * Admin only
  */
-router.get('/faculty-workload/:empId', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, async (req, res, next) => {
   try {
     const { empId } = req.params;
     const summary = await getFacultyWorkloadSummary(empId);
@@ -535,11 +548,11 @@ router.get('/faculty-workload/:empId', requireAuth, requireAdmin, async (req, re
         empId: summary.empId,
         name: summary.name,
         designation: summary.designation,
-        totalCapacity: summary.totalWorkingHours,
+        totalCapacity: summary.capacity,
         currentLoad: summary.currentLoad,
-        remainingHours: summary.remainingHours,
-        excessHours: Math.max(0, summary.currentLoad - summary.totalWorkingHours),
-        utilizationPercent: summary.utilizationPercent,
+        remainingHours: summary.remaining,
+        excessHours: Math.max(0, summary.currentLoad - summary.capacity),
+        utilizationPercent: summary.workloadPercentage,
         isOverAllocated: summary.isOverAllocated,
         assignments: summary.assignments,
         breakdown: summary.breakdown,

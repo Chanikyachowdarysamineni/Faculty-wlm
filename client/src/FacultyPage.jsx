@@ -5,7 +5,7 @@ import { useSharedData } from './DataContext';
 
 import './FacultyPage.css';
 
-const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', weeklyCapacityHours: 30 };
+const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };
 
 const FacultyPage = ({ isAdmin = false }) => {
   const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations } = useSharedData();
@@ -285,7 +285,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       mobile: form.mobile || '',
       email: form.email || '',
       department: form.department || 'CSE',
-      weeklyCapacityHours: Number(form.weeklyCapacityHours) || 30,
+      capacity: Number(form.capacity) || 18,
     };
     try {
       setSyncing(true);
@@ -355,12 +355,13 @@ const FacultyPage = ({ isAdmin = false }) => {
 
   // ── Export CSV ─────────────────────────────────────────
   const exportCSV = () => {
-    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Department', 'Designation', 'L', 'T', 'P', 'Allocated Hours', 'Weekly Capacity', 'Remaining Capacity', 'Utilization %', 'Status'];
+    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Department', 'Designation', 'L', 'T', 'P', 'Allocated', 'Capacity', 'Remaining', 'Workload %', 'Status'];
     const rows = mergedList.map(f => [
       f.slNo || '', f.empId, `"${f.name}"`, `"${f.department || 'CSE'}"`, `"${f.designation}"`,
       f.lectureHours, f.tutorialHours, f.practicalHours,
-      f.allocatedHours, f.weeklyCapacityHours, f.remainingHours,
-      f.utilizationPercentage, f.status
+      f.allocated, f.capacity, f.remaining,
+      f.workloadPercentage ? `${f.workloadPercentage}%` : '0%',
+      f.status || 'Available'
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -510,7 +511,7 @@ const FacultyPage = ({ isAdmin = false }) => {
               <th>Allocated</th>
               <th>Capacity</th>
               <th>Remaining</th>
-              <th>Util %</th>
+              <th>Workload %</th>
               <th>Status</th>
               {!isDragMode && <th>Actions</th>}
             </tr>
@@ -551,12 +552,12 @@ const FacultyPage = ({ isAdmin = false }) => {
                   <td>{f.practicalHours}</td>
                   <td>
                     <strong style={{ color: f.status === 'Overloaded' ? '#dc2626' : 'inherit' }}>
-                      {f.allocatedHours}
+                      {f.allocated || 0}
                     </strong>
                   </td>
-                  <td>{f.weeklyCapacityHours}</td>
-                  <td>{f.remainingHours}</td>
-                  <td>{f.utilizationPercentage}%</td>
+                  <td>{f.capacity}</td>
+                  <td>{f.remaining ?? 18}</td>
+                  <td>{f.workloadPercentage ? `${f.workloadPercentage}%` : '0%'}</td>
                   <td style={{ fontWeight: 'bold', color: f.status === 'Available' ? '#22c55e' : f.status === 'Nearly Full' ? '#eab308' : f.status === 'Full' ? '#f97316' : '#ef4444' }}>
                     {f.status}
                   </td>
@@ -630,9 +631,9 @@ const FacultyPage = ({ isAdmin = false }) => {
                     placeholder="e.g. john@example.com" />
                 </div>
                 <div className="fp-form-group">
-                  <label>Weekly Capacity (Hours) *</label>
-                  <input type="number" min="0" value={form.weeklyCapacityHours || ''} onChange={e => setForm({...form, weeklyCapacityHours: e.target.value})}
-                    placeholder="e.g. 30" required />
+                  <label>Capacity *</label>
+                  <input type="number" min="1" max="60" value={form.capacity || ''} onChange={e => setForm({...form, capacity: e.target.value})}
+                    placeholder="e.g. 18" required />
                 </div>
               </div>
               <div className="fp-modal-actions">

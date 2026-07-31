@@ -37,9 +37,9 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
         return;
       }
 
-      const L = Number(w.manualL || w.fixedL || 0);
-      const T = Number(w.manualT || w.fixedT || 0);
-      const P = Number(w.manualP || w.fixedP || 0);
+      const L = Number(w.manualL !== undefined && w.manualL !== null ? w.manualL : (w.fixedL || 0));
+      const T = Number(w.manualT !== undefined && w.manualT !== null ? w.manualT : (w.fixedT || 0));
+      const P = Number(w.manualP !== undefined && w.manualP !== null ? w.manualP : (w.fixedP || 0));
       const hoursForThisAssignment = L + T + P;
 
       totalHours += hoursForThisAssignment;
@@ -80,7 +80,7 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
  * @param {String} empId - Employee ID
  * @param {String} excludeWorkloadId - Optional: workload ID to exclude from calculation
  * @param {Object} session - Optional mongoose session
- * @returns {Object} { empId, name, weeklyCapacityHours, currentLoad, remainingHours, utilizationPercent, assignments }
+ * @returns {Object} { empId, name, capacity, currentLoad, remaining, workloadPercentage, assignments }
  */
 const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null) => {
   try {
@@ -92,22 +92,22 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
       throw new Error(`Faculty not found: ${empId}`);
     }
 
-    const weeklyCapacityHours = Number(faculty.weeklyCapacityHours || 30);
+    const capacity = Number(faculty.capacity || 18);
     const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session);
 
     const currentLoad = workloadData.totalHours;
-    const remainingHours = Math.max(0, weeklyCapacityHours - currentLoad);
-    const utilizationPercent = weeklyCapacityHours > 0 ? ((currentLoad / weeklyCapacityHours) * 100).toFixed(2) : 0;
+    const remaining = capacity - currentLoad;
+    const workloadPercentage = capacity > 0 ? ((currentLoad / capacity) * 100).toFixed(2) : 0;
 
     return {
       empId: faculty.empId,
       name: faculty.name,
       designation: faculty.designation,
-      weeklyCapacityHours,
+      capacity,
       currentLoad,
-      remainingHours,
-      utilizationPercent: parseFloat(utilizationPercent),
-      isOverAllocated: currentLoad > weeklyCapacityHours,
+      remaining,
+      workloadPercentage: parseFloat(workloadPercentage),
+      isOverAllocated: currentLoad > capacity,
       breakdown: workloadData.breakdown,
       assignmentCount: workloadData.assignmentCount,
       assignments: workloadData.breakdown.assignments
@@ -133,7 +133,7 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
     const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session);
     const additionalHours = Number(lectureHours || 0) + Number(tutorialHours || 0) + Number(practicalHours || 0);
     const newTotal = summary.currentLoad + additionalHours;
-    const capacity = summary.weeklyCapacityHours;
+    const capacity = summary.capacity;
 
     const canAssign = newTotal <= capacity;
     let reason = '';
@@ -151,7 +151,7 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
         additionalHours,
         newTotal,
         capacity,
-        remainingAfterAssignment: Math.max(0, capacity - newTotal)
+        remainingAfterAssignment: capacity - newTotal
       }
     };
   } catch (err) {
@@ -168,28 +168,63 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
 const getFacultyWorkloadReport = async (year = null) => {
   try {
     const allFaculty = await Faculty.find({}).lean();
+    const allWorkloads = await Workload.find({}).lean();
+    
+    // Group workloads by empId
+    const workloadsByEmp = {};
+    for (const w of allWorkloads) {
+      if (!workloadsByEmp[w.empId]) workloadsByEmp[w.empId] = [];
+      workloadsByEmp[w.empId].push(w);
+    }
+
     const report = [];
 
     for (const faculty of allFaculty) {
-      const summary = await getFacultyWorkloadSummary(faculty.empId);
+      const capacity = Number(faculty.capacity || 18);
+      const facultyWorkloads = workloadsByEmp[faculty.empId] || [];
       
-      let assignments = summary.assignments;
-      if (year) {
-        assignments = assignments.filter(a => a.year === String(year));
+      let currentLoad = 0;
+      const assignments = [];
+      
+      for (const w of facultyWorkloads) {
+        const L = Number(w.manualL !== undefined && w.manualL !== null ? w.manualL : (w.fixedL || 0));
+        const T = Number(w.manualT !== undefined && w.manualT !== null ? w.manualT : (w.fixedT || 0));
+        const P = Number(w.manualP !== undefined && w.manualP !== null ? w.manualP : (w.fixedP || 0));
+        const hoursForThisAssignment = L + T + P;
+        
+        currentLoad += hoursForThisAssignment;
+        
+        assignments.push({
+          id: String(w._id),
+          empId: w.empId,
+          subjectCode: w.subjectCode,
+          subjectName: w.subjectName,
+          year: w.year,
+          section: w.section,
+          role: w.facultyRole,
+          lectureHours: L,
+          tutorialHours: T,
+          practicalHours: P,
+          totalHours: hoursForThisAssignment
+        });
       }
+      
+      const filteredAssignments = year ? assignments.filter(a => a.year === String(year)) : assignments;
+      const remaining = capacity - currentLoad;
+      const workloadPercentage = capacity > 0 ? ((currentLoad / capacity) * 100).toFixed(2) : 0;
 
       report.push({
         empId: faculty.empId,
         name: faculty.name,
         designation: faculty.designation,
         department: faculty.department,
-        totalCapacity: summary.weeklyCapacityHours,
-        currentLoad: summary.currentLoad,
-        remainingHours: summary.remainingHours,
-        utilizationPercent: summary.utilizationPercent,
-        isOverAllocated: summary.isOverAllocated,
-        assignmentCount: assignments.length,
-        assignments: year ? assignments : summary.assignments
+        totalCapacity: capacity,
+        currentLoad: currentLoad,
+        remainingHours: remaining,
+        utilizationPercent: parseFloat(workloadPercentage),
+        isOverAllocated: currentLoad > capacity,
+        assignmentCount: filteredAssignments.length,
+        assignments: filteredAssignments
       });
     }
 
