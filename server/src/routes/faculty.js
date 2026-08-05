@@ -375,6 +375,71 @@ router.put(
         }
       }
 
+      // ── Cascade Updates to Workload and CourseAllocation ──
+      if (allowedUpdates.name || allowedUpdates.designation || allowedUpdates.department || allowedUpdates.mobile !== undefined) {
+        const workloadUpdates = {};
+        if (allowedUpdates.name) workloadUpdates.empName = allowedUpdates.name;
+        if (allowedUpdates.designation) workloadUpdates.designation = allowedUpdates.designation;
+        if (allowedUpdates.department) workloadUpdates.department = allowedUpdates.department;
+        if (allowedUpdates.mobile !== undefined) workloadUpdates.mobile = allowedUpdates.mobile;
+
+        if (Object.keys(workloadUpdates).length > 0) {
+          try {
+            await Workload.updateMany({ empId }, { $set: workloadUpdates });
+            logger.info('Workloads synced for faculty update', { empId, changes: Object.keys(workloadUpdates) });
+          } catch (workloadErr) {
+            logger.error('Failed to sync workloads for faculty update', { empId, error: workloadErr.message });
+          }
+        }
+
+        if (allowedUpdates.name || allowedUpdates.designation) {
+          try {
+            const allocations = await CourseAllocation.find({
+              $or: [
+                { 'lectureSlot.empId': empId },
+                { 'lectureSlots.empId': empId },
+                { 'tutorialSlots.empId': empId },
+                { 'practicalSlots.empId': empId }
+              ]
+            });
+
+            for (const alloc of allocations) {
+              let modified = false;
+              if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
+                if (allowedUpdates.name) alloc.lectureSlot.empName = allowedUpdates.name;
+                if (allowedUpdates.designation) alloc.lectureSlot.designation = allowedUpdates.designation;
+                modified = true;
+              }
+              const updateSlots = (slots) => {
+                if (!slots || !Array.isArray(slots)) return;
+                slots.forEach(slot => {
+                  if (slot && slot.empId === empId) {
+                    if (allowedUpdates.name) slot.empName = allowedUpdates.name;
+                    if (allowedUpdates.designation) slot.designation = allowedUpdates.designation;
+                    modified = true;
+                  }
+                });
+              };
+              updateSlots(alloc.lectureSlots);
+              updateSlots(alloc.tutorialSlots);
+              updateSlots(alloc.practicalSlots);
+
+              if (modified) {
+                // Mongoose might not detect changes in nested arrays without markModified
+                alloc.markModified('lectureSlot');
+                alloc.markModified('lectureSlots');
+                alloc.markModified('tutorialSlots');
+                alloc.markModified('practicalSlots');
+                await alloc.save();
+              }
+            }
+            logger.info('Course allocations synced for faculty update', { empId, updatedCount: allocations.length });
+          } catch (allocErr) {
+            logger.error('Failed to sync course allocations for faculty update', { empId, error: allocErr.message });
+          }
+        }
+      }
+
       await logAuditEvent({ req, action: 'faculty.update', entity: 'faculty', entityId: empId, metadata: { fields: Object.keys(allowedUpdates), isSelfEdit: isSelf } });
       logger.info('Faculty updated successfully', { empId, fields: Object.keys(allowedUpdates), userId: req.user.id, isSelfEdit: isSelf });
       sendSuccess(res, toClient(doc), 200);

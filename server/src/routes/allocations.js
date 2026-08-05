@@ -272,6 +272,8 @@ router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
 // R1 Auto-Fill: When L.R1 is set, automatically populate T.R1 and P.R1
 // R2-R4 Mirror: When T.R2/R3/R4 is set, mirror to P.R2/R3/R4 and vice versa
 router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+  const session = await CourseAllocation.startSession();
+  session.startTransaction();
   try {
     const {
       courseId, year: rawYear, section,
@@ -453,13 +455,18 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
           createdBy:      req.user?.id || '',
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true, session }
     ).lean();
+
+    await session.commitTransaction();
+    session.endSession();
 
     await logAuditEvent({ req, action: 'allocation.upsert', entity: 'allocation', entityId: String(doc._id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
 
     res.status(201).json({ success: true, data: toClient(doc) });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     if (err?.status) {
       return res.status(err.status).json({ success: false, message: err.message || 'Validation failed.' });
     }

@@ -336,12 +336,17 @@ const WorkloadPage = ({ submissions }) => {
       ? allocation.lectureSlots
       : (allocation.lectureSlot ? [allocation.lectureSlot] : []);
 
-    return [
-      ...normalizeRows('L', lectureSlots, 1),
-      ...normalizeRows('T', allocation.tutorialSlots || [], 4),
-      ...normalizeRows('P', allocation.practicalSlots || [], 4),
-    ];
-  }, [allocation]);
+    const rows = [...normalizeRows('L', lectureSlots, 1)];
+    
+    if (selectedCourse && Number(selectedCourse.T || 0) > 0) {
+      rows.push(...normalizeRows('T', allocation.tutorialSlots || [], 4));
+    }
+    if (selectedCourse && Number(selectedCourse.P || 0) > 0) {
+      rows.push(...normalizeRows('P', allocation.practicalSlots || [], 4));
+    }
+    
+    return rows;
+  }, [allocation, selectedCourse]);
 
   // ── Employee ID change: auto fill name, clear course ──
   const handleEmpIdChange = val => {

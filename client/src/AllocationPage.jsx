@@ -39,8 +39,8 @@ const isTADesignation = (designation = '') => {
  *  Returns 0 when the course has no hours for that type (skips the block).
  */
 const typeRowCount = (course, type) => {
-  const n = course[type];
-  if (!n || n === 0) return 0;
+  const n = Number(course[type] || 0);
+  if (n <= 0) return 0;
   if (type === 'L') return 1;
   return 4; // T and P always get 4 rows
 };

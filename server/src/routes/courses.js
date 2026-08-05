@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/courses.js
  *
  * GET    /api/courses          — list (optional ?program=&courseType=&year=)
@@ -231,6 +231,46 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       logger.warn('Course not found after update', { courseId, userId: req.user.id });
       return sendNotFound(res, 'Course not found.');
     }
+
+    // ── Cascade Updates to Workload and CourseAllocation ──
+    const syncUpdates = {};
+    if (updates.subjectCode !== undefined) syncUpdates.subjectCode = updates.subjectCode;
+    if (updates.subjectName !== undefined) syncUpdates.subjectName = updates.subjectName;
+    if (updates.shortName !== undefined) syncUpdates.shortName = updates.shortName;
+    if (updates.program !== undefined) syncUpdates.program = updates.program;
+    if (updates.year !== undefined) syncUpdates.year = updates.year;
+    
+    const workloadUpdates = { ...syncUpdates };
+    if (updates.courseType !== undefined) workloadUpdates.courseType = updates.courseType;
+    if (updates.C !== undefined) workloadUpdates.C = updates.C;
+    if (updates.L !== undefined) workloadUpdates.fixedL = updates.L;
+    if (updates.T !== undefined) workloadUpdates.fixedT = updates.T;
+    if (updates.P !== undefined) workloadUpdates.fixedP = updates.P;
+
+    const allocUpdates = { ...syncUpdates };
+    if (updates.L !== undefined) allocUpdates.fixedL = updates.L;
+    if (updates.T !== undefined) allocUpdates.fixedT = updates.T;
+    if (updates.P !== undefined) allocUpdates.fixedP = updates.P;
+    if (updates.C !== undefined) allocUpdates.C = updates.C;
+
+    if (Object.keys(workloadUpdates).length > 0) {
+      try {
+        await Workload.updateMany({ courseId }, { $set: workloadUpdates });
+        logger.info('Workloads synced for course update', { courseId, changes: Object.keys(workloadUpdates) });
+      } catch (workloadErr) {
+        logger.error('Failed to sync workloads for course update', { courseId, error: workloadErr.message });
+      }
+    }
+
+    if (Object.keys(allocUpdates).length > 0) {
+      try {
+        await CourseAllocation.updateMany({ courseId }, { $set: allocUpdates });
+        logger.info('Course allocations synced for course update', { courseId, changes: Object.keys(allocUpdates) });
+      } catch (allocErr) {
+        logger.error('Failed to sync course allocations for course update', { courseId, error: allocErr.message });
+      }
+    }
+
     await logAuditEvent({ req, action: 'course.update', entity: 'course', entityId: String(courseId), metadata: { fields: Object.keys(updates) } });
     logger.info('Course updated', { courseId, fields: Object.keys(updates), userId: req.user.id });
     sendSuccess(res, toClient(doc), 200);
