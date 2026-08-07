@@ -368,62 +368,23 @@ process.on('uncaughtException', (err) => {
     { upsert: true }
   );
 
-  // Determine SSL certificate paths
-  const sslKeyPath = process.env.SSL_KEY_PATH || '/etc/ssl/private/your-domain.key';
-  const sslCertPath = process.env.SSL_CERT_PATH || '/etc/ssl/certs/your-domain.crt';
-  let hasSSL = fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath);
+  // Server runs on HTTP (Nginx handles SSL termination in production)
+  const server = http.createServer(app);
 
-  let server;
+  server.listen(PORT, () => {
+    console.log(`\n✅  WLM Server running on http://localhost:${PORT}`);
+    console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
+    console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
+    console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
+    console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
+    console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
+    console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
+    console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
+    console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
 
-  if (hasSSL) {
-    // Start HTTPS server with SSL certificates
-    try {
-      server = https.createServer(
-        {
-          key: fs.readFileSync(sslKeyPath),
-          cert: fs.readFileSync(sslCertPath),
-        },
-        app
-      );
-
-      server.listen(PORT, () => {
-        console.log(`\n✅  WLM Server running on https://localhost:${PORT}`);
-        console.log(`   Auth:        POST https://localhost:${PORT}/deva/auth/login`);
-        console.log(`   Faculty:     GET  https://localhost:${PORT}/deva/faculty`);
-        console.log(`   Courses:     GET  https://localhost:${PORT}/deva/courses`);
-        console.log(`   Submissions: GET  https://localhost:${PORT}/deva/submissions`);
-        console.log(`   Workloads:   GET  https://localhost:${PORT}/deva/workloads`);
-        console.log(`   Stats:       GET  https://localhost:${PORT}/deva/stats`);
-        console.log(`   Health:      GET  https://localhost:${PORT}/deva/health`);
-        console.log(`   WebSocket:   WSS  wss://localhost:${PORT}/ws\n`);
-
-        // Initialize WebSocket server
-        WebSocketHandler.initialize(server);
-      });
-    } catch (certErr) {
-      console.warn('⚠️  Failed to load SSL certificates:', certErr.message);
-      console.log('Falling back to HTTP server\n');
-      hasSSL = false;
-    }
-  }
-
-  // Start HTTP server if SSL not available
-  if (!hasSSL) {
-    server = app.listen(PORT, () => {
-      console.log(`\n✅  WLM Server running on http://localhost:${PORT} (development mode)`);
-      console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
-      console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
-      console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
-      console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
-      console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
-      console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
-      console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
-      console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
-
-      // Initialize WebSocket server
-      WebSocketHandler.initialize(server);
-    });
-  }
+    // Initialize WebSocket server
+    WebSocketHandler.initialize(server);
+  });
 
   // Render's load balancer holds connections for 75 s+; Node defaults to 5 s,
   // which makes Render send requests on already-closed sockets → ERR_CONNECTION_CLOSED.
