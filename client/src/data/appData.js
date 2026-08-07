@@ -10,9 +10,9 @@ export const faculty = [
   // The app fetches faculty from GET /api/faculty instead.
 ];
 
-// courses: program = 'B.Tech' | 'M.Tech'
-//          courseType = 'Mandatory' | 'Department Elective'
-//          year = 'I' | 'II' | 'III' | 'IV' | '' (M.Tech has no year column)
+// courses: program = 'B.Tech'
+//          courseType = 'Theory' | 'Lab' | 'Mandatory' | 'Audit' | 'Department Elective' | 'Open Elective'
+//          year = 'I' | 'II' | 'III' | 'IV'
 //          L,T,P = Lecture / Tutorial / Practical hours  C = Credits (fixed)
 export const courses = [
   // ── B.Tech ▸ Mandatory ───────────────────────────────────────
@@ -35,14 +35,7 @@ export const courses = [
   { id:16, program:'B.Tech', courseType:'Department Elective', year:'III', subjectCode:'22CS805', subjectName:'Digital Image Processing',               shortName:'DIP',     L:2, T:2, P:2,  C:4  },
   { id:17, program:'B.Tech', courseType:'Department Elective', year:'III', subjectCode:'22CS806', subjectName:'Machine Learning',                       shortName:'ML',      L:2, T:2, P:2,  C:4  },
   { id:18, program:'B.Tech', courseType:'Department Elective', year:'III', subjectCode:'22CS807', subjectName:'Mobile Ad-hoc Networks',                 shortName:'MAN',     L:2, T:2, P:2,  C:4  },
-  { id:19, program:'B.Tech', courseType:'Department Elective', year:'III', subjectCode:'22CS808', subjectName:'Mobile Application Development',         shortName:'MAD',     L:2, T:2, P:2,  C:4  },
-  // ── M.Tech ▸ Mandatory ───────────────────────────────────────
-  { id:20, program:'M.Tech', courseType:'Mandatory',           year:'',    subjectCode:'25CSB105', subjectName:'Cloud Computing',                       shortName:'CC',      L:2, T:2, P:2,  C:4  },
-  { id:21, program:'M.Tech', courseType:'Mandatory',           year:'',    subjectCode:'25CSB106', subjectName:'Big Data and Analytics',                shortName:'BDA',     L:2, T:2, P:2,  C:4  },
-  // ── M.Tech ▸ Department Elective ─────────────────────────────
-  { id:22, program:'M.Tech', courseType:'Department Elective', year:'',    subjectCode:'25CSB803', subjectName:'Deep Learning',                         shortName:'DL',      L:3, T:0, P:2,  C:4  },
-  { id:23, program:'M.Tech', courseType:'Department Elective', year:'',    subjectCode:'25CSB806', subjectName:'Full Stack Development',                shortName:'FSD',     L:3, T:0, P:2,  C:4  },
-];
+  { id:19, program:'B.Tech', courseType:'Department Elective', year:'III', subjectCode:'22CS808', subjectName:'Mobile Application Development',         shortName:'MAD',     L:2, T:2, P:2,  C:4  },];
 
 // ── Derived stats ─────────────────────────────────────────
 export const getDepartments = () => [...new Set(faculty.map(f => f.designation))];

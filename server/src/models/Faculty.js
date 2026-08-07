@@ -29,7 +29,7 @@ const facultySchema = new mongoose.Schema(
     remaining: { type: Number, default: 18 },
     workloadPercentage: { type: Number, default: 0 },
     status: { type: String, default: 'Available' },
-    updatedBy: { type: String, default: 'System' },
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true, collection: 'faculty' }
 );

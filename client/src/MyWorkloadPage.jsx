@@ -9,7 +9,7 @@ const authHeader = () => ({
 
 const TYPE_COLOR = { L: '#6b74e8', T: '#16a34a', P: '#f59e0b' };
 const TYPE_BG    = { L: '#eef0fd', T: '#dcfce7', P: '#fef9c3' };
-const YEAR_COLOR = { I: '#6b74e8', II: '#22c55e', III: '#f59e0b', IV: '#ec4899', 'M.Tech': '#06b6d4' };
+const YEAR_COLOR = { I: '#6b74e8', II: '#22c55e', III: '#f59e0b', IV: '#ec4899' };
 const AUTO_REFRESH_MS = 60000;
 
 const MyWorkloadPage = ({ currentUser }) => {
@@ -84,7 +84,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     return acc;
   }, {});
 
-  const yearOrder = ['I', 'II', 'III', 'IV', 'M.Tech', 'Other'];
+  const yearOrder = ['I', 'II', 'III', 'IV', 'Other'];
   const sortedYears = Object.keys(grouped).sort(
     (a, b) => yearOrder.indexOf(a) - yearOrder.indexOf(b)
   );
@@ -191,7 +191,7 @@ const MyWorkloadPage = ({ currentUser }) => {
                     border: `1.5px solid ${YEAR_COLOR[year] || '#64748b'}40`,
                   }}
                 >
-                  {year === 'M.Tech' ? 'M.Tech' : `Year ${year}`}
+                  {`Year ${year}`}
                 </span>
                 <span className="mwl-year-count">{grouped[year].length} course{grouped[year].length !== 1 ? 's' : ''}</span>
               </div>

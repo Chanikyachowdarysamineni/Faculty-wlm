@@ -152,7 +152,8 @@ const CoursesPage = ({ isAdmin = true }) => {
       );
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Could not save course.');
+        const errMsg = data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Could not save course.');
+        showToast(errMsg);
         return;
       }
       

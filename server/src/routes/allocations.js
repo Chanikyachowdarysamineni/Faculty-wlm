@@ -18,6 +18,7 @@ const Faculty          = require('../models/Faculty');
 const Setting          = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { logAuditEvent } = require('../utils/audit');
+const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const logger           = require('../utils/logger');
 
@@ -25,18 +26,17 @@ const router = express.Router();
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: sec(9), 'M.Tech': ['1', '2'],
+  I: sec(19), II: sec(22), III: sec(19), IV: sec(9)
 };
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
-// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV', 'M.Tech' -> 'M.Tech'
+// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV'
 const normalizeYear = (year) => {
   const trimmed = String(year || '').trim().toUpperCase();
   if (trimmed === 'I' || trimmed === '1') return 'I';
   if (trimmed === 'II' || trimmed === '2') return 'II';
   if (trimmed === 'III' || trimmed === '3') return 'III';
   if (trimmed === 'IV' || trimmed === '4') return 'IV';
-  if (trimmed === 'M.TECH') return 'M.Tech';
   return trimmed; // Return as-is if not recognized
 };
 
@@ -68,9 +68,9 @@ const normalizeSlots = (slots = [], count = 0) => {
   return Array.from({ length: count }, (_, idx) => {
     const slot = source[idx] || {};
     return {
-      empId: String(slot.empId || '').trim(),
-      empName: String(slot.empName || '').trim(),
-      designation: String(slot.designation || '').trim(),
+      empId: String(slot.faculty?.empId || slot.empId || '').trim(),
+      empName: String(slot.faculty?.name || slot.empName || '').trim(),
+      designation: String(slot.faculty?.designation || slot.designation || '').trim(),
       hours: slot.hours ?? 0,
     };
   });
@@ -79,17 +79,17 @@ const normalizeSlots = (slots = [], count = 0) => {
 // ── helper ─────────────────────────────────────────────────────────────────
 const toClient = (doc) => ({
   id:             doc._id?.toString() || '',
-  courseId:       Number(doc.courseId || 0),
-  subjectCode:    String(doc.subjectCode || '').trim(),
-  subjectName:    String(doc.subjectName || '').trim(),
-  shortName:      String(doc.shortName || '').trim(),
-  program:        String(doc.program || '').trim() || 'N/A',
-  year:           String(doc.year || '').trim() || 'I',
-  section:        String(doc.section || '').trim() || '1',
-  fixedL:         Number(doc.fixedL || 0),
-  fixedT:         Number(doc.fixedT || 0),
-  fixedP:         Number(doc.fixedP || 0),
-  C:              Number(doc.C || 0),
+  courseId:       Number(doc.course?.courseId || doc.courseId || 0),
+  subjectCode:    String(doc.course?.subjectCode || doc.subjectCode || '').trim(),
+  subjectName:    String(doc.course?.subjectName || doc.subjectName || '').trim(),
+  shortName:      String(doc.course?.shortName || doc.shortName || '').trim(),
+  program:        String(doc.course?.program || doc.program || '').trim() || 'N/A',
+  year:           String(doc.sectionRef?.year || doc.year || '').trim() || 'I',
+  section:        String(doc.sectionRef?.name || doc.section || '').trim() || '1',
+  fixedL:         Number(doc.course?.L ?? doc.fixedL ?? 0),
+  fixedT:         Number(doc.course?.T ?? doc.fixedT ?? 0),
+  fixedP:         Number(doc.course?.P ?? doc.fixedP ?? 0),
+  C:              Number(doc.course?.C || doc.C || 0),
   lectureSlot:    normalizeSlots([doc.lectureSlot], 1)[0] || emptySlot(),
   lectureSlots:   normalizeSlots(doc.lectureSlots, 4),
   tutorialSlots:  normalizeSlots(doc.tutorialSlots, 4),
@@ -125,7 +125,8 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
     const [total, docs] = await Promise.all([
       CourseAllocation.countDocuments(filter),
       CourseAllocation.find(filter)
-        .select('courseId subjectCode subjectName shortName program year section fixedL fixedT fixedP C lectureSlot lectureSlots tutorialSlots practicalSlots createdBy createdAt updatedAt')
+        .select('course sectionRef courseId subjectCode subjectName shortName program year section fixedL fixedT fixedP C lectureSlot lectureSlots tutorialSlots practicalSlots createdBy createdAt updatedAt')
+        .populate('course sectionRef lectureSlot.faculty lectureSlots.faculty tutorialSlots.faculty practicalSlots.faculty')
         .sort({ courseId: 1, year: 1, section: 1 })
         .skip(skip)
         .limit(limit)
@@ -224,7 +225,7 @@ router.get('/workload-sheets', requireAuth, requireAdmin, async (req, res, next)
       totalHours: f.rows.reduce((sum, r) => sum + (r.hours || 0), 0),
     })).sort((a, b) => a.empId.localeCompare(b.empId));
 
-    res.json({ success: true, data: sheets });
+    sendSuccess(res, sheets, 200);
   } catch (err) { next(err); }
 });
 
@@ -291,11 +292,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     ];
     const badHours = allSlots.some((slot) => slot && slot.hours !== undefined && (!Number.isFinite(Number(slot.hours)) || Number(slot.hours) < 0 || Number(slot.hours) > 30));
     if (badHours) {
-      return res.status(400).json({ success: false, message: 'Slot hours must be between 0 and 30.' });
+      return sendError(res, 'Slot hours must be between 0 and 30.', 400);
     }
 
     if (!courseId || !year || !section)
-      return res.status(400).json({ success: false, message: 'courseId, year, section required.' });
+      return sendError(res, 'courseId, year, section required.', 400);
 
     const sectionCfg = await getSectionsConfig();
     if (sectionCfg[year] && !sectionCfg[year].includes(section)) {
@@ -304,7 +305,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 
     const course = await Course.findOne({ courseId: Number(courseId) }).lean();
     if (!course)
-      return res.status(404).json({ success: false, message: 'Course not found.' });
+      return sendNotFound(res, 'Course not found.');
 
     // Validate/enrich each empId in the slots
     const enrichSlot = async (slot) => {
@@ -327,7 +328,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     let rawPracticalSlots = normalizeSlots(practicalSlots, 4);
 
     if (hasDuplicateEmpId(rawLSlots) || hasDuplicateEmpId(rawTutorialSlots) || hasDuplicateEmpId(rawPracticalSlots)) {
-      return res.status(409).json({ success: false, message: 'Duplicate faculty slot detected in allocation data.' });
+      return sendConflict(res, 'Duplicate faculty slot detected in allocation data.');
     }
 
     const enrichedLSlots = await Promise.all(rawLSlots.map(enrichSlot));
@@ -463,7 +464,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 
     await logAuditEvent({ req, action: 'allocation.upsert', entity: 'allocation', entityId: String(doc._id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
 
-    res.status(201).json({ success: true, data: toClient(doc) });
+    sendCreated(res, toClient(doc));
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -478,9 +479,9 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const doc = await CourseAllocation.findByIdAndDelete(req.params.id);
-    if (!doc) return res.status(404).json({ success: false, message: 'Allocation not found.' });
+    if (!doc) return sendNotFound(res, 'Allocation not found.');
     await logAuditEvent({ req, action: 'allocation.delete', entity: 'allocation', entityId: String(req.params.id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
-    res.json({ success: true, message: 'Allocation removed.' });
+    sendSuccess(res, { message: 'Allocation removed.' }, 200);
   } catch (err) { next(err); }
 });
 

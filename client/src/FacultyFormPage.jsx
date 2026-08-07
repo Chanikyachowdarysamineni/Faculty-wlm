@@ -162,7 +162,7 @@ const FacultyFormPage = ({
         });
         const data = await res.json();
         if (!res.ok || !data?.success) { 
-          setApiError(data?.message || 'Update failed.'); 
+          setApiError(data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Update failed.')); 
           setSaving(false); 
           return; 
         }
@@ -206,7 +206,7 @@ const FacultyFormPage = ({
       });
       const data = await res.json();
       if (!res.ok || !data?.success) { 
-        setApiError(data?.message || 'Submission failed.'); 
+        setApiError(data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Submission failed.')); 
         setSaving(false); 
         return; 
       }

@@ -56,9 +56,9 @@ const validateWorkloadCreate = [
     .custom((value) => {
       // Accept various formats and normalize
       const trimmed = String(value || '').trim().toUpperCase();
-      const validYears = ['I', 'II', 'III', 'IV', 'M.TECH', '1', '2', '3', '4', 'MTECH'];
+      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4'];
       if (!validYears.includes(trimmed)) {
-        throw new Error('Invalid year. Must be I/II/III/IV/M.Tech (or numeric 1/2/3/4)');
+        throw new Error('Invalid year. Must be I/II/III/IV (or numeric 1/2/3/4)');
       }
       return true;
     }),
@@ -213,8 +213,8 @@ const validateCourseCreate = [
     .trim()
     .notEmpty()
     .withMessage('Program is required')
-    .isIn(['B.Tech', 'M.Tech'])
-    .withMessage('Program must be B.Tech or M.Tech'),
+    .isIn(['B.Tech'])
+    .withMessage('Program must be B.Tech'),
 
   body('courseType')
     .trim()

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/settings.js
  *
  * GET  /api/settings/form-status  — get form open/closed
@@ -16,6 +16,7 @@ const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const { mongoose } = require('../db');
 const { logAuditEvent } = require('../utils/audit');
+const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -24,8 +25,7 @@ const DEFAULT_SECTIONS = {
   I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
   II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1)),
-  'M.Tech': ['1', '2'],
+  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
 };
 
 const normalizeSections = (raw) => {
@@ -63,7 +63,7 @@ const saveSectionsConfig = async (sections) => {
 router.get('/form-status', requireAuth, async (req, res, next) => {
   try {
     const doc = await Setting.findOne({ key: 'form_enabled' }).lean();
-    res.json({ success: true, formEnabled: doc ? doc.value === 'true' : true });
+    sendSuccess(res, { formEnabled: doc ? doc.value === 'true' : true }, 200);
   } catch (err) { next(err); }
 });
 
@@ -75,7 +75,7 @@ router.put(
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
+      if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
       const { formEnabled } = req.body;
       await Setting.findOneAndUpdate(
@@ -84,7 +84,7 @@ router.put(
         { upsert: true, new: true }
       );
       await logAuditEvent({ req, action: 'settings.form.toggle', entity: 'settings', entityId: 'form_enabled', metadata: { formEnabled } });
-      res.json({ success: true, formEnabled: Boolean(formEnabled) });
+      sendSuccess(res, { formEnabled: Boolean(formEnabled) }, 200);
     } catch (err) { next(err); }
   }
 );
@@ -93,7 +93,7 @@ router.put(
 router.get('/sections', requireAuth, async (req, res, next) => {
   try {
     const sections = await getSectionsConfig();
-    res.json({ success: true, data: sections });
+    sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
 
@@ -101,7 +101,7 @@ router.get('/sections', requireAuth, async (req, res, next) => {
 router.put('/sections', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const sections = await saveSectionsConfig(req.body?.sections);
-    res.json({ success: true, data: sections });
+    sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
 
@@ -111,17 +111,17 @@ router.post('/sections/:year', requireAuth, requireAdmin, async (req, res, next)
     const year = String(req.params.year || '').trim();
     const section = String(req.body?.section || '').trim();
     if (!year || !section) {
-      return res.status(400).json({ success: false, message: 'year and section are required.' });
+      return sendError(res, 'year and section are required.', 400);
     }
     const current = await getSectionsConfig();
-    if (!current[year]) return res.status(400).json({ success: false, message: 'Invalid year.' });
+    if (!current[year]) return sendError(res, 'Invalid year.', 400);
     if (current[year].includes(section)) {
-      return res.status(409).json({ success: false, message: 'Section already exists.' });
+      return sendConflict(res, 'Section already exists.');
     }
     current[year].push(section);
     const sections = await saveSectionsConfig(current);
     await logAuditEvent({ req, action: 'settings.section.add', entity: 'settings.sections', entityId: year, metadata: { section } });
-    res.status(201).json({ success: true, data: sections });
+    sendCreated(res, sections);
   } catch (err) { next(err); }
 });
 
@@ -133,14 +133,14 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
     const oldSection = String(req.params.section || '').trim();
     const newSection = String(req.body?.newSection || '').trim();
     if (!year || !oldSection || !newSection) {
-      return res.status(400).json({ success: false, message: 'year, section and newSection are required.' });
+      return sendError(res, 'year, section and newSection are required.', 400);
     }
     const current = await getSectionsConfig();
-    if (!current[year]) return res.status(400).json({ success: false, message: 'Invalid year.' });
+    if (!current[year]) return sendError(res, 'Invalid year.', 400);
     const idx = current[year].indexOf(oldSection);
-    if (idx < 0) return res.status(404).json({ success: false, message: 'Section not found.' });
+    if (idx < 0) return sendNotFound(res, 'Section not found.');
     if (current[year].includes(newSection) && newSection !== oldSection) {
-      return res.status(409).json({ success: false, message: 'Section already exists.' });
+      return sendConflict(res, 'Section already exists.');
     }
     session.startTransaction();
     current[year][idx] = newSection;
@@ -155,7 +155,7 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
     await session.commitTransaction();
     await logAuditEvent({ req, action: 'settings.section.rename', entity: 'settings.sections', entityId: year, metadata: { oldSection, newSection } });
     const sections = normalized;
-    res.json({ success: true, data: sections });
+    sendSuccess(res, sections, 200);
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
     next(err);
@@ -171,10 +171,10 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
     const year = String(req.params.year || '').trim();
     const section = String(req.params.section || '').trim();
     const current = await getSectionsConfig();
-    if (!current[year]) return res.status(400).json({ success: false, message: 'Invalid year.' });
+    if (!current[year]) return sendError(res, 'Invalid year.', 400);
     current[year] = current[year].filter(s => s !== section);
     if (current[year].length === 0) {
-      return res.status(400).json({ success: false, message: 'At least one section must remain for a year.' });
+      return sendError(res, 'At least one section must remain for a year.', 400);
     }
     session.startTransaction();
     await Workload.deleteMany({ year, section }, { session });
@@ -188,7 +188,7 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
     await session.commitTransaction();
     await logAuditEvent({ req, action: 'settings.section.delete', entity: 'settings.sections', entityId: year, metadata: { section } });
     const sections = normalized;
-    res.json({ success: true, data: sections });
+    sendSuccess(res, sections, 200);
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
     next(err);
@@ -201,7 +201,7 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
 router.get('/edit-status', requireAuth, async (req, res, next) => {
   try {
     const doc = await Setting.findOne({ key: 'edit_enabled' }).lean();
-    res.json({ success: true, editEnabled: doc ? doc.value === 'true' : true });
+    sendSuccess(res, { editEnabled: doc ? doc.value === 'true' : true }, 200);
   } catch (err) { next(err); }
 });
 
@@ -213,7 +213,7 @@ router.put(
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
+      if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
       const { editEnabled } = req.body;
       await Setting.findOneAndUpdate(
@@ -222,7 +222,7 @@ router.put(
         { upsert: true, new: true }
       );
       await logAuditEvent({ req, action: 'settings.edit.toggle', entity: 'settings', entityId: 'edit_enabled', metadata: { editEnabled } });
-      res.json({ success: true, editEnabled: Boolean(editEnabled) });
+      sendSuccess(res, { editEnabled: Boolean(editEnabled) }, 200);
     } catch (err) { next(err); }
   }
 );

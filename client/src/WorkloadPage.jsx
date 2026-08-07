@@ -27,7 +27,7 @@ import {
  * 1. AUTO-FETCH YEAR FROM COURSE SELECTION
  *    - When a course is selected, the year is automatically populated from
  *      the course's year field (e.g., Course CS101 → Year I)
- *    - If course doesn't have a year, derives from program (M.Tech → M.Tech)
+ *    - If course doesn't have a year, derives from program
  *    - Falls back to Year I for B.Tech courses without explicit year
  * 
  * 2. COURSE DETAILS PANEL
@@ -37,7 +37,7 @@ import {
  * 
  * 3. BACKEND VALIDATION FIX
  *    - Updated validator to accept manualL/manualT/manualP (not fixedL/T/P)
- *    - Made year validation flexible to accept various formats (I, II, III, IV, M.Tech)
+ *    - Made year validation flexible to accept various formats (I, II, III, IV)
  *    - Normalizes year before sending to API (1→I, 2→II, etc.)
  * 
  * 4. ERROR HANDLING & LOGGING
@@ -572,15 +572,14 @@ const WorkloadPage = ({ submissions }) => {
       const resolvedEmpId   = form.empId   === '__other__' ? form.empIdOther.trim()   || 'OTHER' : form.empId;
       const resolvedCrsId   = form.courseId === '__other__' ? 0 : +form.courseId;
       
-      // Normalize year to standard format (I, II, III, IV, M.Tech)
+      // Normalize year to standard format (I, II, III, IV)
       const normalizeYearFormat = (y) => {
         const trimmed = String(y || '').trim().toUpperCase();
         if (trimmed === '1') return 'I';
         if (trimmed === '2') return 'II';
         if (trimmed === '3') return 'III';
         if (trimmed === '4') return 'IV';
-        if (trimmed === 'MTECH') return 'M.Tech';
-        return trimmed; // Return as-is (I, II, III, IV, M.Tech, Other, etc.)
+        return trimmed; // Return as-is (I, II, III, IV, Other, etc.)
       };
       
       const normalizedYear = normalizeYearFormat(resolvedYear);
@@ -686,7 +685,7 @@ const WorkloadPage = ({ submissions }) => {
         empId:    resolvedEmpId,
         courseId: resolvedCrsId,
         facultyRole: selectedRole,
-        year:     normalizedYear,  // Use normalized year (I, II, III, IV, or M.Tech)
+        year:     normalizedYear,  // Use normalized year (I, II, III, IV)
         section:  String(resolvedSection).trim() || 'default',  // Fallback section
         manualL:  form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0),
         manualT:  form.manualT !== '' ? parseInt(form.manualT) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.T || 0),
@@ -989,8 +988,7 @@ const WorkloadPage = ({ submissions }) => {
     if (activeYear !== 'All') {
       list = list.filter(w => w.year === activeYear);
     } else {
-      // When "All" is selected, exclude M.Tech courses
-      list = list.filter(w => w.year !== 'M.Tech');
+      // When "All" is selected, return all courses
     }
     if (filterEmp) list = list.filter(w => w.empId === filterEmp);
     const q = search.toLowerCase();
@@ -1793,7 +1791,7 @@ const WorkloadPage = ({ submissions }) => {
           <div className="wl-year-tabs" style={{ marginBottom: 0 }}>
             {['All', 'I', 'II', 'III', 'IV'].map(y => {
               const count = y === 'All'
-                ? workloads.filter(w => w.year !== 'M.Tech').length
+                ? workloads.length
                 : workloads.filter(w => w.year === y).length;
               return (
                 <button

@@ -253,7 +253,6 @@ const AdminOverview = ({ user }) => {
             <option value="II">II</option>
             <option value="III">III</option>
             <option value="IV">IV</option>
-            <option value="M.Tech">M.Tech</option>
           </select>
         </div>
       </div>

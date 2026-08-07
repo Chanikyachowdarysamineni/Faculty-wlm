@@ -2,7 +2,7 @@
  * SectionManagementPage.jsx
  *
  * Centralized Section Management Module
- * ─ Manage sections for each academic year (I, II, III, IV for B.Tech, M.Tech)
+ * ─ Manage sections for each academic year (I, II, III, IV for B.Tech)
  * ─ Add, rename, delete sections
  * ─ Sync section data across all pages (Allocation, Workload, etc.)
  */
@@ -18,7 +18,7 @@ import {
 } from './utils/sectionsApi';
 import { useSharedData } from './DataContext';
 
-const YEARS = ['I', 'II', 'III', 'IV', 'M.Tech'];
+const YEARS = ['I', 'II', 'III', 'IV'];
 
 const SectionManagementPage = () => {
   const [activeYear, setActiveYear] = useState('I');
@@ -71,7 +71,8 @@ const SectionManagementPage = () => {
     try {
       const result = await addSectionConfig(activeYear, newSectionInput.trim());
       if (!result.success) {
-        showMessage(result.message || 'Failed to add section', 'error');
+        const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to add section');
+        showMessage(errMsg, 'error');
       } else {
         showMessage(`✅ Section "${newSectionInput.trim()}" added successfully`, 'success');
         setNewSectionInput('');
@@ -96,7 +97,8 @@ const SectionManagementPage = () => {
     try {
       const result = await renameSectionConfig(activeYear, oldName, editingValue.trim());
       if (!result.success) {
-        showMessage(result.message || 'Failed to rename section', 'error');
+        const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to rename section');
+        showMessage(errMsg, 'error');
       } else {
         showMessage(`✅ Section renamed to "${editingValue.trim()}"`, 'success');
         setEditingSection(null);
@@ -120,7 +122,8 @@ const SectionManagementPage = () => {
     try {
       const result = await deleteSectionConfig(activeYear, section);
       if (!result.success) {
-        showMessage(result.message || 'Failed to delete section', 'error');
+        const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to delete section');
+        showMessage(errMsg, 'error');
       } else {
         showMessage(`✅ Section "${section}" deleted successfully`, 'success');
         setEditingSection(null);
@@ -164,7 +167,7 @@ const SectionManagementPage = () => {
             onClick={() => setActiveYear(year)}
             disabled={loading}
           >
-            {year === 'M.Tech' ? 'M.Tech' : `${year} Year`}
+            {`${year} Year`}
           </button>
         ))}
       </div>
@@ -172,7 +175,7 @@ const SectionManagementPage = () => {
       {/* Current Year Info */}
       <div className="smp-year-info">
         <span className="smp-info-label">
-          {activeYear === 'M.Tech' ? 'M.Tech Sections:' : `${activeYear} Year Sections:`}
+          {`${activeYear} Year Sections:`}
         </span>
         <span className="smp-info-count">
           {sections.length} section{sections.length !== 1 ? 's' : ''}
@@ -205,7 +208,7 @@ const SectionManagementPage = () => {
         {sections.length === 0 ? (
           <div className="smp-empty-state">
             <span className="smp-empty-icon">📭</span>
-            <p>No sections configured for {activeYear === 'M.Tech' ? 'M.Tech' : `${activeYear} Year`}</p>
+            <p>No sections configured for {`${activeYear} Year`}</p>
             <p className="smp-empty-hint">Add a section using the form above</p>
           </div>
         ) : (
@@ -285,7 +288,7 @@ const SectionManagementPage = () => {
           </div>
           {Object.entries(sectionsConfig).map(([year, secs]) => (
             <div key={year} className="smp-stat-item">
-              <span className="smp-stat-label">{year === 'M.Tech' ? 'M.Tech' : `${year} Year`}:</span>
+              <span className="smp-stat-label">{`${year} Year`}:</span>
               <span className="smp-stat-value">{Array.isArray(secs) ? secs.length : 0}</span>
             </div>
           ))}

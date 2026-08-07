@@ -14,6 +14,7 @@ const { mongoose } = require('../db');
 
 const facultySlotSchema = new mongoose.Schema(
   {
+    faculty:     { type: mongoose.Schema.Types.ObjectId, ref: 'Faculty' },
     empId:       { type: String, default: '' },
     empName:     { type: String, default: '' },
     designation: { type: String, default: '' },
@@ -24,6 +25,10 @@ const facultySlotSchema = new mongoose.Schema(
 
 const courseAllocationSchema = new mongoose.Schema(
   {
+    course:         { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
+    sectionRef:     { type: mongoose.Schema.Types.ObjectId, ref: 'Section', required: true },
+    
+    // Kept for backward compatibility during migration
     courseId:       { type: Number, required: true },
     subjectCode:    { type: String, required: true },
     subjectName:    { type: String, required: true },

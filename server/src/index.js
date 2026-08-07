@@ -16,7 +16,7 @@ const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
   console.error(`❌  MISSING REQUIRED ENVIRONMENT VARIABLES: ${missingEnvVars.join(', ')}`);
-  console.error('Please ensure all required variables are set in .env file');
+  logger.error('Please ensure all required variables are set in .env file');
   process.exit(1);
 }
 
@@ -33,6 +33,9 @@ const cors         = require('cors');
 const morgan       = require('morgan');
 const helmet       = require('helmet');
 const compression  = require('compression');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeRedis, apiLimiter, strictLimiter } = require('./middleware/rateLimiters');
 
@@ -68,8 +71,7 @@ const DEFAULT_SECTIONS = {
   I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
   II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1)),
-  'M.Tech': ['1', '2'],
+  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
 };
 
 const normalizeCourseTypeKey = (courseType = '') => {
@@ -217,6 +219,8 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(mongoSanitize());
+app.use(xss());
 app.use(morgan('dev'));
 
 // ── Rate Limiting ──────────────────────────────────────────
@@ -273,6 +277,7 @@ app.use('/deva/courses',               coursesRoutes);
 app.use('/deva/submissions',           submissionsRoutes);
 app.use('/deva/workloads',             workloadsRoutes);
 app.use('/deva/settings',              settingsRoutes);
+app.use('/deva/sections',              require('./routes/sections'));
 app.use('/deva/stats',                 statsRoutes);
 app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/audit-logs',            auditLogsRoutes);
@@ -417,3 +422,4 @@ process.on('uncaughtException', (err) => {
 })();
 
 module.exports = app;
+

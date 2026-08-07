@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import * as XLSX from 'xlsx';
 
 import './FacultyPage.css';
 
@@ -25,6 +26,9 @@ const FacultyPage = ({ isAdmin = false }) => {
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragSrcIdx = useRef(null);
   const [syncing, setSyncing]     = useState(false);
+  const [restoreMode, setRestoreMode] = useState(false);
+  const [deletedList, setDeletedList] = useState([]);
+  const fileInputRef = useRef(null);
 
   // Helper: Deduplicate faculty records by empId, keeping most recent
   const deduplicateList = useCallback((data) => {
@@ -260,6 +264,104 @@ const FacultyPage = ({ isAdmin = false }) => {
     setTimeout(() => setToast(''), 2500);
   };
 
+  
+  const fetchDeleted = async () => {
+    try {
+      setSyncing(true);
+      const res = await fetch(`${API}/deva/faculty/deleted`, { headers: authHeaders() });
+      const data = await res.json();
+      if (data.success) {
+        setDeletedList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const toggleRestoreMode = () => {
+    const newMode = !restoreMode;
+    setRestoreMode(newMode);
+    if (newMode) {
+      fetchDeleted();
+    }
+  };
+
+  const handleRestore = async (empId) => {
+    if (!window.confirm('Restore this faculty member?')) return;
+    try {
+      setSyncing(true);
+      const res = await fetch(`${API}/deva/faculty/${encodeURIComponent(empId)}/restore`, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Restored successfully.');
+        fetchDeleted();
+        refetchFaculty();
+      } else {
+        showToast(data.message || 'Error restoring.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const payload = data.map(row => ({
+          empId: String(row.empId || row['Employee ID'] || row.id || '').trim(),
+          name: String(row.name || row['Name of the Faculty'] || row['Name'] || '').trim(),
+          designation: String(row.designation || row['Designation'] || '').trim(),
+          department: String(row.department || row['Department'] || 'CSE').trim(),
+          capacity: Number(row.capacity || row['Capacity']) || 18,
+          email: String(row.email || row['Email'] || '').trim(),
+          mobile: String(row.mobile || row['Mobile No'] || '').trim()
+        })).filter(r => r.empId && r.name);
+
+        if (payload.length === 0) {
+          showToast('No valid rows found. Ensure headers like Employee ID, Name are present.');
+          return;
+        }
+
+        setSyncing(true);
+        const res = await fetch(`${API}/deva/faculty/import`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ faculty: payload })
+        });
+        const resData = await res.json();
+        if (resData.success) {
+          showToast(resData.message || 'Import successful.');
+          refetchFaculty();
+        } else {
+          showToast(resData.message || 'Import failed.');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error parsing file.');
+      } finally {
+        setSyncing(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   // ── Open Add modal ─────────────────────────────────────
   const openAdd = () => {
     setEditTarget(null);
@@ -302,7 +404,8 @@ const FacultyPage = ({ isAdmin = false }) => {
       console.log('[FacultyPage] Response:', { status: res.status, ok: res.ok, success: data?.success, message: data?.message, receivedData: !!data?.data });
       if (!res.ok || !data?.success) {
         console.error('[FacultyPage] Save failed:', { status: res.status, message: data?.message });
-        showToast(data?.message || 'Could not save faculty record.');
+        const errMsg = data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Could not save faculty record.');
+        showToast(errMsg);
         return;
       }
       const serverFaculty = data?.data;
@@ -465,6 +568,17 @@ const FacultyPage = ({ isAdmin = false }) => {
             </button>
           )}
 
+          {isAdmin && (
+            <>
+              <button className="fp-btn fp-btn-reorder" onClick={toggleRestoreMode} style={{ marginLeft: '10px' }}>
+                {restoreMode ? 'Exit Restore Mode' : 'View Deleted'}
+              </button>
+              <input type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+              <button className="fp-btn fp-btn-export" onClick={() => fileInputRef.current?.click()} style={{ marginLeft: '10px' }}>
+                Import CSV
+              </button>
+            </>
+          )}
           {/* Add Faculty */}
           <button className="fp-btn fp-btn-add" onClick={openAdd}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
@@ -517,8 +631,8 @@ const FacultyPage = ({ isAdmin = false }) => {
             </tr>
           </thead>
           <tbody>
-            {(isDragMode ? mergedList : filtered).length === 0 ? (
-              <tr><td colSpan={isDragMode ? 12 : 13} className="fp-empty">No records found.</td></tr>
+            {(restoreMode ? deletedList : (isDragMode ? mergedList : filtered)).length === 0 ? (
+              <tr><td colSpan={isDragMode ? 12 : 13} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
             ) : (
               (isDragMode ? mergedList : filtered).map((f, i) => (
                 <tr
@@ -563,24 +677,30 @@ const FacultyPage = ({ isAdmin = false }) => {
                   </td>
                   {!isDragMode && (
                     <td className="fp-td-actions">
-                      <button className="fp-action-btn fp-edit" onClick={() => openEdit(f)} title="Edit">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-                          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                        Edit
-                      </button>
-                      <button className="fp-action-btn fp-delete" onClick={() => setDeleteConfirm(f)} title="Delete">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-                          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"/>
-                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                          <path d="M10 11v6"/><path d="M14 11v6"/>
-                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                        </svg>
-                        Delete
-                      </button>
+                      {restoreMode ? (
+                        <button className="fp-action-btn fp-add" onClick={() => handleRestore(f.empId)}>Restore</button>
+                      ) : (
+                        <>
+                          <button className="fp-action-btn fp-edit" onClick={() => openEdit(f)} title="Edit">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                            Edit
+                          </button>
+                          <button className="fp-action-btn fp-delete" onClick={() => setDeleteConfirm(f)} title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6"/>
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                              <path d="M10 11v6"/><path d="M14 11v6"/>
+                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                            </svg>
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -602,12 +722,12 @@ const FacultyPage = ({ isAdmin = false }) => {
               <div className="fp-form-grid">
                 <div className="fp-form-group">
                   <label>Employee ID *</label>
-                  <input value={form.empId} onChange={e => setForm({...form, empId: e.target.value})}
+                  <input minLength={3} maxLength={20} pattern="[a-zA-Z0-9_\\-]+" value={form.empId} onChange={e => setForm({...form, empId: e.target.value})}
                     placeholder="e.g. 1234" required disabled={!isAdmin && !!editTarget} />
                 </div>
                 <div className="fp-form-group fp-form-full">
                   <label>Name of Faculty *</label>
-                  <input value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+                  <input minLength={3} maxLength={100} value={form.name} onChange={e => setForm({...form, name: e.target.value})}
                     placeholder="e.g. Dr. John Smith" required />
                 </div>
                 <div className="fp-form-group fp-form-full">
@@ -635,6 +755,7 @@ const FacultyPage = ({ isAdmin = false }) => {
                   <input type="number" min="1" max="60" value={form.capacity || ''} onChange={e => setForm({...form, capacity: e.target.value})}
                     placeholder="e.g. 18" required />
                 </div>
+
               </div>
               <div className="fp-modal-actions">
                 <button type="button" className="fp-btn fp-btn-cancel" onClick={() => setShowModal(false)}>Cancel</button>
@@ -645,7 +766,7 @@ const FacultyPage = ({ isAdmin = false }) => {
         </div>
       )}
 
-      {/* ── Delete Confirm ── */}
+      {/* -- Delete Confirm -- */}
       {deleteConfirm && (
         <div className="fp-overlay" onClick={() => setDeleteConfirm(null)}>
           <div className="fp-modal fp-modal-sm" onClick={e => e.stopPropagation()}>

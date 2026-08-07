@@ -13,6 +13,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
+const { mongoose } = require('../db');
 const Faculty  = require('../models/Faculty');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
@@ -163,6 +164,14 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
   }
 });
 
+// GET /api/faculty/deleted  (admin)
+router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const docs = await Faculty.find({ isDeleted: true }).lean();
+    sendSuccess(res, docs.map(toClient), 200);
+  } catch (err) { next(err); }
+});
+
 // GET /api/faculty/:empId
 router.get('/:empId', requireAuth, async (req, res, next) => {
   try {
@@ -200,7 +209,7 @@ router.post(
         return sendValidationError(res, errors.array());
       }
 
-      const { empId, name, department = 'CSE', designation, mobile = '', email = '' } = req.body;
+      const { empId, name, department = 'CSE', designation, mobile = '', email = '', capacity } = req.body;
 
       const existing = await Faculty.findOne({ empId: empId.trim() }).session(session);
       if (existing) {
@@ -222,6 +231,19 @@ router.post(
         capacity: req.body.capacity !== undefined ? Number(req.body.capacity) : 18,
         mobile,
         email,
+        qualification: String(qualification || '').trim(),
+        experience: Number(experience) || 0,
+        role: String(role || 'faculty').trim(),
+        username: String(username || '').trim(),
+        workingHours: String(workingHours || '').trim(),
+        joiningDate: joiningDate || null,
+        address: String(address || '').trim(),
+        gender: String(gender || '').trim(),
+        dob: dob || null,
+        profilePicture: String(profilePicture || '').trim(),
+        researchArea: String(researchArea || '').trim(),
+        specialization: String(specialization || '').trim(),
+        status: String(status || 'Available').trim(),
       }], { session });
       const doc = createdDocs[0];
 
@@ -267,17 +289,20 @@ router.put(
   requireAuth, requireSelfOrAdmin,
   validateFacultyUpdate,
   async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try {
-      // Validate empId parameter
       const empId = String(req.params.empId || '').trim();
       if (!empId) {
-        logger.warn('Faculty update - invalid empId parameter', { empId: req.params.empId, userId: req.user.id });
+        await session.abortTransaction();
+        session.endSession();
         return sendError(res, 'Invalid Employee ID', 400);
       }
 
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        logger.warn('Faculty update validation failed', { empId, userId: req.user.id, errors: errors.array(), body: req.body });
+        await session.abortTransaction();
+        session.endSession();
         return sendValidationError(res, errors.array());
       }
 
@@ -285,165 +310,80 @@ router.put(
       const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
       
-      logger.debug('Faculty update request received', { empId, userId: req.user.id, bodyKeys: Object.keys(req.body), isAdmin, isSelf });
-
       const allowedUpdates = {};
+      if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
+      if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
+      if (mobile !== undefined) allowedUpdates.mobile = String(mobile).trim();
+      if (email !== undefined && String(email).trim()) allowedUpdates.email = String(email).trim();
       
-      // Both admin and self can update: name, designation, mobile, email
-      if (name !== undefined && String(name).trim()) {
-        allowedUpdates.name = String(name).trim();
-        logger.debug('Setting name', { value: allowedUpdates.name });
-      }
-      if (designation !== undefined && String(designation).trim()) {
-        allowedUpdates.designation = String(designation).trim();
-        logger.debug('Setting designation', { value: allowedUpdates.designation });
-      }
-      if (mobile !== undefined) {
-        allowedUpdates.mobile = String(mobile).trim();
-        logger.debug('Setting mobile', { value: allowedUpdates.mobile });
-      }
-      if (email !== undefined && String(email).trim()) {
-        allowedUpdates.email = String(email).trim();
-        logger.debug('Setting email', { value: allowedUpdates.email });
-      }
-      
-      // Only admin can update: department, slNo
       if (isAdmin) {
-        if (department !== undefined && String(department).trim()) {
-          allowedUpdates.department = String(department).trim();
-          logger.debug('Setting department', { value: allowedUpdates.department });
-        }
-        if (slNo !== undefined) {
-          allowedUpdates.slNo = Number(slNo);
-          logger.debug('Setting slNo', { value: allowedUpdates.slNo });
-        }
-        if (capacity !== undefined) {
-          allowedUpdates.capacity = Number(capacity);
-          logger.debug('Setting capacity', { value: allowedUpdates.capacity });
-        }
+        if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
+        if (slNo !== undefined) allowedUpdates.slNo = Number(slNo);
+        if (capacity !== undefined) allowedUpdates.capacity = Number(capacity);
+        if (status !== undefined) allowedUpdates.status = String(status).trim();
+        if (role !== undefined) allowedUpdates.role = String(role).trim();
+        if (username !== undefined) allowedUpdates.username = String(username).trim();
       }
 
-      // Always update the timestamp
-      allowedUpdates.updatedAt = new Date();
+      if (qualification !== undefined) allowedUpdates.qualification = String(qualification).trim();
+      if (experience !== undefined) allowedUpdates.experience = Number(experience);
+      if (workingHours !== undefined) allowedUpdates.workingHours = String(workingHours).trim();
+      if (joiningDate !== undefined) allowedUpdates.joiningDate = joiningDate;
+      if (address !== undefined) allowedUpdates.address = String(address).trim();
+      if (gender !== undefined) allowedUpdates.gender = String(gender).trim();
+      if (dob !== undefined) allowedUpdates.dob = dob;
+      if (profilePicture !== undefined) allowedUpdates.profilePicture = String(profilePicture).trim();
+      if (researchArea !== undefined) allowedUpdates.researchArea = String(researchArea).trim();
+      if (specialization !== undefined) allowedUpdates.specialization = String(specialization).trim();
 
-      logger.info('Faculty update - preparing database update', { empId, userId: req.user.id, updates: allowedUpdates });
+      allowedUpdates.updatedAt = new Date();
 
       const doc = await Faculty.findOneAndUpdate(
         { empId },
         { $set: allowedUpdates },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true, session }
       ).lean();
 
       if (!doc) {
-        logger.warn('Faculty member not found for update', { empId, userId: req.user.id });
+        await session.abortTransaction();
+        session.endSession();
         return sendNotFound(res, 'Faculty member not found.');
       }
 
-      // ── Update User account if mobile or other fields changed ──
-      // CRITICAL: User account update must succeed, otherwise profile and login diverge
       if (allowedUpdates.mobile || allowedUpdates.name || allowedUpdates.designation || allowedUpdates.email) {
         const userUpdates = {};
         if (allowedUpdates.name) userUpdates.name = allowedUpdates.name;
         if (allowedUpdates.designation) userUpdates.designation = allowedUpdates.designation;
         if (allowedUpdates.email) userUpdates.email = allowedUpdates.email;
-        
-        // If mobile changed, re-hash it as password
         if (allowedUpdates.mobile && allowedUpdates.mobile.trim()) {
           userUpdates.mobile = allowedUpdates.mobile;
           userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
         }
 
         if (Object.keys(userUpdates).length > 0) {
-          try {
-            const userUpdateResult = await User.findOneAndUpdate(
-              { empId },
-              { $set: userUpdates },
-              { new: true, runValidators: true }
-            );
-            if (!userUpdateResult) {
-              throw new Error('User account not found - cannot update login credentials');
-            }
-            logger.info('User account synced for faculty update', { empId, changes: Object.keys(userUpdates) });
-          } catch (userErr) {
-            // If user account update fails, rollback faculty update by re-fetching original
-            logger.error('CRITICAL: User account update failed - rolling back faculty update', { empId, error: userErr.message });
-            
-            // Fetch the faculty record again to return unchanged data
-            const originalDoc = await Faculty.findOne({ empId }).lean();
-            return sendError(res, `Failed to sync login credentials for faculty member. Faculty profile and login account would diverge. Please contact support. Error: ${userErr.message}`, 500);
-          }
-        }
-      }
-
-      // ── Cascade Updates to Workload and CourseAllocation ──
-      if (allowedUpdates.name || allowedUpdates.designation || allowedUpdates.department || allowedUpdates.mobile !== undefined) {
-        const workloadUpdates = {};
-        if (allowedUpdates.name) workloadUpdates.empName = allowedUpdates.name;
-        if (allowedUpdates.designation) workloadUpdates.designation = allowedUpdates.designation;
-        if (allowedUpdates.department) workloadUpdates.department = allowedUpdates.department;
-        if (allowedUpdates.mobile !== undefined) workloadUpdates.mobile = allowedUpdates.mobile;
-
-        if (Object.keys(workloadUpdates).length > 0) {
-          try {
-            await Workload.updateMany({ empId }, { $set: workloadUpdates });
-            logger.info('Workloads synced for faculty update', { empId, changes: Object.keys(workloadUpdates) });
-          } catch (workloadErr) {
-            logger.error('Failed to sync workloads for faculty update', { empId, error: workloadErr.message });
-          }
-        }
-
-        if (allowedUpdates.name || allowedUpdates.designation) {
-          try {
-            const allocations = await CourseAllocation.find({
-              $or: [
-                { 'lectureSlot.empId': empId },
-                { 'lectureSlots.empId': empId },
-                { 'tutorialSlots.empId': empId },
-                { 'practicalSlots.empId': empId }
-              ]
-            });
-
-            for (const alloc of allocations) {
-              let modified = false;
-              if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
-                if (allowedUpdates.name) alloc.lectureSlot.empName = allowedUpdates.name;
-                if (allowedUpdates.designation) alloc.lectureSlot.designation = allowedUpdates.designation;
-                modified = true;
-              }
-              const updateSlots = (slots) => {
-                if (!slots || !Array.isArray(slots)) return;
-                slots.forEach(slot => {
-                  if (slot && slot.empId === empId) {
-                    if (allowedUpdates.name) slot.empName = allowedUpdates.name;
-                    if (allowedUpdates.designation) slot.designation = allowedUpdates.designation;
-                    modified = true;
-                  }
-                });
-              };
-              updateSlots(alloc.lectureSlots);
-              updateSlots(alloc.tutorialSlots);
-              updateSlots(alloc.practicalSlots);
-
-              if (modified) {
-                // Mongoose might not detect changes in nested arrays without markModified
-                alloc.markModified('lectureSlot');
-                alloc.markModified('lectureSlots');
-                alloc.markModified('tutorialSlots');
-                alloc.markModified('practicalSlots');
-                await alloc.save();
-              }
-            }
-            logger.info('Course allocations synced for faculty update', { empId, updatedCount: allocations.length });
-          } catch (allocErr) {
-            logger.error('Failed to sync course allocations for faculty update', { empId, error: allocErr.message });
+          const userUpdateResult = await User.findOneAndUpdate(
+            { empId },
+            { $set: userUpdates },
+            { new: true, runValidators: true, session }
+          );
+          if (!userUpdateResult) {
+            await session.abortTransaction();
+            session.endSession();
+            return sendError(res, 'User account not found - cannot update login credentials', 500);
           }
         }
       }
 
       await logAuditEvent({ req, action: 'faculty.update', entity: 'faculty', entityId: empId, metadata: { fields: Object.keys(allowedUpdates), isSelfEdit: isSelf } });
+      
+      await session.commitTransaction();
+      session.endSession();
+      
       logger.info('Faculty updated successfully', { empId, fields: Object.keys(allowedUpdates), userId: req.user.id, isSelfEdit: isSelf });
       sendSuccess(res, toClient(doc), 200);
     } catch (err) { 
+      await session.abortTransaction();
+      session.endSession();
       logger.error('Error updating faculty', { error: err.message, stack: err.stack, empId: req.params.empId, userId: req.user.id });
       next(err); 
     }
@@ -451,101 +391,173 @@ router.put(
 );
 
 // DELETE /api/faculty/:empId  (admin)
-// Admin-only delete with CASCADE cleanup of related records (User, Workload, Submissions, Allocations)
 router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const empId = String(req.params.empId || '').trim();
     if (!empId) {
-      logger.warn('Delete request with missing empId', { userId: req.user.id });
+      await session.abortTransaction();
+      session.endSession();
       return sendError(res, 'Employee ID is required.', 400);
     }
 
-    // Check if faculty exists first
-    const doc = await Faculty.findOne({ empId });
+    const doc = await Faculty.findOneAndUpdate(
+      { empId, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true, deletedAt: new Date() } },
+      { new: true, session }
+    );
     if (!doc) {
-      logger.warn('Faculty member not found for deletion', { empId, userId: req.user.id });
+      await session.abortTransaction();
+      session.endSession();
       return sendNotFound(res, 'Faculty member not found.');
     }
 
-    // Log what we're about to delete
-    const counters = {
-      workloads: 0,
-      submissions: 0,
-      users: 0,
-      allocations: 0,
-    };
+    const counters = { workloads: 0, submissions: 0, users: 0, allocations: 0 };
 
-    // CASCADE DELETE: Remove all related records
-    try {
-      counters.workloads = (await Workload.deleteMany({ empId })).deletedCount || 0;
-      counters.submissions = (await Submission.deleteMany({ empId })).deletedCount || 0;
-      counters.users = (await User.deleteMany({ empId })).deletedCount || 0;
+    const wlRes = await Workload.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
+    counters.workloads = wlRes.modifiedCount || 0;
+
+    const subRes = await Submission.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
+    counters.submissions = subRes.modifiedCount || 0;
+
+    const userRes = await User.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
+    counters.users = userRes.modifiedCount || 0;
       
-      // Remove faculty from course allocations safely (zero out slots instead of deleting the whole document)
-      const allocations = await CourseAllocation.find({
-        $or: [
-          { 'lectureSlot.empId': empId },
-          { lectureSlots: { $elemMatch: { empId } } },
-          { tutorialSlots: { $elemMatch: { empId } } },
-          { practicalSlots: { $elemMatch: { empId } } },
-        ],
-      });
-      
-      for (const alloc of allocations) {
-        if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
-          alloc.lectureSlot = { empId: '', empName: '', designation: '', hours: 0 };
-        }
-        alloc.lectureSlots.forEach(slot => {
-          if (slot.empId === empId) {
-            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
-          }
-        });
-        alloc.tutorialSlots.forEach(slot => {
-          if (slot.empId === empId) {
-            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
-          }
-        });
-        alloc.practicalSlots.forEach(slot => {
-          if (slot.empId === empId) {
-            slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0;
-          }
-        });
-        await alloc.save();
+    const allocations = await CourseAllocation.find({
+      $or: [
+        { 'lectureSlot.empId': empId },
+        { lectureSlots: { $elemMatch: { empId } } },
+        { tutorialSlots: { $elemMatch: { empId } } },
+        { practicalSlots: { $elemMatch: { empId } } },
+      ],
+    }).session(session);
+    
+    for (const alloc of allocations) {
+      if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
+        alloc.lectureSlot = { empId: '', empName: '', designation: '', hours: 0 };
       }
-      counters.allocations = allocations.length;
-    } catch (cleanupErr) {
-      logger.error('Error during cascade delete cleanup', { error: cleanupErr.message, empId, userId: req.user.id, counters });
-      // Continue with faculty deletion even if cleanup fails
+      const clearSlot = (slot) => {
+        if (slot.empId === empId) { slot.empId = ''; slot.empName = ''; slot.designation = ''; slot.hours = 0; }
+      };
+      alloc.lectureSlots.forEach(clearSlot);
+      alloc.tutorialSlots.forEach(clearSlot);
+      alloc.practicalSlots.forEach(clearSlot);
+      await alloc.save({ session });
     }
+    counters.allocations = allocations.length;
 
-    // Delete the faculty record itself
-    await Faculty.findOneAndDelete({ empId });
+    await logAuditEvent({ req, action: 'faculty.delete_soft', entity: 'faculty', entityId: empId, details: { name: doc.name, cleanupStats: counters } });
     
-    await logAuditEvent({ 
-      req, 
-      action: 'faculty.delete_cascade', 
-      entity: 'faculty', 
-      entityId: empId,
-      details: { 
-        name: doc.name,
-        cleanupStats: counters,
-      },
-    });
+    await session.commitTransaction();
+    session.endSession();
     
-    logger.info('Faculty deleted with cascade cleanup', { 
-      empId, 
-      name: doc.name, 
-      userId: req.user.id,
-      cleanupStats: counters,
-    });
-    
-    sendSuccess(res, { 
-      message: 'Faculty member deleted successfully with all related records cleaned up.',
-      cleaned: counters,
-    }, 200);
+    logger.info('Faculty soft deleted with cascade cleanup', { empId, name: doc.name, userId: req.user.id, cleanupStats: counters });
+    sendSuccess(res, { message: 'Faculty member deleted successfully.', cleaned: counters }, 200);
   } catch (err) { 
+    await session.abortTransaction();
+    session.endSession();
     logger.error('Error deleting faculty', { error: err.message, empId: req.params.empId, userId: req.user.id });
     next(err); 
+  }
+});
+
+// POST /api/faculty/:empId/restore  (admin)
+router.post('/:empId/restore', requireAuth, requireAdmin, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const empId = String(req.params.empId || '').trim();
+    const doc = await Faculty.findOneAndUpdate(
+      { empId, isDeleted: true },
+      { $set: { isDeleted: false, deletedAt: null } },
+      { new: true, session }
+    ).lean();
+
+    if (!doc) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendNotFound(res, 'Deleted faculty member not found.');
+    }
+
+    await Workload.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
+    await Submission.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
+    await User.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
+
+    await logAuditEvent({ req, action: 'faculty.restore', entity: 'faculty', entityId: empId });
+    
+    await session.commitTransaction();
+    session.endSession();
+    
+    logger.info('Faculty restored', { empId, userId: req.user.id });
+    sendSuccess(res, toClient(doc), 200, { message: 'Faculty member restored successfully.' });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    logger.error('Error restoring faculty', { error: err.message, empId: req.params.empId, userId: req.user.id });
+    next(err);
+  }
+});
+
+// POST /api/faculty/import  (admin)
+router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    if (!req.body.faculty || !Array.isArray(req.body.faculty)) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendError(res, 'Invalid data. Expected an array of faculty.', 400);
+    }
+
+    let createdCount = 0;
+    for (const item of req.body.faculty) {
+      const { empId, name, department = 'CSE', designation, mobile = '', email = '' } = item;
+      if (!empId || !name || !designation) continue;
+
+      const existing = await Faculty.findOne({ empId: String(empId).trim() }).session(session);
+      if (existing) continue;
+
+      const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).session(session).lean();
+      const slNo = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
+
+      const createdDocs = await Faculty.create([{
+        slNo,
+        empId: String(empId).trim(),
+        name: String(name).trim(),
+        department: String(department || 'CSE').trim(),
+        designation: String(designation).trim(),
+        capacity: item.capacity !== undefined ? Number(item.capacity) : 18,
+        mobile: String(mobile).trim(),
+        email: String(email).trim(),
+      }], { session });
+
+      const defaultPassword = String(mobile).trim() ? String(mobile).trim() : String(empId).trim();
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      
+      await User.create([{
+        empId: String(empId).trim(),
+        name: String(name).trim(),
+        designation: String(designation).trim(),
+        mobile: String(mobile).trim(),
+        email: String(email).trim(),
+        passwordHash,
+        role: 'Faculty',
+        canAccessAdmin: false,
+        forcePasswordChange: true
+      }], { session });
+      createdCount++;
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+    
+    sendSuccess(res, { created: createdCount }, 201, { message: `Successfully imported ${createdCount} faculty members.` });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    logger.error('Error importing faculty', { error: err.message, userId: req.user.id });
+    next(err);
   }
 });
 

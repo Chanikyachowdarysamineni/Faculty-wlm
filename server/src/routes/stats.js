@@ -13,6 +13,7 @@ const Submission  = require('../models/Submission');
 const Workload    = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const Setting     = require('../models/Setting');
+const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { getFacultyWorkloadSummary, getFacultyWorkloadReport } = require('../utils/workloadHours');
 
@@ -20,7 +21,7 @@ const router = express.Router();
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: sec(9), 'M.Tech': ['1', '2'],
+  I: sec(19), II: sec(22), III: sec(19), IV: sec(9)
 };
 
 const getSectionsConfig = async () => {

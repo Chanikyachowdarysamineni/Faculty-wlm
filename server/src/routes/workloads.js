@@ -41,14 +41,13 @@ const TA_SECTION_DUPLICATE_MSG = 'TA is already assigned for this subject and se
 const DE_COURSE_TYPE_REGEX = /^\s*(de|department\s+elective)\s*$/i;
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
-// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV', 'M.Tech' -> 'M.Tech'
+// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV'
 const normalizeYear = (year) => {
   const trimmed = String(year || '').trim().toUpperCase();
   if (trimmed === 'I' || trimmed === '1') return 'I';
   if (trimmed === 'II' || trimmed === '2') return 'II';
   if (trimmed === 'III' || trimmed === '3') return 'III';
   if (trimmed === 'IV' || trimmed === '4') return 'IV';
-  if (trimmed === 'M.TECH') return 'M.Tech';
   return trimmed; // Return as-is if not recognized
 };
 
@@ -100,7 +99,7 @@ const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: sec(9), 'M.Tech': ['1', '2'],
+  I: sec(19), II: sec(22), III: sec(19), IV: sec(9)
 };
 
 const getSectionsConfig = async () => {
@@ -125,24 +124,24 @@ const ensureValidSection = async (year, section) => {
 
 const toClient = (doc) => ({
   id:          doc._id?.toString() || '',
-  empId:       String(doc.empId || '').trim(),
-  empName:     String(doc.empName || '').trim(),
+  empId:       String(doc.faculty?.empId || doc.empId || '').trim(),
+  empName:     String(doc.faculty?.name || doc.empName || '').trim(),
   facultyRole: String(doc.facultyRole || 'Main Faculty').trim(),
-  designation: String(doc.designation || '').trim() || 'N/A',
-  mobile:      String(doc.mobile || '').trim() || 'N/A',
-  department:  String(doc.department || '').trim() || 'CSE',
-  courseId:    Number(doc.courseId || 0),
-  courseType:  String(doc.courseType || '').trim() || 'Other',
-  subjectCode: String(doc.subjectCode || '').trim(),
-  subjectName: String(doc.subjectName || '').trim(),
-  shortName:   String(doc.shortName || '').trim(),
-  program:     String(doc.program || '').trim() || 'N/A',
-  year:        String(doc.year || '').trim() || 'I',
-  section:     String(doc.section || '').trim() || '1',
-  fixedL:      Number(doc.fixedL || 0),
-  fixedT:      Number(doc.fixedT || 0),
-  fixedP:      Number(doc.fixedP || 0),
-  C:           Number(doc.C || 0),
+  designation: String(doc.faculty?.designation || doc.designation || '').trim() || 'N/A',
+  mobile:      String(doc.faculty?.mobile || doc.mobile || '').trim() || 'N/A',
+  department:  String(doc.faculty?.department || doc.department || '').trim() || 'CSE',
+  courseId:    Number(doc.course?.courseId || doc.courseId || 0),
+  courseType:  String(doc.course?.courseType || doc.courseType || '').trim() || 'Other',
+  subjectCode: String(doc.course?.subjectCode || doc.subjectCode || '').trim(),
+  subjectName: String(doc.course?.subjectName || doc.subjectName || '').trim(),
+  shortName:   String(doc.course?.shortName || doc.shortName || '').trim(),
+  program:     String(doc.course?.program || doc.program || '').trim() || 'N/A',
+  year:        String(doc.sectionRef?.year || doc.year || '').trim() || 'I',
+  section:     String(doc.sectionRef?.name || doc.section || '').trim() || '1',
+  fixedL:      Number(doc.course?.L ?? doc.fixedL ?? 0),
+  fixedT:      Number(doc.course?.T ?? doc.fixedT ?? 0),
+  fixedP:      Number(doc.course?.P ?? doc.fixedP ?? 0),
+  C:           Number(doc.course?.C ?? doc.C ?? 0),
   manualL:     Number(doc.manualL || 0),
   manualT:     Number(doc.manualT || 0),
   manualP:     Number(doc.manualP || 0),
@@ -357,7 +356,8 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     const [total, docs] = await Promise.all([
       Workload.countDocuments(filter),
       Workload.find(filter)
-        .select('empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow createdAt')
+        .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow createdAt')
+        .populate('faculty course sectionRef')
         .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)

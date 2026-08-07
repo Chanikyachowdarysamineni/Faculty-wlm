@@ -3,7 +3,7 @@
 const express = require('express');
 const Designation = require('../models/Designation');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { sendSuccess, sendError } = require('../utils/response');
+const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const logger = require('../utils/logger');
 
 const router = express.Router();

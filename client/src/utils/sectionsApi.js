@@ -5,8 +5,7 @@ export const DEFAULT_SECTIONS = {
   I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
   II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1)),
-  'M.Tech': ['1', '2'],
+  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
 };
 
 const authHeader = () => ({

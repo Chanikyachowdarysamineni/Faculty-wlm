@@ -8,6 +8,7 @@
 
 const express      = require('express');
 const AuditLog     = require('../models/AuditLog');
+const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();

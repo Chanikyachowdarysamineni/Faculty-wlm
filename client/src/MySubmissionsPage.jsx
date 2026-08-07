@@ -288,7 +288,7 @@ const MySubmissionsPage = ({
                         }}
                       >
                         <option value="">— Select a course —</option>
-                        {['B.Tech', 'M.Tech'].map(prog => (
+                        {['B.Tech'].map(prog => (
                           <optgroup key={prog} label={`── ${prog} ──`}>
                             {courseList.filter(c2 => c2.program === prog).map(c2 => (
                               <option
