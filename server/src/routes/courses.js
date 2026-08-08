@@ -163,11 +163,8 @@ router.post(
       const normalizedSubjectCode = String(subjectCode || '').trim().toUpperCase();
       const normalizedYear = normalizeYear(year);
 
-      const duplicateCode = await Course.findOne({ subjectCode: normalizedSubjectCode }).lean();
-      if (duplicateCode) {
-        logger.warn('Duplicate course code attempted', { subjectCode: normalizedSubjectCode, userId: req.user.id });
-        return sendConflict(res, 'Duplicate course code. Subject Code already exists.');
-      }
+      const courseTypeNormalized = String(courseType || '').trim();
+      // No duplicate check required - identical courses are allowed
 
       const doc = await Course.create({
         courseId,
@@ -215,22 +212,16 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     const updates = { ...req.body };
-    if (updates.subjectCode !== undefined) {
-      updates.subjectCode = String(updates.subjectCode || '').trim().toUpperCase();
-      const duplicateCode = await Course.findOne({
-        subjectCode: updates.subjectCode,
-        courseId: { $ne: courseId },
-      }).session(session).lean();
-      if (duplicateCode) {
-        await session.abortTransaction();
-        session.endSession();
-        logger.warn('Duplicate course code in update', { courseId, subjectCode: updates.subjectCode, userId: req.user.id });
-        return sendConflict(res, 'Duplicate course code. Subject Code already exists.');
-      }
-    }
+    
+    if (updates.subjectCode !== undefined) updates.subjectCode = String(updates.subjectCode || '').trim().toUpperCase();
     if (updates.courseType !== undefined) updates.courseType = String(updates.courseType || '').trim();
     if (updates.year !== undefined) updates.year = normalizeYear(updates.year);
     if (updates.program !== undefined) updates.program = String(updates.program || '').trim();
+
+    const checkSubjectCode = updates.subjectCode !== undefined ? updates.subjectCode : current.subjectCode;
+    const checkCourseType = updates.courseType !== undefined ? updates.courseType : current.courseType;
+    
+    // No duplicate check required - identical courses are allowed
 
     if (updates.L !== undefined) updates.L = Number(updates.L) || 0;
     if (updates.T !== undefined) updates.T = Number(updates.T) || 0;

@@ -141,7 +141,7 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
         { $match: { count: { $gt: 1 } } },
       ]),
       Course.aggregate([
-        { $group: { _id: '$subjectCode', count: { $sum: 1 }, ids: { $push: '$_id' } } },
+        { $group: { _id: { subjectCode: '$subjectCode', courseType: '$courseType' }, count: { $sum: 1 }, ids: { $push: '$_id' } } },
         { $match: { count: { $gt: 1 } } },
       ]),
       Promise.all([

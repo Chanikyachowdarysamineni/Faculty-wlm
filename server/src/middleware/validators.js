@@ -9,6 +9,7 @@ const { body, validationResult, param, query } = require('express-validator');
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.error('Validation Error:', JSON.stringify(errors.array()));
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
@@ -212,9 +213,7 @@ const validateCourseCreate = [
   body('program')
     .trim()
     .notEmpty()
-    .withMessage('Program is required')
-    .isIn(['B.Tech'])
-    .withMessage('Program must be B.Tech'),
+    .withMessage('Program is required'),
 
   body('courseType')
     .trim()
@@ -244,23 +243,23 @@ const validateCourseCreate = [
 
   body('L')
     .toInt()
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Lecture hours (L) must be 0-10'),
+    .isInt({ min: 0, max: 100 })
+    .withMessage('Lecture hours (L) must be 0-100'),
 
   body('T')
     .toInt()
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Tutorial hours (T) must be 0-10'),
+    .isInt({ min: 0, max: 100 })
+    .withMessage('Tutorial hours (T) must be 0-100'),
 
   body('P')
     .toInt()
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Practical hours (P) must be 0-10'),
+    .isInt({ min: 0, max: 100 })
+    .withMessage('Practical hours (P) must be 0-100'),
 
   body('C')
     .toInt()
-    .isInt({ min: 0, max: 5 })
-    .withMessage('Credits (C) must be 0-5'),
+    .isInt({ min: 0, max: 50 })
+    .withMessage('Credits (C) must be 0-50'),
 
   body('year')
     .optional({ checkFalsy: true })
