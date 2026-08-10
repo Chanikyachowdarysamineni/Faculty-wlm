@@ -14,9 +14,9 @@ const normalizeCourseTypeKey = (courseType = '') => {
 
 const workloadSchema = new mongoose.Schema(
   {
-    faculty: { type: mongoose.Schema.Types.ObjectId, ref: 'Faculty', required: true },
-    course:  { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-    sectionRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Section', required: true },
+    faculty: { type: mongoose.Schema.Types.ObjectId, ref: 'Faculty' },
+    course:  { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+    sectionRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
     
     // Kept for backward compatibility during migration, but should be derived from references
     empId:       { type: String, default: '' },
@@ -38,6 +38,13 @@ const workloadSchema = new mongoose.Schema(
     isVisible: { type: Boolean, default: false },
     // For TA role: slot index in tutorialSlots/practicalSlots arrays (1=R2, 2=R3, 3=R4)
     allocationRow: { type: Number, default: null },
+    
+    // Status of this workload assignment
+    allocationStatus: { 
+      type: String, 
+      enum: ['UNALLOCATED', 'AVAILABLE', 'PENDING', 'ALLOCATED', 'CANCELLED'], 
+      default: 'ALLOCATED' 
+    },
 
   },
   { timestamps: true, collection: 'workloads' }

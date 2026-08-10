@@ -33,11 +33,12 @@ const wsHandler = require('../websocket');
 
 const router = express.Router();
 
-const MAIN_FACULTY_DUPLICATE_MSG = 'Faculty already assigned for this section and course.';
-const FACULTY_ROLES = ['Main Faculty', 'Supporting Faculty', 'TA'];
-const ROLE_DUPLICATE_MSG = 'This faculty is already assigned with the same role for this course, year, and section.';
-const DE_SECTION_DUPLICATE_MSG = 'Only one Department Elective can be assigned to the same section for I/II/III years.';
-const TA_SECTION_DUPLICATE_MSG = 'TA is already assigned for this subject and section. Only one TA is allowed per section.';
+const EXACT_DUPLICATE_MSG = 'Workload already assigned. This course is already allocated for the selected section and academic context.';
+
+const MAIN_FACULTY_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
+const ROLE_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
+const TA_SECTION_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
+const DE_SECTION_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
 const DE_COURSE_TYPE_REGEX = /^\s*(de|department\s+elective)\s*$/i;
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
@@ -84,6 +85,8 @@ const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
     year: String(year || '').trim(),
     section: String(section || '').trim(),
     facultyRole: 'Main Faculty',
+    allocationStatus: 'ALLOCATED',
+    empId: { $ne: '' },
     $or: [
       { courseTypeKey: 'DE' },
       { courseType: { $regex: DE_COURSE_TYPE_REGEX } },
@@ -99,7 +102,7 @@ const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: sec(9)
+  I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))]
 };
 
 const getSectionsConfig = async () => {
@@ -452,7 +455,7 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
     }
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     const normalizedYear = normalizeYear(year);
-    const docs = await Workload.find({ year: normalizedYear, facultyRole: 'Main Faculty' }).lean();
+    const docs = await Workload.find({ year: normalizedYear, facultyRole: 'Main Faculty', allocationStatus: 'ALLOCATED', empId: { $ne: '' } }).lean();
     // Map: courseId__section => faculty details (first found for each combo)
     const map = {};
     for (const w of docs) {
@@ -970,6 +973,13 @@ router.post(
         return sendError(res, sectionCheck.message, 400);
       }
 
+      if (course && Array.isArray(course.allowedSections) && course.allowedSections.length > 0) {
+        if (!course.allowedSections.includes(normalizedSection)) {
+          logger.warn('Section not allowed for course', { courseId, section: normalizedSection, userId: req.user.id });
+          return sendError(res, `This course is only available for sections: ${course.allowedSections.join(', ')}`, 400);
+        }
+      }
+
       const courseTypeKey = normalizeCourseTypeKey(effectiveCourse.courseType);
       if (normalizedFacultyRole === 'Main Faculty' && courseTypeKey === 'DE' && isRestrictedDeYear(normalizedYear)) {
         const existingDe = await Workload.findOne(
@@ -987,6 +997,8 @@ router.post(
           year: normalizedYear,
           section: normalizedSection,
           facultyRole: 'Main Faculty',
+          allocationStatus: 'ALLOCATED',
+          empId: { $ne: '' }
         }).lean();
         if (existingMain) {
           logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1000,6 +1012,8 @@ router.post(
           year: normalizedYear,
           section: normalizedSection,
           facultyRole: 'TA',
+          allocationStatus: 'ALLOCATED',
+          empId: { $ne: '' }
         }).lean();
         if (existingTa) {
           logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1048,6 +1062,7 @@ router.post(
         year: normalizedYear,
         section: normalizedSection,
         facultyRole: normalizedFacultyRole,
+        allocationStatus: 'ALLOCATED',
       }).session(session).lean();
       if (duplicateRole) {
         logger.warn('Duplicate role assignment', { empId: effectiveMember.empId, courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, role: normalizedFacultyRole, userId: req.user.id });
@@ -1243,6 +1258,13 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       }
     }
 
+    if (course && Array.isArray(course.allowedSections) && course.allowedSections.length > 0) {
+      if (!course.allowedSections.includes(nextSection)) {
+        logger.warn('Section not allowed for course in update', { courseId: nextCourseId, section: nextSection, userId: req.user.id });
+        return sendError(res, `This course is only available for sections: ${course.allowedSections.join(', ')}`, 400);
+      }
+    }
+
     const targetId = new mongoose.Types.ObjectId(req.params.id);
 
     if (normalizedFacultyRole === 'Main Faculty') {
@@ -1252,6 +1274,8 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         year: nextYear,
         section: nextSection,
         facultyRole: 'Main Faculty',
+        allocationStatus: 'ALLOCATED',
+        empId: { $ne: '' }
       }).session(session).lean();
       if (duplicateMain) {
         logger.warn('Main faculty duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
@@ -1266,6 +1290,8 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         year: nextYear,
         section: nextSection,
         facultyRole: 'TA',
+        allocationStatus: 'ALLOCATED',
+        empId: { $ne: '' }
       }).session(session).lean();
       if (duplicateTa) {
         logger.warn('TA duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
@@ -1280,6 +1306,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       year: nextYear,
       section: nextSection,
       facultyRole: normalizedFacultyRole,
+      allocationStatus: 'ALLOCATED'
     }).session(session).lean();
 
     if (duplicateRole) {

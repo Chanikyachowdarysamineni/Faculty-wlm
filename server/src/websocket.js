@@ -119,7 +119,9 @@ class WebSocketHandler {
       }
     });
 
-    console.log(`Broadcasted message to ${broadcastCount} clients`);
+    if (broadcastCount > 0) {
+      console.log(`Broadcasted message to ${broadcastCount} clients`);
+    }
   }
 
   /**

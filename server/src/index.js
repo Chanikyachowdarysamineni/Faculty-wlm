@@ -198,30 +198,33 @@ app.use(cors({
 app.set('trust proxy', 1);
 
 // ── HTTPS Enforcement Middleware (Production) ──────────────────────
-// Redirect HTTP to HTTPS and enforce secure headers
+// Redirect HTTP to HTTPS and enforce secure headers — skipped for localhost
 if (process.env.NODE_ENV === 'production') {
-  // Redirect HTTP to HTTPS
   app.use((req, res, next) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
-      res.redirect(301, `https://${req.header('host')}${req.url}`);
-    } else {
-      next();
+    const host = req.header('host') || '';
+    const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+    if (!isLocalhost && req.header('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, `https://${host}${req.url}`);
     }
+    next();
   });
-  
-  // Add HSTS (HTTP Strict Transport Security) header
-  app.use(helmet.hsts({
-    maxAge: 31536000, // 1 year in seconds
-    includeSubDomains: true,
-    preload: true,
-  }));
+
+  // Add HSTS only for non-localhost
+  app.use((req, res, next) => {
+    const host = req.header('host') || '';
+    if (!host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {
+      res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    }
+    next();
+  });
 }
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(mongoSanitize());
 app.use(xss());
-app.use(morgan('dev'));
+// Use 'combined' format in production (structured logs), 'dev' in development
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // ── Rate Limiting ──────────────────────────────────────────
 // Initialize Redis for distributed rate limiting (optional, falls back to memory)
@@ -283,6 +286,28 @@ app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/audit-logs',            auditLogsRoutes);
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 app.use('/deva/faculty',               facultyCapacityRoutes);
+
+// ── Serve React production build ───────────────────────────
+// Express serves the frontend at /csefaculty so a single process handles everything
+const path = require('path');
+const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
+if (fs.existsSync(clientBuildPath)) {
+  // Serve static assets (JS/CSS/images) under the /csefaculty base path
+  app.use('/csefaculty', express.static(clientBuildPath, {
+    maxAge: '1y',           // Cache hashed assets for 1 year
+    etag: true,
+    immutable: true,
+  }));
+  // SPA fallback — all non-API routes under /csefaculty return index.html
+  app.get('/csefaculty/*', (_req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+  // Redirect root to the app
+  app.get('/', (_req, res) => res.redirect('/csefaculty'));
+  console.log(`✅  Serving React build from ${clientBuildPath}`);
+} else {
+  console.warn('⚠️  React build not found — run "npm run build" in client/ to enable frontend serving');
+}
 
 // ── 404 handler ────────────────────────────────────────────
 app.use((_req, res) => {

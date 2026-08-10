@@ -159,12 +159,11 @@ router.post(
       const maxDoc = await Course.findOne().sort({ courseId: -1 }).lean();
       const courseId = await nextSequence('course_id', Number(maxDoc?.courseId || 0));
 
-      const { program, courseType, year = '', subjectCode, subjectName, shortName, L, T, P, C, department, academicYear, semester, regulations, status, description, allocationStatus } = req.body;
+      const { program, courseType, year = '', subjectCode, subjectName, shortName, L, T, P, C, department, academicYear, semester, regulations, status, description, allocationStatus, allowedSections = [] } = req.body;
       const normalizedSubjectCode = String(subjectCode || '').trim().toUpperCase();
       const normalizedYear = normalizeYear(year);
 
       const courseTypeNormalized = String(courseType || '').trim();
-      // No duplicate check required - identical courses are allowed
 
       const doc = await Course.create({
         courseId,
@@ -186,11 +185,16 @@ router.post(
         description: String(description || '').trim(),
         allocationStatus: allocationStatus || 'Pending',
         isDeleted: false,
+        allowedSections: Array.isArray(allowedSections) ? allowedSections.map(s => String(s).trim()).filter(Boolean) : [],
       });
       await logAuditEvent({ req, action: 'course.create', entity: 'course', entityId: String(doc.courseId) });
       logger.info('Course created', { courseId: doc.courseId, subjectCode: doc.subjectCode, userId: req.user.id });
       sendCreated(res, toClient(doc));
     } catch (err) {
+      if (err.code === 11000 || err.code === 11001) {
+        logger.warn('Course duplicate constraint failed', { userId: req.user.id, error: err.message });
+        return sendConflict(res, 'Failed to create course due to duplicate unique identifier.');
+      }
       logger.error('Error creating course', { error: err.message, userId: req.user.id });
       next(err);
     }
@@ -236,6 +240,12 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (updates.description !== undefined) updates.description = String(updates.description).trim();
     if (updates.allocationStatus !== undefined) updates.allocationStatus = updates.allocationStatus;
     if (updates.isDeleted !== undefined) updates.isDeleted = Boolean(updates.isDeleted);
+    
+    if (updates.allowedSections !== undefined) {
+      updates.allowedSections = Array.isArray(updates.allowedSections) 
+        ? updates.allowedSections.map(s => String(s).trim()).filter(Boolean) 
+        : [];
+    }
 
     const doc = await Course.findOneAndUpdate(
       { courseId },

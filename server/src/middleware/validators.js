@@ -36,8 +36,8 @@ const validateWorkloadCreate = [
     .trim()
     .notEmpty()
     .withMessage('Employee ID is required')
-    .isLength({ min: 2, max: 10 })
-    .withMessage('Employee ID must be 2-10 characters'),
+    .isLength({ min: 2, max: 30 })
+    .withMessage('Employee ID must be 2-30 characters'),
 
   body('courseId')
     .custom((value) => {
@@ -57,9 +57,9 @@ const validateWorkloadCreate = [
     .custom((value) => {
       // Accept various formats and normalize
       const trimmed = String(value || '').trim().toUpperCase();
-      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4'];
+      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4', 'M.TECH', 'OTHER', 'ALL'];
       if (!validYears.includes(trimmed)) {
-        throw new Error('Invalid year. Must be I/II/III/IV (or numeric 1/2/3/4)');
+        throw new Error('Invalid year. Must be I/II/III/IV/M.Tech or Other');
       }
       return true;
     }),
@@ -224,22 +224,22 @@ const validateCourseCreate = [
     .trim()
     .notEmpty()
     .withMessage('Subject code is required')
-    .isLength({ min: 2, max: 20 })
-    .withMessage('Subject code must be 2-20 characters'),
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Subject code must be 2-100 characters'),
 
   body('subjectName')
     .trim()
     .notEmpty()
     .withMessage('Subject name is required')
-    .isLength({ min: 3, max: 200 })
-    .withMessage('Subject name must be 3-200 characters'),
+    .isLength({ min: 2, max: 500 })
+    .withMessage('Subject name must be 2-500 characters'),
 
   body('shortName')
     .trim()
     .notEmpty()
     .withMessage('Short name is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Short name must be 2-50 characters'),
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Short name must be 2-100 characters'),
 
   body('L')
     .toInt()
@@ -276,13 +276,13 @@ const validateCourseCreate = [
 
 const validatePagination = [
   query('page')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1 })
     .withMessage('Page must be >= 1')
     .toInt(),
 
   query('limit')
-    .optional()
+    .optional({ checkFalsy: true })
     .isInt({ min: 1, max: 1000 })
     .withMessage('Limit must be 1-1000')
     .toInt(),

@@ -24,6 +24,7 @@ const emptyCourseForm = {
   L: 0, T: 0, P: 0, C: 0,
   // 'Other' free-text companions
   programOther: '', courseTypeOther: '', yearOther: '',
+  allowedSectionsText: '', // For comma-separated section strings
 };
 
 // ── CoursesPage ────────────────────────────────────────────────
@@ -106,7 +107,10 @@ const CoursesPage = ({ isAdmin = true }) => {
   };
 
   const openEditCourse = (c) => {
-    setCourseForm({ ...c });
+    setCourseForm({ 
+      ...c,
+      allowedSectionsText: Array.isArray(c.allowedSections) ? c.allowedSections.join(', ') : ''
+    });
     setEditCourse(c);
     setShowCourseModal(true);
   };
@@ -140,6 +144,9 @@ const CoursesPage = ({ isAdmin = true }) => {
       T: +f.T,
       P: +f.P,
       C: +f.C,
+      allowedSections: f.allowedSectionsText 
+        ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean) 
+        : [],
     };
     try {
       const res = await fetch(
@@ -428,6 +435,12 @@ const CoursesPage = ({ isAdmin = true }) => {
                   <label>Short Name *</label>
                   <input value={courseForm.shortName} placeholder="e.g. OS"
                     onChange={e => setCourseForm(p => ({ ...p, shortName: e.target.value }))} />
+                </div>
+                {/* Allowed Sections */}
+                <div className="cp-fg">
+                  <label>Allowed Sections</label>
+                  <input value={courseForm.allowedSectionsText || ''} placeholder="e.g. 1, 2, 3 (Leave empty for all)"
+                    onChange={e => setCourseForm(p => ({ ...p, allowedSectionsText: e.target.value }))} />
                 </div>
                 {/* Subject Name — full width */}
                 <div className="cp-fg cp-fg-full">

@@ -59,7 +59,7 @@ const YEAR_SECTIONS = {
   'I':      Array.from({ length: 19 }, (_, i) => String(i + 1)),
   'II':     Array.from({ length: 22 }, (_, i) => String(i + 1)),
   'III':    Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  'IV':     Array.from({ length:  9 }, (_, i) => String(i + 1)),
+  'IV':     [...Array.from({ length: 19 }, (_, i) => String(i + 1)), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
 };
 const YEARS = ['I', 'II', 'III', 'IV'];
 const YEAR_OPTIONS = [
@@ -1584,6 +1584,10 @@ const WorkloadPage = ({ submissions }) => {
                       section: e.target.value !== '__other__'
                         ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
                         : p.section,
+                      courseId: '',
+                      manualL: '',
+                      manualT: '',
+                      manualP: ''
                     }))}
                   >
                     {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

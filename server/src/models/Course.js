@@ -21,9 +21,17 @@ const courseSchema = new mongoose.Schema(
     C:             { type: Number, default: 0 },
     mainFacultyId: { type: String, default: '' },
     isDeleted:     { type: Boolean, default: false },
+    allowedSections: { type: [String], default: [] },
   },
   { timestamps: true, collection: 'courses' }
 );
+
+courseSchema.pre('save', function (next) {
+  if (this.subjectCode) {
+    this.subjectCode = this.subjectCode.toUpperCase().trim();
+  }
+  next();
+});
 
 // Identical courses are allowed, so no unique index on subjectCode/courseType is needed
 

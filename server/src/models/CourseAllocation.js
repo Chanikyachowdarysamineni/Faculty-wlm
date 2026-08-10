@@ -25,8 +25,8 @@ const facultySlotSchema = new mongoose.Schema(
 
 const courseAllocationSchema = new mongoose.Schema(
   {
-    course:         { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
-    sectionRef:     { type: mongoose.Schema.Types.ObjectId, ref: 'Section', required: true },
+    course:         { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+    sectionRef:     { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
     
     // Kept for backward compatibility during migration
     courseId:       { type: Number, required: true },
