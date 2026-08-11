@@ -10,12 +10,21 @@
 
 'use strict';
 
+// H-7 FIX: Support admin IDs from environment variable to avoid committing sensitive IDs to source code
+// In production, set ADMIN_EMPLOYEE_IDS=189,675 (comma-separated) in your .env file
+const ENV_ADMIN_IDS = (process.env.ADMIN_EMPLOYEE_IDS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 // List of employee IDs that should have admin access
-// These IDs are checked server-side during login
-const ADMIN_EMPLOYEE_IDS = [
-  '189',  // Admin user 1
-  '675',  // Admin user 2
-];
+// Falls back to hardcoded IDs only when env var is not set (local dev only)
+const ADMIN_EMPLOYEE_IDS = ENV_ADMIN_IDS.length > 0
+  ? ENV_ADMIN_IDS
+  : [
+    '189',  // Admin user 1 (fallback — set ADMIN_EMPLOYEE_IDS env var in production)
+    '675',  // Admin user 2
+  ];
 
 /**
  * Check if an employee ID should have admin access

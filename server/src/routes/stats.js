@@ -61,8 +61,11 @@ router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) =>
       deletedWorkloads = result.deletedCount;
     }
 
-    // 2. Ensure all Faculty have a User account
+    // 2. Ensure all Faculty have a User account (only non-deleted faculty)
     const missingUsers = await Faculty.aggregate([
+      {
+        $match: { isDeleted: { $ne: true } }   // H-3 FIX: skip soft-deleted faculty
+      },
       {
         $lookup: {
           from: 'users',
@@ -252,10 +255,10 @@ router.get('/', requireAuth, async (req, res, next) => {
       coursesByType,
       workloadByFaculty,
     ] = await Promise.all([
-      Faculty.countDocuments(),
-      Course.countDocuments(),
-      Submission.countDocuments(),
-      Workload.countDocuments(),
+      Faculty.countDocuments({ isDeleted: { $ne: true } }),
+      Course.countDocuments({ isDeleted: { $ne: true } }),
+      Submission.countDocuments({ isDeleted: { $ne: true } }),
+      Workload.countDocuments({ isDeleted: { $ne: true } }),
       Course.aggregate([{ $group: { _id: null, total: { $sum: '$C' } } }]),
       Faculty.aggregate([{ $group: { _id: '$designation', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
       Course.aggregate([{ $group: { _id: '$program', count: { $sum: 1 } } }]),

@@ -21,6 +21,7 @@ const { logAuditEvent } = require('../utils/audit');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const logger           = require('../utils/logger');
+const { recalculateCapacity } = require('../utils/capacityUtils');
 
 const router = express.Router();
 
@@ -458,6 +459,20 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
       },
       { upsert: true, new: true, session }
     ).lean();
+
+    // Trigger capacity recalculation for all affected faculty (both existing & new)
+    const affectedEmpIds = new Set([
+      ...enrichedLSlots.map(s => s?.empId),
+      ...enrichedTutorials.map(s => s?.empId),
+      ...enrichedPracticals.map(s => s?.empId),
+      ...(existing?.lectureSlots || []).map(s => s?.empId),
+      ...(existing?.tutorialSlots || []).map(s => s?.empId),
+      ...(existing?.practicalSlots || []).map(s => s?.empId),
+    ].filter(Boolean));
+
+    for (const empId of affectedEmpIds) {
+      await recalculateCapacity(empId, { session, updatedBy: req.user?.id });
+    }
 
     await session.commitTransaction();
     session.endSession();

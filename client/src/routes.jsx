@@ -129,7 +129,8 @@ export const protectedRoutes = [
   },
   {
     path: '/workload',
-    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading workload..." />}><WorkloadPage /></Suspense></ProtectedRoute>,
+    // H-4 FIX: Workload management is admin-only; faculty view their workload via /my-workload
+    element: <ProtectedRoute roles={['admin']}><Suspense fallback={<LoadingIndicator message="Loading workload..." />}><WorkloadPage /></Suspense></ProtectedRoute>,
     title: 'Workload Management'
   },
   {
@@ -144,7 +145,8 @@ export const protectedRoutes = [
   },
   {
     path: '/sections',
-    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading sections..." />}><SectionManagementPage /></Suspense></ProtectedRoute>,
+    // H-4 FIX: Section management is admin-only
+    element: <ProtectedRoute roles={['admin']}><Suspense fallback={<LoadingIndicator message="Loading sections..." />}><SectionManagementPage /></Suspense></ProtectedRoute>,
     title: 'Section Management'
   },
   {
@@ -164,7 +166,8 @@ export const protectedRoutes = [
   },
   {
     path: '/audit-logs',
-    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading logs..." />}><AuditLogPage /></Suspense></ProtectedRoute>,
+    // H-4 FIX: Audit logs are admin-only
+    element: <ProtectedRoute roles={['admin']}><Suspense fallback={<LoadingIndicator message="Loading logs..." />}><AuditLogPage /></Suspense></ProtectedRoute>,
     title: 'Audit Logs'
   },
 ];

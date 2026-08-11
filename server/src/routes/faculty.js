@@ -209,7 +209,13 @@ router.post(
         return sendValidationError(res, errors.array());
       }
 
-      const { empId, name, department = 'CSE', designation, mobile = '', email = '', capacity } = req.body;
+      const {
+        empId, name, department = 'CSE', designation, mobile = '', email = '', capacity,
+        qualification = '', experience = 0, role = 'faculty', username = '',
+        workingHours = '', joiningDate = null, address = '', gender = '',
+        dob = null, profilePicture = '', researchArea = '', specialization = '',
+        status = 'Available',
+      } = req.body;
 
       const existing = await Faculty.findOne({ empId: empId.trim() }).session(session);
       if (existing) {
@@ -228,7 +234,7 @@ router.post(
         name: name.trim(),
         department: String(department || 'CSE').trim() || 'CSE',
         designation: designation.trim(),
-        capacity: req.body.capacity !== undefined ? Number(req.body.capacity) : 18,
+        capacity: capacity !== undefined ? Number(capacity) : 18,
         mobile,
         email,
         qualification: String(qualification || '').trim(),
@@ -306,7 +312,12 @@ router.put(
         return sendValidationError(res, errors.array());
       }
 
-      const { name, department, designation, mobile, email, slNo, capacity } = req.body;
+      const {
+        name, department, designation, mobile, email, slNo, capacity,
+        status, role, username, qualification, experience,
+        workingHours, joiningDate, address, gender, dob,
+        profilePicture, researchArea, specialization,
+      } = req.body;
       const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
       
@@ -374,13 +385,27 @@ router.put(
         }
       }
 
+      // M-5: Propagate name/designation changes to existing Workload records so they stay fresh
+      const workloadUpdates = {};
+      if (allowedUpdates.name) workloadUpdates.empName = allowedUpdates.name;
+      if (allowedUpdates.designation) workloadUpdates.designation = allowedUpdates.designation;
+      if (Object.keys(workloadUpdates).length > 0) {
+        await Workload.updateMany({ empId }, { $set: workloadUpdates }, { session });
+        logger.info('Propagated faculty name/designation to workload records', { empId, workloadUpdates });
+      }
+
       await logAuditEvent({ req, action: 'faculty.update', entity: 'faculty', entityId: empId, metadata: { fields: Object.keys(allowedUpdates), isSelfEdit: isSelf } });
       
       await session.commitTransaction();
       session.endSession();
+
+      // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
+      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1);
+      const freshDocs = await Faculty.aggregate(freshPipeline);
+      const freshDoc = freshDocs[0] || doc;
       
       logger.info('Faculty updated successfully', { empId, fields: Object.keys(allowedUpdates), userId: req.user.id, isSelfEdit: isSelf });
-      sendSuccess(res, toClient(doc), 200);
+      sendSuccess(res, toClient(freshDoc), 200);
     } catch (err) { 
       await session.abortTransaction();
       session.endSession();

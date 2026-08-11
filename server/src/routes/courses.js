@@ -90,6 +90,9 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const filter = {};
+    if (req.query.includeDeleted !== 'true') {
+      filter.isDeleted = { $ne: true };
+    }
     if (req.query.program) filter.program = req.query.program;
     if (req.query.courseType) filter.courseType = req.query.courseType;
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering

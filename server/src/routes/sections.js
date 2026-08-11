@@ -57,7 +57,7 @@ router.post('/', requireAuth, requireAdmin, sectionValidation, async (req, res, 
     
     await newSection.save();
     
-    logAuditEvent(req.user.id, 'CREATE_SECTION', `Created section ${newSection.name} for year ${newSection.year}`);
+    await logAuditEvent({ req, action: 'section.create', entity: 'section', entityId: String(newSection._id), metadata: { name: newSection.name, year: newSection.year } });
     sendCreated(res, newSection);
   } catch (err) {
     next(err);
@@ -70,15 +70,17 @@ router.put('/:id', requireAuth, requireAdmin, sectionValidation, async (req, res
   if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
   try {
+    // H-1: Whitelist allowed fields instead of using req.body directly (prevents mass assignment)
+    const { name, year, department, status } = req.body;
     const updated = await Section.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: { name, year, department, status } },
       { new: true, runValidators: true }
     );
     
     if (!updated) return res.status(404).json({ success: false, message: 'Section not found' });
     
-    logAuditEvent(req.user.id, 'UPDATE_SECTION', `Updated section ${updated.name}`);
+    await logAuditEvent({ req, action: 'section.update', entity: 'section', entityId: String(req.params.id), metadata: { name: updated.name, year: updated.year } });
     sendSuccess(res, updated);
   } catch (err) {
     next(err);
@@ -96,7 +98,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     
     if (!section) return res.status(404).json({ success: false, message: 'Section not found' });
     
-    logAuditEvent(req.user.id, 'DELETE_SECTION', `Deleted section ${section.name}`);
+    await logAuditEvent({ req, action: 'section.delete', entity: 'section', entityId: String(req.params.id), metadata: { name: section.name, year: section.year } });
     sendSuccess(res, { message: 'Section deleted successfully' });
   } catch (err) {
     next(err);

@@ -10,6 +10,9 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+// H-6 FIX: Import logger BEFORE env var validation so it is available if we need to log the error
+const logger = require('./utils/logger');
+
 // ── Validate Required Environment Variables ────────────────
 const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET', 'CLIENT_ORIGIN'];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -35,7 +38,6 @@ const helmet       = require('helmet');
 const compression  = require('compression');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
-const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeRedis, apiLimiter, strictLimiter } = require('./middleware/rateLimiters');
 
@@ -67,11 +69,16 @@ const Counter = require('./models/Counter');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const { syncAuthAndRBAC } = require('./utils/authSync');
 
+// L-2 FIX: Align Year IV sections to include 1-19 AND 51-59 (for Computing Ethics 22CS310)
+// This must match the definition in workloads.js and allocations.js
 const DEFAULT_SECTIONS = {
-  I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
+  I:   Array.from({ length: 19 }, (_, i) => String(i + 1)),
+  II:  Array.from({ length: 22 }, (_, i) => String(i + 1)),
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
+  IV:  [
+    ...Array.from({ length: 19 }, (_, i) => String(i + 1)),
+    ...Array.from({ length: 9 }, (_, i) => String(51 + i)),
+  ],
 };
 
 const normalizeCourseTypeKey = (courseType = '') => {
@@ -269,7 +276,7 @@ app.get('/deva/health', (_req, res) => {
 });
 
 // ── Middleware ───────────────────────────────────────────────
-app.use(helmet());
+// L-1 FIX: Removed duplicate app.use(helmet()) which was overriding the configured helmet above
 app.use(compression());
 
 // ── API routes ─────────────────────────────────────────────

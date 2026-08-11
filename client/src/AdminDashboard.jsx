@@ -6,11 +6,11 @@
  * Fully responsive with mobile sidebar toggle
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import PageHeader from './components/PageHeader';
-import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
+import { authJsonHeaders } from './utils/apiFetchAll';
 import API from './config';
 import './Dashboard.css';
 
@@ -146,8 +146,7 @@ const AdminDashboard = () => {
  * Admin Overview Card - Shows key admin information and quick actions
  */
 const AdminOverview = ({ user }) => {
-  const [faculties, setFaculties] = useState([]);
-  const [workloads, setWorkloads] = useState([]);
+  const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [] });
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -161,67 +160,26 @@ const AdminOverview = ({ user }) => {
       setLoading(true);
       try {
         const headers = authJsonHeaders();
-        const [facRes, wlRes] = await Promise.all([
-          fetchAllPages('/deva/faculty', {}, { headers }),
-          fetchAllPages('/deva/workloads', {}, { headers })
-        ]);
-        
-        if (facRes.success) setFaculties(facRes.data || []);
-        if (wlRes.success) setWorkloads(wlRes.data || []);
+        // M-4 FIX: Use server-side analytics endpoint instead of fetching all data client-side
+        const params = new URLSearchParams();
+        if (yearFilter !== 'All') params.set('year', yearFilter);
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?${params}`, { headers });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setStats({
+            overloaded: json.data.overloaded || [],
+            pending:    json.data.pending    || [],
+            perfect:    json.data.perfect    || [],
+          });
+        }
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
+        console.error('Error fetching dashboard analytics:', err);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, []);
-
-  // Calculate stats based on filters
-  const stats = useMemo(() => {
-    // 1. Filter workloads by year and section
-    const filteredWorkloads = workloads.filter(w => {
-      if (yearFilter !== 'All' && String(w.year) !== yearFilter) return false;
-      return true;
-    });
-
-    // 2. Aggregate assigned hours by empId
-    const assignedMap = {};
-    filteredWorkloads.forEach(w => {
-      if (!assignedMap[w.empId]) assignedMap[w.empId] = 0;
-      assignedMap[w.empId] += Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0);
-    });
-
-    // 3. Classify faculties
-    const overloaded = [];
-    const pending = [];
-    const perfect = [];
-
-    faculties.forEach(f => {
-      const capacity = Number(f.capacity);
-      const assigned = assignedMap[f.empId] || 0;
-      const remaining = capacity - assigned;
-
-      const facultyData = {
-        empId: f.empId,
-        name: f.name,
-        designation: f.designation,
-        capacity,
-        assigned,
-        remaining
-      };
-
-      if (assigned > capacity) {
-        overloaded.push(facultyData);
-      } else if (assigned < capacity) {
-        pending.push(facultyData);
-      } else if (capacity > 0 && assigned === capacity) {
-        perfect.push(facultyData);
-      }
-    });
-
-    return { overloaded, pending, perfect };
-  }, [faculties, workloads, yearFilter]);
+  }, [yearFilter]);
 
   const handleCardClick = (cardType) => {
     setExpandedCard(expandedCard === cardType ? null : cardType);
@@ -337,9 +295,9 @@ const AdminOverview = ({ user }) => {
                       <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{f.name}</td>
                       <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{f.designation}</td>
                       <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{f.capacity}h</td>
-                      <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{f.assigned}h</td>
-                      <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: f.remaining < 0 ? '#dc2626' : f.remaining > 0 ? '#ca8a04' : '#16a34a' }}>
-                        {f.remaining > 0 ? `+${f.remaining}h` : `${f.remaining}h`}
+                      <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{f.assignedHours}h</td>
+                      <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: f.pendingLoad < 0 ? '#dc2626' : f.pendingLoad > 0 ? '#ca8a04' : '#16a34a' }}>
+                        {f.pendingLoad > 0 ? `+${f.pendingLoad}h` : `${f.pendingLoad}h`}
                       </td>
                     </tr>
                   ))}

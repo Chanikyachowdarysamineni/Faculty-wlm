@@ -35,6 +35,9 @@ const router = express.Router();
 
 const EXACT_DUPLICATE_MSG = 'Workload already assigned. This course is already allocated for the selected section and academic context.';
 
+// C-4 FIX: Define FACULTY_ROLES constant (was referenced but never declared, causing ReferenceError)
+const FACULTY_ROLES = ['Main Faculty', 'Supporting Faculty', 'TA'];
+
 const MAIN_FACULTY_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
 const ROLE_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
 const TA_SECTION_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
@@ -385,7 +388,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 // GET /api/workloads/export/csv  (admin)
 router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const docs = await Workload.find().sort({ empId: 1, createdAt: 1 }).lean();
+    const docs = await Workload.find({ isDeleted: { $ne: true } }).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;

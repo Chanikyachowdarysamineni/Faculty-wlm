@@ -1,4 +1,4 @@
-﻿/**
+/**
  * routes/submissions.js
  *
  * GET    /api/submissions              — list all (admin)
@@ -189,6 +189,13 @@ router.post(
       }
 
       const { empId, prefs } = req.body;
+
+      const isSelf = String(req.user.id) === String(empId || '').trim();
+      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+      if (!isSelf && !isAdmin) {
+        logger.warn('Unauthorized attempt to submit preferences for another faculty', { empId, userId: req.user.id });
+        return sendForbidden(res, 'You can only submit preferences for your own account.');
+      }
 
       if (new Set(prefs).size !== prefs.length) {
         logger.warn('Duplicate preferences in submission', { empId, userId: req.user.id });
