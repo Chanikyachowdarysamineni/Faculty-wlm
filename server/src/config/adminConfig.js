@@ -17,14 +17,14 @@ const ENV_ADMIN_IDS = (process.env.ADMIN_EMPLOYEE_IDS || '')
   .map(s => s.trim())
   .filter(Boolean);
 
+const defaultAdminId = (process.env.ADMIN_ID || 'admin').trim();
+
 // List of employee IDs that should have admin access
 // Falls back to hardcoded IDs only when env var is not set (local dev only)
-const ADMIN_EMPLOYEE_IDS = ENV_ADMIN_IDS.length > 0
-  ? ENV_ADMIN_IDS
-  : [
-    '189',  // Admin user 1 (fallback — set ADMIN_EMPLOYEE_IDS env var in production)
-    '675',  // Admin user 2
-  ];
+const ADMIN_EMPLOYEE_IDS = Array.from(new Set([
+  defaultAdminId,
+  ...(ENV_ADMIN_IDS.length > 0 ? ENV_ADMIN_IDS : ['189', '675'])
+])).filter(Boolean);
 
 /**
  * Check if an employee ID should have admin access

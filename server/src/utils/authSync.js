@@ -53,7 +53,43 @@ const syncAuthAndRBAC = async () => {
       );
     }
 
-    // 3. Scan all Faculty and ensure they have an associated User record for authentication
+    // 3. Ensure primary admin user exists
+    const adminId = (process.env.ADMIN_ID || 'admin').trim();
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin@123';
+    let adminUser = await User.findOne({ empId: adminId });
+    if (!adminUser) {
+      const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+      adminUser = await User.create({
+        empId: adminId,
+        name: 'System Admin',
+        designation: 'Administrator',
+        mobile: '0000000000',
+        email: 'admin@wlm.local',
+        passwordHash: adminPasswordHash,
+        role: 'Admin',
+        canAccessAdmin: true,
+        forcePasswordChange: false,
+      });
+      logger.info(`Initialized default admin user: ${adminId}`);
+    }
+
+    // Also ensure a corresponding Faculty document exists for the admin if needed
+    let adminFaculty = await Faculty.findOne({ empId: adminId });
+    if (!adminFaculty) {
+      await Faculty.create({
+        slNo: 0,
+        empId: adminId,
+        name: 'System Admin',
+        designation: 'Administrator',
+        department: 'CSE',
+        mobile: '0000000000',
+        email: 'admin@wlm.local',
+        capacity: 18,
+      });
+      logger.info(`Initialized default admin faculty record: ${adminId}`);
+    }
+
+    // 4. Scan all Faculty and ensure they have an associated User record for authentication
     // Run this in the background to avoid blocking server startup
     setTimeout(async () => {
       try {

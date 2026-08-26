@@ -32,18 +32,16 @@ const logger = winston.createLogger({
   ],
 });
 
-// If we're not in production then also log to the `console`
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(
-          ({ level, message, timestamp, stack }) => `${timestamp} ${level}: ${message} ${stack ? '\\n' + stack : ''}`
-        )
-      ),
-    })
-  );
-}
+// Always add Console transport so container / stdout log streams capture application logs
+logger.add(
+  new winston.transports.Console({
+    format: winston.format.combine(
+      process.env.NODE_ENV !== 'production' ? winston.format.colorize() : winston.format.uncolorize(),
+      winston.format.printf(
+        ({ level, message, timestamp, stack }) => `${timestamp} ${level}: ${message}${stack ? '\n' + stack : ''}`
+      )
+    ),
+  })
+);
 
 module.exports = logger;

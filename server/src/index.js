@@ -233,6 +233,17 @@ app.use(xss());
 // Use 'combined' format in production (structured logs), 'dev' in development
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
+// ── Path Rewrite Middleware for /csefaculty/deva ───────────
+// Translates /csefaculty/deva/* requests to /deva/* before rate limiters and route handlers
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/csefaculty/deva/')) {
+    req.url = req.url.replace('/csefaculty/deva/', '/deva/');
+  } else if (req.url === '/csefaculty/deva') {
+    req.url = '/deva';
+  }
+  next();
+});
+
 // ── Rate Limiting ──────────────────────────────────────────
 // Initialize Redis for distributed rate limiting (optional, falls back to memory)
 initializeRedis().catch((err) => {
