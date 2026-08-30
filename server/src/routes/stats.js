@@ -92,7 +92,7 @@ router.post('/auto-repair', requireAuth, requireAdmin, async (req, res, next) =>
         mobile: f.mobile || '',
         email: f.email || '',
         passwordHash,
-        role: 'faculty', // Assuming role is lowercase 'faculty' based on auth defaults
+        role: 'faculty',  // M-6: Lowercase 'faculty' for consistency
         canAccessAdmin: false,
         forcePasswordChange: true
       });
@@ -271,7 +271,16 @@ router.get('/', requireAuth, async (req, res, next) => {
             designation:      { $first: '$designation' },
             coursesAssigned:  { $sum: 1 },
             totalCredits:     { $sum: '$C' },
-            totalHours:       { $sum: { $add: ['$manualL', '$manualT', '$manualP'] } },
+            // H-1: Use $ifNull to avoid null sums when fields are missing
+            totalHours: {
+              $sum: {
+                $add: [
+                  { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] },
+                  { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+                  { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] },
+                ]
+              }
+            },
           },
         },
         { $sort: { totalHours: -1 } },

@@ -83,16 +83,28 @@ router.post(
         return sendError(res, 'Employee ID not found.', 401);
       }
 
+      // H-7: Check if account is locked before validating password
+      if (user.lockUntil && user.lockUntil > new Date()) {
+        const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+        logger.warn('Login attempt on locked account', { empId: user.empId, lockUntil: user.lockUntil });
+        await logAuditEvent({ req, action: 'auth.login.locked', entity: 'user', entityId: user.empId, metadata: { minutesLeft } });
+        return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
+      }
+
       const ok = await bcrypt.compare(password, user.passwordHash);
       if (!ok) {
         const failedAttempts = Number(user.failedLoginAttempts || 0) + 1;
-        await User.updateOne(
-          { _id: user._id },
-          {
-            $inc: { failedLoginAttempts: 1 },
-          }
-        );
-        logger.info('Failed login attempt', { empId: user.empId, attempt: failedAttempts, locked: false });
+        const MAX_FAILED = 5;
+        const LOCK_MINUTES = 15;
+        const lockUpdate = { $inc: { failedLoginAttempts: 1 } };
+
+        // H-7: Lock account after MAX_FAILED consecutive failures
+        if (failedAttempts >= MAX_FAILED) {
+          lockUpdate.$set = { lockUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000) };
+        }
+
+        await User.updateOne({ _id: user._id }, lockUpdate);
+        logger.info('Failed login attempt', { empId: user.empId, attempt: failedAttempts, locked: failedAttempts >= MAX_FAILED });
         await logAuditEvent({
           req,
           action: 'auth.login.failed',
@@ -101,8 +113,12 @@ router.post(
           metadata: {
             reason: 'invalid-password',
             failedAttempts,
+            locked: failedAttempts >= MAX_FAILED,
           },
         });
+        if (failedAttempts >= MAX_FAILED) {
+          return sendError(res, `Account locked due to too many failed attempts. Try again after ${LOCK_MINUTES} minutes.`, 401);
+        }
         return sendError(res, 'Invalid password.', 401);
       }
 
@@ -122,6 +138,7 @@ router.post(
 
       const payload = {
         id:             user.empId,
+        empId:          user.empId, // Dual compatibility for routes expecting req.user.empId
         role:           userRole,
         name:           user.name,
         canAccessAdmin: user.canAccessAdmin || isAdminUser,
@@ -281,10 +298,12 @@ router.put(
       );
       
       // Update token so the client knows forcePasswordChange is false now
-      const userRole = user.role;
+      // L-2: Use admin role for admin employee IDs (same as login flow)
       const isAdminUser = isAdminEmployeeId(user.empId);
+      const userRole = isAdminUser ? 'admin' : user.role;
       const payload = {
         id:             user.empId,
+        empId:          user.empId, // Dual compatibility
         role:           userRole,
         name:           user.name,
         canAccessAdmin: user.canAccessAdmin || isAdminUser,

@@ -51,8 +51,10 @@ const toClient = (doc) => ({
 });
 
 const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null) => {
+  // H-3: Always exclude soft-deleted faculty unless the caller explicitly opts in
+  const baseFilter = { isDeleted: { $ne: true }, ...matchFilter };
   const pipeline = [
-    { $match: matchFilter }
+    { $match: baseFilter }
   ];
 
   if (sort) pipeline.push({ $sort: sort });
@@ -152,8 +154,10 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
         { department: { $regex: q, $options: 'i' } },
       ];
     }
+    // H-3: Exclude soft-deleted faculty from count (pipeline already excludes them)
+    const countFilter = { isDeleted: { $ne: true }, ...filter };
     const [total, docs] = await Promise.all([
-      Faculty.countDocuments(filter),
+      Faculty.countDocuments(countFilter),
       Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit))
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
@@ -264,7 +268,7 @@ router.post(
         mobile: mobile.trim(),
         email: email.trim(),
         passwordHash,
-        role: 'Faculty',
+        role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
         canAccessAdmin: false,
         forcePasswordChange: true
       }], { session });
@@ -567,7 +571,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
         mobile: String(mobile).trim(),
         email: String(email).trim(),
         passwordHash,
-        role: 'Faculty',
+        role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
         canAccessAdmin: false,
         forcePasswordChange: true
       }], { session });

@@ -128,8 +128,13 @@ const sendForbidden = (res, message = 'Access denied') => {
  * @example
  * sendNotFound(res, 'Faculty');
  */
-const sendNotFound = (res, resource = 'Resource') => {
-  sendError(res, `${resource} not found`, 404);
+const sendNotFound = (res, resource = 'Resource not found') => {
+  // If caller passed a full message (e.g. 'Workload entry not found.'), use it directly.
+  // Otherwise treat it as a resource name and append "not found".
+  const message = resource.toLowerCase().includes('not found')
+    ? resource
+    : `${resource} not found`;
+  sendError(res, message, 404);
 };
 
 /**

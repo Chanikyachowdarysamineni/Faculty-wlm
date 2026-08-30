@@ -71,28 +71,80 @@ const validateWorkloadCreate = [
 
   body('manualL')
     .optional({ checkFalsy: true })
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Lecture hours (L) must be 0-10'),
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Lecture hours (L) must be 0-20'),
 
   body('manualT')
     .optional({ checkFalsy: true })
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Tutorial hours (T) must be 0-10'),
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Tutorial hours (T) must be 0-20'),
 
   body('manualP')
     .optional({ checkFalsy: true })
-    .isInt({ min: 0, max: 10 })
-    .withMessage('Practical hours (P) must be 0-10'),
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Practical hours (P) must be 0-20'),
 
   handleValidationErrors,
 ];
 
+// C-6/M-1: validateWorkloadUpdate uses separate optional validators
+// so partial updates (only some fields sent) work correctly,
+// and handleValidationErrors is called exactly once.
 const validateWorkloadUpdate = [
   param('id')
     .isMongoId()
     .withMessage('Invalid workload ID'),
 
-  ...validateWorkloadCreate,
+  // All body fields are optional for updates (partial update support)
+  body('empId')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ min: 2, max: 30 })
+    .withMessage('Employee ID must be 2-30 characters'),
+
+  body('courseId')
+    .optional({ checkFalsy: true })
+    .custom((value) => {
+      const num = Number(value);
+      if (num === 0) return true;
+      if (!Number.isInteger(num) || num < 1) {
+        throw new Error('Valid course ID is required (must be 0 or integer >= 1)');
+      }
+      return true;
+    }),
+
+  body('year')
+    .optional({ checkFalsy: true })
+    .trim()
+    .custom((value) => {
+      const trimmed = String(value || '').trim().toUpperCase();
+      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4', 'M.TECH', 'OTHER', 'ALL'];
+      if (!validYears.includes(trimmed)) {
+        throw new Error('Invalid year. Must be I/II/III/IV/M.Tech or Other');
+      }
+      return true;
+    }),
+
+  body('section')
+    .optional({ checkFalsy: true })
+    .trim(),
+
+  body('manualL')
+    .optional({ checkFalsy: true })
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Lecture hours (L) must be 0-20'),
+
+  body('manualT')
+    .optional({ checkFalsy: true })
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Tutorial hours (T) must be 0-20'),
+
+  body('manualP')
+    .optional({ checkFalsy: true })
+    .isInt({ min: 0, max: 20 })
+    .withMessage('Practical hours (P) must be 0-20'),
+
+  handleValidationErrors,
 ];
 
 const validateWorkloadDelete = [

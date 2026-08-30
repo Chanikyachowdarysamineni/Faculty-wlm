@@ -18,7 +18,12 @@ const Faculty = require('../models/Faculty');
  */
 const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null) => {
   try {
-    const query = { empId: String(empId || '').trim() };
+    // C-3: Exclude cancelled/unallocated and soft-deleted workloads from capacity calculations
+    const query = {
+      empId: String(empId || '').trim(),
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+      isDeleted: { $ne: true },
+    };
     const dbQuery = Workload.find(query).lean();
     if (session) dbQuery.session(session);
     const workloads = await dbQuery.exec();
@@ -167,8 +172,13 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
  */
 const getFacultyWorkloadReport = async (year = null) => {
   try {
-    const allFaculty = await Faculty.find({}).lean();
-    const allWorkloads = await Workload.find({}).lean();
+    // H-8: Exclude soft-deleted faculty from reports
+    const allFaculty = await Faculty.find({ isDeleted: { $ne: true } }).lean();
+    // C-3: Exclude cancelled/unallocated and soft-deleted workloads
+    const allWorkloads = await Workload.find({
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+      isDeleted: { $ne: true },
+    }).lean();
     
     // Group workloads by empId
     const workloadsByEmp = {};

@@ -465,7 +465,7 @@
 .ap-cell-empty { font-size: 12px; color: #cbd5e1; }
 .ap-cell-dash  { color: #e2e8f0; }
 
-/* Read-only */
+/* Read-only & Locked cells */
 .ap-cell-readonly {
   display: flex;
   align-items: center;
@@ -475,6 +475,12 @@
   font-weight: 600;
   color: #334155;
   min-height: 30px;
+  border-radius: 5px;
+}
+.ap-cell-locked {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  color: #1e293b;
 }
 
 /* Auto badge */
@@ -488,6 +494,13 @@
   padding: 0px 4px;
   border-radius: 4px;
   margin-left: 2px;
+}
+
+.ap-lock-icon {
+  font-size: 11px;
+  margin-left: 3px;
+  cursor: help;
+  opacity: 0.75;
 }
 
 /* ── Dropdown ─────────────────────────────────────────────────────────────── */

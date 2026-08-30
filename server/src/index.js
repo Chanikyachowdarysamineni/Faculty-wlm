@@ -178,9 +178,11 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', process.env.NODE_ENV === 'production' ? 'https:' : 'http:'],
-      connectSrc: ["'self'", process.env.NODE_ENV === 'production' ? 'https:' : 'http:'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      styleSrcElem: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:', process.env.NODE_ENV === 'production' ? 'https:' : 'http:'],
+      connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
     },
   },
   hsts: process.env.NODE_ENV === 'production' ? {

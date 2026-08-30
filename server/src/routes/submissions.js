@@ -119,6 +119,14 @@ router.put(
   ],
   async (req, res, next) => {
     try {
+      // M-3: Check that form is open (in addition to edit being enabled)
+      const formSetting = await Setting.findOne({ key: 'form_enabled' }).lean();
+      const isFormOpen = formSetting ? formSetting.value === 'true' : true;
+      if (!isFormOpen && req.user.role !== 'admin') {
+        logger.warn('Submission update blocked: form closed', { empId: req.params.empId, userId: req.user.id });
+        return sendForbidden(res, 'The submission form is currently closed.');
+      }
+
       // Check that editing is allowed
       const editSetting = await Setting.findOne({ key: 'edit_enabled' }).lean();
       const isEditEnabled = editSetting ? editSetting.value === 'true' : true;

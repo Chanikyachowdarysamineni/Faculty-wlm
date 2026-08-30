@@ -65,16 +65,17 @@ router.put(
 
       const oldCapacity = faculty.capacity;
 
+      const adminEmpId = req.user.id || req.user.empId || 'system';
       faculty.capacity = capacity;
-      faculty.updatedBy = req.user.empId;
+      faculty.updatedBy = adminEmpId;
       await faculty.save({ session });
 
       // Recalculate
-      const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: req.user.empId });
+      const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
       await logCapacityChange({
         empId,
-        adminId: req.user.empId,
+        adminId: adminEmpId,
         oldCapacity,
         newCapacity: capacity,
         action: 'UPDATE_CAPACITY',
@@ -108,15 +109,16 @@ router.post('/:empId/reset-capacity', requireAuth, requireAdmin, async (req, res
 
     const oldCapacity = faculty.capacity;
 
+    const adminEmpId = req.user.id || req.user.empId || 'system';
     faculty.capacity = 18; // default
-    faculty.updatedBy = req.user.empId;
+    faculty.updatedBy = adminEmpId;
     await faculty.save({ session });
 
-    const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: req.user.empId });
+    const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
     await logCapacityChange({
       empId,
-      adminId: req.user.empId,
+      adminId: adminEmpId,
       oldCapacity,
       newCapacity: 18,
       action: 'RESET_CAPACITY',
@@ -165,15 +167,16 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
 
       const oldCapacity = faculty.capacity;
 
+      const adminEmpId = req.user.id || req.user.empId || 'system';
       faculty.capacity = Number(capacity);
-      faculty.updatedBy = req.user.empId;
+      faculty.updatedBy = adminEmpId;
       await faculty.save({ session });
 
-      await recalculateCapacity(empId, { session, updatedBy: req.user.empId });
+      await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
       await logCapacityChange({
         empId,
-        adminId: req.user.empId,
+        adminId: adminEmpId,
         oldCapacity,
         newCapacity: faculty.capacity,
         action: 'BULK_UPDATE_CAPACITY',

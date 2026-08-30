@@ -175,14 +175,18 @@ const normalizeSlots = (slots = []) =>
       : emptyFacultySlot();
   });
 
-const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty }) => {
+const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   if (!numericCourseId || !year || !section || !faculty?.empId) return;
 
-  const course = await Course.findOne({ courseId: numericCourseId }).lean();
+  const courseQuery = Course.findOne({ courseId: numericCourseId }).lean();
+  if (session) courseQuery.session(session);
+  const course = await courseQuery.exec();
   if (!course) return;
 
-  const existing = await CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  if (session) existingQuery.session(session);
+  const existing = await existingQuery.exec();
 
   const lecturePrimary = toPrimarySlot(faculty, course.L);
   const tutorialPrimary = toPrimarySlot(faculty, course.T);
@@ -225,15 +229,17 @@ const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty })
         practicalSlots,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true, ...(session && { session }) }
   );
 };
 
-const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }) => {
+const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   if (!numericCourseId || !year || !section || !empId) return;
 
-  const existing = await CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  if (session) existingQuery.session(session);
+  const existing = await existingQuery.exec();
   if (!existing) return;
 
   const shouldClearPrimary = (slots = []) => (
@@ -259,21 +265,25 @@ const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }
         practicalSlots,
       },
     },
-    { new: true }
+    { new: true, ...(session && { session }) }
   );
 };
 
 // Sync a TA workload assignment to the allocation at the specified row index (1-3)
-const syncTAToAllocation = async ({ courseId, year, section, faculty, allocationRow }) => {
+const syncTAToAllocation = async ({ courseId, year, section, faculty, allocationRow }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   const rowIdx = Number(allocationRow || 0);
   if (!numericCourseId || !year || !section || !faculty?.empId || rowIdx < 1 || rowIdx > 3) return;
 
-  const course = await Course.findOne({ courseId: numericCourseId }).lean();
+  const courseQuery = Course.findOne({ courseId: numericCourseId }).lean();
+  if (session) courseQuery.session(session);
+  const course = await courseQuery.exec();
   if (!course) return;
 
   const taSlot = toPrimarySlot(faculty, 0);
-  const existing = await CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  if (session) existingQuery.session(session);
+  const existing = await existingQuery.exec();
 
   const tutorialSlots = normalizeSlots(existing?.tutorialSlots);
   const practicalSlots = normalizeSlots(existing?.practicalSlots);
@@ -299,17 +309,19 @@ const syncTAToAllocation = async ({ courseId, year, section, faculty, allocation
         practicalSlots,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true, ...(session && { session }) }
   );
 };
 
 // Clear a TA from the allocation at the specified row index
-const clearTAFromAllocation = async ({ courseId, year, section, allocationRow }) => {
+const clearTAFromAllocation = async ({ courseId, year, section, allocationRow }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   const rowIdx = Number(allocationRow || 0);
   if (!numericCourseId || !year || !section || rowIdx < 1 || rowIdx > 3) return;
 
-  const existing = await CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  if (session) existingQuery.session(session);
+  const existing = await existingQuery.exec();
   if (!existing) return;
 
   const tutorialSlots = normalizeSlots(existing.tutorialSlots);
@@ -320,7 +332,7 @@ const clearTAFromAllocation = async ({ courseId, year, section, allocationRow })
   await CourseAllocation.findOneAndUpdate(
     { courseId: numericCourseId, year, section },
     { $set: { tutorialSlots, practicalSlots } },
-    { new: true }
+    { new: true, ...(session && { session }) }
   );
 };
 
@@ -334,7 +346,8 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     res.set('Expires', '0');
     
     const { page, limit, skip } = parsePagination(req.query);
-    const filter = {};
+    // L-1/M-4: Always exclude soft-deleted workloads
+    const filter = { isDeleted: { $ne: true } };
     const isDualAccessAdmin = req.user?.canAccessAdmin === true;
     const isFacultyOnly = req.user.role === 'faculty' && !isDualAccessAdmin;
     const effectiveEmp = isFacultyOnly ? req.user.id : req.query.empId;
@@ -348,7 +361,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
       filter.isVisible = true;
     }
     if (req.query.search) {
-      const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
       filter.$or = [
         { empId:       { $regex: q, $options: 'i' } },
         { empName:     { $regex: q, $options: 'i' } },
@@ -362,8 +375,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     const [total, docs] = await Promise.all([
       Workload.countDocuments(filter),
       Workload.find(filter)
-        .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow createdAt')
-        .populate('faculty course sectionRef')
+        .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow allocationStatus createdAt')
         .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -388,7 +400,11 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 // GET /api/workloads/export/csv  (admin)
 router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const docs = await Workload.find({ isDeleted: { $ne: true } }).sort({ empId: 1, createdAt: 1 }).lean();
+    // L-8/M-4: Exclude soft-deleted and cancelled/unallocated workloads from CSV export
+    const docs = await Workload.find({
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+    }).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -443,7 +459,7 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
 });
 
 // GET /api/workloads/main-faculty?year=III
-// Returns mapping: { '<courseId>__<section>': { empId, empName, designation, ... } }
+// Returns mapping: { '<courseId>__<section>': { empId, empName, designation, courseId, section, year, manualL, manualT, manualP, fixedL, fixedT, fixedP, C, subjectCode, subjectName } }
 router.get('/main-faculty', requireAuth, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
@@ -458,19 +474,45 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
     }
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     const normalizedYear = normalizeYear(year);
-    const docs = await Workload.find({ year: normalizedYear, facultyRole: 'Main Faculty', allocationStatus: 'ALLOCATED', empId: { $ne: '' } }).lean();
-    // Map: courseId__section => faculty details (first found for each combo)
+    const docs = await Workload.find({
+      year: normalizedYear,
+      facultyRole: 'Main Faculty',
+      allocationStatus: 'ALLOCATED',
+      empId: { $ne: '' },
+      isDeleted: { $ne: true }
+    }).sort({ createdAt: -1 }).lean();
+
+    // Look up missing faculty names/designations if any
+    const missingFacultyIds = docs.filter(w => !w.empName || !w.designation).map(w => w.empId);
+    let facultyMap = {};
+    if (missingFacultyIds.length > 0) {
+      const facultyDocs = await Faculty.find({ empId: { $in: missingFacultyIds } }).select('empId name designation department').lean();
+      facultyMap = Object.fromEntries(facultyDocs.map(f => [f.empId, f]));
+    }
+
+    // Map: courseId__section => faculty details (latest valid workload for each combo)
     const map = {};
     for (const w of docs) {
       const key = `${w.courseId}__${w.section}`;
       if (!map[key]) {
+        const fac = facultyMap[w.empId];
         map[key] = {
           empId: w.empId,
-          empName: w.empName,
-          designation: w.designation,
-          courseId: w.courseId,
-          section: w.section,
-          year: w.year
+          empName: w.empName || fac?.name || w.empId,
+          designation: w.designation || fac?.designation || '',
+          department: w.department || fac?.department || 'CSE',
+          courseId: Number(w.courseId),
+          section: String(w.section),
+          year: String(w.year),
+          manualL: w.manualL,
+          manualT: w.manualT,
+          manualP: w.manualP,
+          fixedL: w.fixedL,
+          fixedT: w.fixedT,
+          fixedP: w.fixedP,
+          C: w.C,
+          subjectCode: w.subjectCode,
+          subjectName: w.subjectName,
         };
       }
     }
@@ -529,7 +571,10 @@ router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next)
     const summary = {
       totalFaculty: report.length,
       overAllocatedCount: report.filter(f => f.isOverAllocated).length,
-      averageUtilization: (report.reduce((sum, f) => sum + f.utilizationPercent, 0) / report.length).toFixed(2),
+      // L-3: Guard against divide-by-zero when report is empty
+      averageUtilization: report.length > 0
+        ? (report.reduce((sum, f) => sum + f.utilizationPercent, 0) / report.length).toFixed(2)
+        : '0.00',
       yearFilter: yearFilter || 'all_years'
     };
 
@@ -1104,7 +1149,7 @@ router.post(
             empName: doc.empName,
             designation: doc.designation,
           },
-        });
+        }, session); // H-5: Pass session so sync is part of the same transaction
       }
 
       if (normalizedFacultyRole === 'TA') {
@@ -1114,16 +1159,15 @@ router.post(
           section: doc.section,
           faculty: { empId: doc.empId, empName: doc.empName, designation: doc.designation },
           allocationRow: doc.allocationRow,
-        });
+        }, session); // H-5: Pass session
       }
 
       await logAuditEvent({ req, action: 'workload.create', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
       logger.info('Workload created', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
       
-      // Recalculate capacity
-      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
-
       await session.commitTransaction();
+      // H-6: recalculateCapacity runs AFTER commit so it starts a fresh operation
+      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
       wsHandler.broadcast({ type: 'workload_updated' });
       sendCreated(res, toClient(doc));
     } catch (err) {
@@ -1421,7 +1465,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
           empName: doc.empName,
           designation: doc.designation,
         },
-      });
+      }, session); // H-5: Pass session
     }
 
     const wasTA = String(current.facultyRole || 'Main Faculty') === 'TA';
@@ -1452,19 +1496,18 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         section: doc.section,
         faculty: { empId: doc.empId, empName: doc.empName, designation: doc.designation },
         allocationRow: doc.allocationRow,
-      });
+      }, session); // H-5: Pass session
     }
 
     await logAuditEvent({ req, action: 'workload.update', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
     logger.info('Workload updated', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
-    
-    // Recalculate capacity for both old and new empId if they changed
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
-    if (current.empId !== doc.empId) {
-      await recalculateCapacity(current.empId, { updatedBy: req.user.empId, session });
-    }
 
     await session.commitTransaction();
+    // H-6: Recalculate capacity AFTER commit so it starts fresh (outside transaction)
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
+    if (current.empId !== doc.empId) {
+      await recalculateCapacity(current.empId, { updatedBy: req.user.empId });
+    }
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, toClient(doc), 200);
   } catch (err) {
@@ -1525,11 +1568,10 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
 
     await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
     logger.info('Workload deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
-    
-    // Recalculate capacity
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, session });
 
     await session.commitTransaction();
+    // H-6: Recalculate capacity AFTER commit (outside transaction scope)
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, { message: 'Workload entry deleted.' }, 200);
   } catch (err) {

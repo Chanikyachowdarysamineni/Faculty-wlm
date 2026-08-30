@@ -495,6 +495,19 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const doc = await CourseAllocation.findByIdAndDelete(req.params.id);
     if (!doc) return sendNotFound(res, 'Allocation not found.');
+
+    // Recalculate capacity for all affected faculty
+    const affectedEmpIds = new Set([
+      ...(doc.lectureSlots || []).map(s => s?.empId),
+      ...(doc.tutorialSlots || []).map(s => s?.empId),
+      ...(doc.practicalSlots || []).map(s => s?.empId),
+      doc.lectureSlot?.empId,
+    ].filter(Boolean));
+
+    for (const empId of affectedEmpIds) {
+      await recalculateCapacity(empId, { updatedBy: req.user?.id });
+    }
+
     await logAuditEvent({ req, action: 'allocation.delete', entity: 'allocation', entityId: String(req.params.id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
     sendSuccess(res, { message: 'Allocation removed.' }, 200);
   } catch (err) { next(err); }

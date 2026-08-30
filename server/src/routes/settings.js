@@ -22,10 +22,11 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 const DEFAULT_SECTIONS = {
-  I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
+  I:   Array.from({ length: 19 }, (_, i) => String(i + 1)),
+  II:  Array.from({ length: 22 }, (_, i) => String(i + 1)),
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
+  // C-5: Year IV has sections 1–19 + 51–59 (matching workloads.js, stats.js and index.js)
+  IV:  [...Array.from({ length: 19 }, (_, i) => String(i + 1)), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
 };
 
 const normalizeSections = (raw) => {
@@ -160,7 +161,7 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
     if (session.inTransaction()) await session.abortTransaction();
     next(err);
   } finally {
-    session.endSession();
+    session.endSession(); // L-4: Always end session — covers both success and error paths
   }
 });
 

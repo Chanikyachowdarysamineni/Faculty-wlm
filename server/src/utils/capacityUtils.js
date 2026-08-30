@@ -32,8 +32,12 @@ const recalculateCapacity = async (empId, options = {}) => {
   const faculty = await Faculty.findOne({ empId }).session(session);
   if (!faculty) return null;
 
-  // Aggregate total allocated hours
-  const workloads = await Workload.find({ empId }).session(session).lean();
+  // C-4: Aggregate total allocated hours — exclude cancelled/unallocated/deleted workloads
+  const workloads = await Workload.find({
+    empId,
+    allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+    isDeleted: { $ne: true },
+  }).session(session).lean();
   let lectureHours = 0;
   let tutorialHours = 0;
   let practicalHours = 0;
@@ -67,11 +71,18 @@ const recalculateCapacity = async (empId, options = {}) => {
 
   await faculty.save({ session });
 
-  // Broadcast real-time update
+  // M-5: Only broadcast a safe summary — never send full faculty document
   if (wsHandler) {
     wsHandler.broadcast({
       type: 'CAPACITY_UPDATE',
-      data: faculty
+      data: {
+        empId: faculty.empId,
+        allocated: faculty.allocated,
+        remaining: faculty.remaining,
+        workloadPercentage: faculty.workloadPercentage,
+        status: faculty.status,
+        capacity: faculty.capacity,
+      },
     });
   }
 

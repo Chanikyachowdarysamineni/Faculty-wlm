@@ -10,10 +10,19 @@ const { parsePagination } = require('../utils/pagination');
 
 const router = express.Router();
 
+const normalizeYear = (year) => {
+  const trimmed = String(year || '').trim().toUpperCase();
+  if (trimmed === 'I' || trimmed === '1') return 'I';
+  if (trimmed === 'II' || trimmed === '2') return 'II';
+  if (trimmed === 'III' || trimmed === '3') return 'III';
+  if (trimmed === 'IV' || trimmed === '4') return 'IV';
+  return trimmed;
+};
+
 // Validation rules
 const sectionValidation = [
   body('name').trim().notEmpty().withMessage('Section name is required'),
-  body('year').isIn(['I', 'II', 'III', 'IV']).withMessage('Valid year is required'),
+  body('year').customSanitizer(normalizeYear).isIn(['I', 'II', 'III', 'IV']).withMessage('Valid year is required'),
   body('department').optional().trim(),
   body('status').optional().isIn(['Active', 'Inactive']),
 ];
@@ -25,7 +34,7 @@ router.get('/', requireAuth, async (req, res, next) => {
     const skip = (page - 1) * limit;
     const filter = { isDeleted: false };
     
-    if (req.query.year) filter.year = req.query.year;
+    if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.department) filter.department = req.query.department;
     if (req.query.status) filter.status = req.query.status;
 

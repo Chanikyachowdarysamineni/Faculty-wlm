@@ -257,11 +257,11 @@ router.post(
 
       // Log audit event
       await logAuditEvent({
-        action: 'CREATE_FACULTY_PREFERENCE',
-        userId: req.user?.id || 'system',
-        description: `Faculty ${empId} submitted course preferences with ${courseIds.length} courses`,
-        resourceId: empId,
-        resourceType: 'FacultyPreference',
+        req,
+        action: 'faculty_preference.create',
+        entity: 'FacultyPreference',
+        entityId: empId,
+        metadata: { courseCount: courseIds.length, courseIds },
       });
 
       return sendCreated(res, {
@@ -345,11 +345,11 @@ router.put(
 
       // Log audit event
       await logAuditEvent({
-        action: 'UPDATE_FACULTY_PREFERENCE',
-        userId: req.user?.id || 'system',
-        description: `Faculty ${empId} preferences updated`,
-        resourceId: empId,
-        resourceType: 'FacultyPreference',
+        req,
+        action: 'faculty_preference.update',
+        entity: 'FacultyPreference',
+        entityId: empId,
+        metadata: { courseCount: preferredCourseIds?.length },
       });
 
       return sendSuccess(res, {
@@ -399,11 +399,11 @@ router.delete(
 
       // Log audit event
       await logAuditEvent({
-        action: 'DELETE_FACULTY_PREFERENCE',
-        userId: req.user?.id || 'system',
-        description: `Faculty ${empId} preferences deleted`,
-        resourceId: empId,
-        resourceType: 'FacultyPreference',
+        req,
+        action: 'faculty_preference.delete',
+        entity: 'FacultyPreference',
+        entityId: empId,
+        metadata: {},
       });
 
       return sendSuccess(res, {
