@@ -612,6 +612,8 @@ router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next)
  * MUST BE BEFORE /:id route to match correctly
  */
 router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { id } = req.params;
     const { manualL, manualT, manualP } = req.body;
@@ -631,13 +633,13 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       return sendError(res, 'Period values cannot be negative.', 400);
     }
 
-    const workload = await Workload.findById(id).lean();
+    const workload = await Workload.findById(id).session(session).lean();
     if (!workload) {
       logger.warn('Workload not found for period update', { id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
     }
 
-    const faculty = await Faculty.findOne({ empId: workload.empId }).lean();
+    const faculty = await Faculty.findOne({ empId: workload.empId }).session(session).lean();
     if (!faculty) {
       logger.warn('Faculty not found for period update validation', { empId: workload.empId, userId: req.user.id });
       return sendNotFound(res, 'Faculty not found.');
@@ -649,7 +651,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
     const otherWorkloads = await Workload.find({ 
       empId: workload.empId, 
       _id: { $ne: id } 
-    }).lean();
+    }).session(session).lean();
 
     let currentTotalHours = 0;
     otherWorkloads.forEach(w => {
@@ -672,7 +674,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
           manualP: newP,
         }
       },
-      { new: true }
+      { new: true, session }
     ).lean();
 
     // S-6 FIX: Sync updated hours to CourseAllocation for Main Faculty
@@ -687,7 +689,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
             empName: result.empName,
             designation: result.designation,
           },
-        });
+        }, session);
         logger.info('Synced allocation after period update', { id, empId: result.empId });
       } catch (syncErr) {
         logger.error('Failed to sync allocation after period update', { id, empId: result.empId, error: syncErr.message });
@@ -726,6 +728,8 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       userId: req.user.id
     });
 
+    await session.commitTransaction();
+
     // S-6 FIX: Recalculate capacity after period change
     await recalculateCapacity(workload.empId, { updatedBy: req.user.empId });
 
@@ -740,8 +744,11 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       }
     }, 200);
   } catch (err) {
+    await session.abortTransaction();
     logger.error('Error updating workload periods', { error: err.message, id: req.params.id, userId: req.user.id });
     next(err);
+  } finally {
+    session.endSession();
   }
 });
 
@@ -961,7 +968,9 @@ router.get('/:id', requireAuth, async (req, res, next) => {
       logger.warn('Workload entry not found', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
     }
-    if (req.user.role === 'faculty' && doc.empId !== req.user.id) {
+    const isDualAccessAdmin = req.user?.canAccessAdmin === true;
+    const isFacultyOnly = req.user.role === 'faculty' && !isDualAccessAdmin;
+    if (isFacultyOnly && doc.empId !== req.user.id) {
       logger.warn('Unauthorized access to workload', { id: req.params.id, userId: req.user.id, docEmpId: doc.empId });
       return sendError(res, 'Access denied.', 403);
     }
@@ -1001,7 +1010,7 @@ router.post(
           const normalizedSection = String(section || '').trim();
 
 
-      const member = await Faculty.findOne({ empId: empId.trim() }).lean();
+      const member = await Faculty.findOne({ empId: empId.trim() }).session(session).lean();
       if (!member && !empNameOverride) {
         logger.warn('Employee not found for workload creation', { empId, userId: req.user.id });
         return sendNotFound(res, 'Employee not found.');
@@ -1014,7 +1023,7 @@ router.post(
         designation: designationOverride || 'Other',
       };
 
-      const course = courseId > 0 ? await Course.findOne({ courseId: Number(courseId) }).lean() : null;
+      const course = courseId > 0 ? await Course.findOne({ courseId: Number(courseId) }).session(session).lean() : null;
       if (!course && !courseNameOverride) {
         logger.warn('Course not found for workload creation', { courseId, userId: req.user.id });
         return sendNotFound(res, 'Course not found.');
@@ -1073,7 +1082,7 @@ router.post(
       if (normalizedFacultyRole === 'Main Faculty' && courseTypeKey === 'DE' && isRestrictedDeYear(normalizedYear)) {
         const existingDe = await Workload.findOne(
           buildDeSectionConflictFilter({ year: normalizedYear, section: normalizedSection })
-        ).lean();
+        ).session(session).lean();
         if (existingDe && existingDe.empId !== effectiveMember.empId) {
           logger.warn('Department Elective duplicate for section', { year: normalizedYear, section: normalizedSection, userId: req.user.id });
           return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
@@ -1088,7 +1097,7 @@ router.post(
           facultyRole: 'Main Faculty',
           allocationStatus: 'ALLOCATED',
           empId: { $ne: '' }
-        }).lean();
+        }).session(session).lean();
         if (existingMain) {
           logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
           return sendConflict(res, MAIN_FACULTY_DUPLICATE_MSG);
@@ -1103,7 +1112,7 @@ router.post(
           facultyRole: 'TA',
           allocationStatus: 'ALLOCATED',
           empId: { $ne: '' }
-        }).lean();
+        }).session(session).lean();
         if (existingTa) {
           logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
           return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
@@ -1275,7 +1284,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     }
 
     const nextEmpId = String(updates.empId ?? current.empId).trim();
-    const member = await Faculty.findOne({ empId: nextEmpId }).lean();
+    const member = await Faculty.findOne({ empId: nextEmpId }).session(session).lean();
     const effectiveMember = member
       ? {
         empId: member.empId,
@@ -1297,7 +1306,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       return sendNotFound(res, 'Employee not found.');
     }
 
-    const course = await Course.findOne({ courseId: nextCourseId }).lean();
+    const course = await Course.findOne({ courseId: nextCourseId }).session(session).lean();
     const effectiveCourse = course
       ? {
         courseId: course.courseId,
@@ -1492,7 +1501,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
           year: current.year,
           section: current.section,
           empId: current.empId,
-        });
+        }, session);
       }
     }
 
@@ -1526,7 +1535,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
           year: current.year,
           section: current.section,
           allocationRow: current.allocationRow,
-        });
+        }, session);
       }
     }
 
@@ -1612,7 +1621,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
         year: doc.year,
         section: doc.section,
         empId: doc.empId,
-      });
+      }, session);
     }
 
     if (String(doc.facultyRole || '') === 'TA' && doc.allocationRow) {
@@ -1621,7 +1630,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
         year: doc.year,
         section: doc.section,
         allocationRow: doc.allocationRow,
-      });
+      }, session);
     }
 
     await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, softDelete: true } });

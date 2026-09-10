@@ -85,12 +85,12 @@ export const fetchJsonWithRetry = async (url, options = {}) => {
         return { success: true, status: response.status, data };
       }
 
-      if (response.status === 401) {
-        notifyUnauthorized();
+      if (response.status === 401 || response.status === 403) {
+        if (response.status === 401) notifyUnauthorized();
         return {
           success: false,
-          status: 401,
-          message: data?.message || 'Session expired. Please login again.',
+          status: response.status,
+          message: data?.message || (response.status === 401 ? 'Session expired. Please login again.' : 'Access denied.'),
           data,
         };
       }
