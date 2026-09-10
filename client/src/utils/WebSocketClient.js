@@ -38,24 +38,24 @@ class WebSocketClient {
    */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
+
       return;
     }
 
     this.url = this.getWebSocketURL();
-    console.log(`Connecting to WebSocket: ${this.url}`);
+
 
     try {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        console.log('✓ WebSocket connected successfully');
+
         this.reconnectAttempts = 0;
         this.emit('connect');
       };
 
       this.ws.onmessage = (event) => {
-        console.log('WebSocket message received:', event.data);
+
         try {
           const data = JSON.parse(event.data);
           this.emit('message', data);
@@ -71,7 +71,7 @@ class WebSocketClient {
       };
 
       this.ws.onclose = () => {
-        console.log('WebSocket connection closed');
+
         this.emit('disconnect');
         this.attemptReconnect();
       };
@@ -161,7 +161,7 @@ class WebSocketClient {
    * Disconnect from WebSocket
    */
   disconnect() {
-    console.log('Disconnecting from WebSocket...');
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;

@@ -1,6 +1,7 @@
 'use strict';
 
 const { body, validationResult, param, query } = require('express-validator');
+const { isValidConfigValue } = require('../utils/configManager');
 
 /**
  * Validation middleware error handler
@@ -54,13 +55,11 @@ const validateWorkloadCreate = [
     .trim()
     .notEmpty()
     .withMessage('Year is required')
-    .custom((value) => {
+    .custom(async (value) => {
       // Accept various formats and normalize
       const trimmed = String(value || '').trim().toUpperCase();
-      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4', 'M.TECH', 'OTHER', 'ALL'];
-      if (!validYears.includes(trimmed)) {
-        throw new Error('Invalid year. Must be I/II/III/IV/M.Tech or Other');
-      }
+      const valid = await isValidConfigValue('years', trimmed) || ['1', '2', '3', '4', 'ALL'].includes(trimmed);
+      if (!valid) throw new Error('Invalid year according to system configuration.');
       return true;
     }),
 
@@ -116,12 +115,10 @@ const validateWorkloadUpdate = [
   body('year')
     .optional({ checkFalsy: true })
     .trim()
-    .custom((value) => {
+    .custom(async (value) => {
       const trimmed = String(value || '').trim().toUpperCase();
-      const validYears = ['I', 'II', 'III', 'IV', '1', '2', '3', '4', 'M.TECH', 'OTHER', 'ALL'];
-      if (!validYears.includes(trimmed)) {
-        throw new Error('Invalid year. Must be I/II/III/IV/M.Tech or Other');
-      }
+      const valid = await isValidConfigValue('years', trimmed) || ['1', '2', '3', '4', 'ALL'].includes(trimmed);
+      if (!valid) throw new Error('Invalid year according to system configuration.');
       return true;
     }),
 
@@ -193,7 +190,12 @@ const validateFacultyCreate = [
   body('designation')
     .trim()
     .notEmpty()
-    .withMessage('Designation is required'),
+    .withMessage('Designation is required')
+    .custom(async (value) => {
+      const valid = await isValidConfigValue('designations', value);
+      if (!valid) throw new Error('Invalid designation.');
+      return true;
+    }),
 
   body('department')
     .optional({ checkFalsy: true })
@@ -270,7 +272,12 @@ const validateCourseCreate = [
   body('courseType')
     .trim()
     .notEmpty()
-    .withMessage('Course type is required'),
+    .withMessage('Course type is required')
+    .custom(async (value) => {
+      const valid = await isValidConfigValue('courseTypes', value);
+      if (!valid) throw new Error('Invalid course type.');
+      return true;
+    }),
 
   body('subjectCode')
     .trim()

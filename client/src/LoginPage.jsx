@@ -34,13 +34,13 @@ const LoginPage = ({ onLogin }) => {
     setLoading(true);
     try {
       const loginUrl = `${API}/deva/auth/login`;
-      console.log('[Login] Making request to:', loginUrl);
+
       const res  = await fetch(loginUrl, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ employeeId: employeeId.trim(), password }),
       });
-      console.log('[Login] Response status:', res.status, 'URL:', res.url);
+
       const data = await res.json();
       if (!data.success) {
         setError(data.message || 'Login failed.');
@@ -52,7 +52,7 @@ const LoginPage = ({ onLogin }) => {
            // Successfully logged in - store token and user info
            localStorage.setItem('wlm_token', data.data.token);
            localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
-           console.log('[Auth] Token stored successfully');
+
            onLogin(data.data.user);
         }
       } else {

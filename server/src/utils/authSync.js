@@ -91,73 +91,82 @@ const syncAuthAndRBAC = async () => {
 
     // 4. Scan all Faculty and ensure they have an associated User record for authentication
     // Run this in the background to avoid blocking server startup
-    setTimeout(async () => {
+    // M-9 FIX: Use proper async IIFE instead of setTimeout(0) for better error containment
+    setImmediate(async () => {
       try {
         const allFaculty = await Faculty.find({}).lean();
         let repairedCount = 0;
+        let errorCount = 0;
         
         for (const faculty of allFaculty) {
           if (!faculty.empId) continue;
           
-          const user = await User.findOne({ empId: faculty.empId });
-          
-          const defaultPassword = faculty.mobile ? String(faculty.mobile).trim() : String(faculty.empId).trim();
-          const passwordHash = await bcrypt.hash(defaultPassword, 10);
-          
-          if (!user) {
-            // Missing Auth record (e.g. for 03259, 01905, 02209)
-            const isAdmin = isAdminEmployeeId(faculty.empId);
-            await User.create({
-              empId: faculty.empId,
-              name: faculty.name,
-              designation: faculty.designation,
-              mobile: faculty.mobile,
-              email: faculty.email,
-              passwordHash: passwordHash,
-              role: isAdmin ? 'Admin' : 'Faculty',
-              canAccessAdmin: isAdmin,
-              forcePasswordChange: true
-            });
-            logger.info(`Repaired missing Auth record for ${faculty.empId}`);
-            repairedCount++;
-          } else {
-            // Verify consistency (ensure no null password hashes)
-            let needsUpdate = false;
-            let updatePayload = {};
-
-            if (!user.passwordHash || user.passwordHash === null) {
-              updatePayload.passwordHash = passwordHash;
-              updatePayload.forcePasswordChange = true;
-              needsUpdate = true;
-              logger.warn(`Repaired null password hash for ${faculty.empId}`);
-            }
+          try {
+            const user = await User.findOne({ empId: faculty.empId });
             
-            // Sync role if missing
-            if (!user.role || (user.role === 'admin' || user.role === 'faculty')) {
+            const defaultPassword = faculty.mobile ? String(faculty.mobile).trim() : String(faculty.empId).trim();
+            const passwordHash = await bcrypt.hash(defaultPassword, 10);
+            
+            if (!user) {
+              // Missing Auth record — create with forcePasswordChange=true
+              const isAdmin = isAdminEmployeeId(faculty.empId);
+              await User.create({
+                empId: faculty.empId,
+                name: faculty.name,
+                designation: faculty.designation,
+                mobile: faculty.mobile,
+                email: faculty.email,
+                passwordHash: passwordHash,
+                role: isAdmin ? 'Admin' : 'Faculty',
+                canAccessAdmin: isAdmin,
+                forcePasswordChange: true
+              });
+              logger.info(`Repaired missing Auth record for ${faculty.empId}`);
+              repairedCount++;
+            } else {
+              // Verify consistency (ensure no null password hashes)
+              let needsUpdate = false;
+              let updatePayload = {};
+
+              if (!user.passwordHash || user.passwordHash === null) {
+                updatePayload.passwordHash = passwordHash;
+                updatePayload.forcePasswordChange = true;
+                needsUpdate = true;
+                logger.warn(`Repaired null password hash for ${faculty.empId}`);
+              }
+              
+              // Normalize role casing — S-4 fix: DB role should match JWT expected casing
+              const normalizedRole = String(user.role || '').toLowerCase();
+              if (!user.role || (normalizedRole !== 'admin' && normalizedRole !== 'faculty')) {
                 const isAdmin = isAdminEmployeeId(faculty.empId) || user.canAccessAdmin;
                 updatePayload.role = isAdmin ? 'Admin' : 'Faculty';
                 needsUpdate = true;
-            }
+              }
 
-            if (needsUpdate) {
-              await User.updateOne({ empId: faculty.empId }, { $set: updatePayload });
-              repairedCount++;
+              if (needsUpdate) {
+                await User.updateOne({ empId: faculty.empId }, { $set: updatePayload });
+                repairedCount++;
+              }
             }
-          }
-          
-          // Retroactively fix Workload data on boot
-          try {
-            await recalculateCapacity(faculty.empId, { updatedBy: 'System' });
-          } catch (err) {
-            logger.error(`Failed to retroactively calculate capacity for ${faculty.empId}`, err);
+            
+            // Retroactively fix Workload data on boot
+            try {
+              await recalculateCapacity(faculty.empId, { updatedBy: 'System' });
+            } catch (err) {
+              logger.error(`Failed to retroactively calculate capacity for ${faculty.empId}`, { error: err.message });
+            }
+          } catch (facultyErr) {
+            // M-9 FIX: Per-faculty error catch so one bad record doesn't block all others
+            errorCount++;
+            logger.error(`Auth sync error for faculty ${faculty.empId}`, { error: facultyErr.message });
           }
         }
         
-        logger.info(`Auth Sync completed. Total records repaired: ${repairedCount}`);
+        logger.info(`Auth Sync completed. Repaired: ${repairedCount}, Errors: ${errorCount}, Total: ${allFaculty.length}`);
       } catch (err) {
-        logger.error('Error in background Auth Sync:', err);
+        logger.error('Error in background Auth Sync:', { error: err.message, stack: err.stack });
       }
-    }, 0);
+    });
   } catch (err) {
     logger.error('Error during Role and Designation Sync:', err);
   }

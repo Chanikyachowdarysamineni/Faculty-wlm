@@ -108,11 +108,16 @@ const CellPicker = ({
         f.empId.includes(search);
       if (!textMatch) return false;
 
-      // R2-R4: Only show Supporting Faculty and TA
+      // B-3 FIX: Faculty objects from API have `designation`, not `role`.
+      // R2-R4 should only show Supporting Faculty and TAs.
       if (rowIdx >= 1) {
-        const isSupportingOrTA = f.role && (f.role === 'Supporting Faculty' || f.role === 'TA');
-        const isCurrent = f.empId === empId;
-        if (!isSupportingOrTA && !isCurrent) return false;
+        const desig = String(f.designation || '').toLowerCase();
+        const isSupportingOrTA =
+          desig.includes('teaching assistant') ||
+          desig === 'ta' ||
+          desig.includes('supporting') ||
+          f.empId === empId; // always include currently-selected faculty
+        if (!isSupportingOrTA) return false;
       }
 
       const capacity = Number(f.capacity);
@@ -180,7 +185,7 @@ const CellPicker = ({
           <input
             autoFocus
             className="ap-dd-search"
-            placeholder="Search name or ID�"
+            placeholder="Search name or ID…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -189,7 +194,7 @@ const CellPicker = ({
               className="ap-dd-item ap-dd-clear"
               onMouseDown={() => { onSelect(''); setOpen(false); setSearch(''); }}
             >
-              ? Clear
+              ✕ Clear
             </div>
             {filtered.map(f => (
               <div
@@ -216,7 +221,9 @@ const CellPicker = ({
 
 // -- AllocationPage -------------------------------------------------------------
 const AllocationPage = ({ isAdmin = true }) => {
-  const { faculty: contextFaculty, courses: contextCourses } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+
+  const YEARS_BTECH = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
@@ -271,23 +278,10 @@ const AllocationPage = ({ isAdmin = true }) => {
       const workloadData = Array.isArray(result.data) ? result.data : [];
       setWorkloads(workloadData);
       
-      // Detailed logging for debugging
-      console.log('? Fetched Workloads:', {
-        totalCount: workloadData.length,
-        year: yearKey,
-        breakdown: {
-          mainFaculty: workloadData.filter(w => w.facultyRole === 'Main Faculty').length,
-          supportingFaculty: workloadData.filter(w => w.facultyRole === 'Supporting Faculty').length,
-          ta: workloadData.filter(w => w.facultyRole === 'TA').length,
-        },
-        sampleData: workloadData.slice(0, 3),
-        allData: workloadData,
-      });
-      
+      // M-3 FIX: Removed production console.log that dumped all workload data on every fetch
       return { success: true };
     } catch (error) {
       setWorkloads([]);
-      console.error('Error fetching workloads:', error);
       return { success: false, message: 'Failed to load workloads.' };
     } finally {
       setWorkloadsLoading(false);
@@ -401,12 +395,12 @@ const AllocationPage = ({ isAdmin = true }) => {
   }, [allocMap, yearCourses, sections, facultyList]);
 
   // -- Fetch from server ----------------------------------------------------
+  // M-4 FIX: Pass year filter to avoid fetching all allocations for all years
   const fetchAllocations = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
     try {
-      const data = await fetchAllPages('/deva/allocations', {}, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/allocations', { year: yearKey }, { headers: authHeader() });
       if (!data.success) {
-        console.error('Failed to fetch allocations:', data.message);
         return { success: false, message: data.message || 'Could not load allocations.' };
       }
       
@@ -414,12 +408,11 @@ const AllocationPage = ({ isAdmin = true }) => {
       setAllocations(allocArray);
       return { success: true };
     } catch (error) {
-      console.error('Error fetching allocations:', error);
       return { success: false, message: 'Could not load allocations.' };
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, []);
+  }, [yearKey]);
 
   const refreshAllocationReadData = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
@@ -445,10 +438,18 @@ const AllocationPage = ({ isAdmin = true }) => {
     refreshAllocationReadData({ withLoader: true });
   }, [refreshAllocationReadData]);
 
+  // M-5 FIX: Guard against concurrent polling — skip if previous request still in flight
+  const isRefreshingRef = useRef(false);
   useEffect(() => {
-    const id = setInterval(() => {
-      refreshAllocationReadData({ withLoader: false });
-    }, 15000);
+    const id = setInterval(async () => {
+      if (isRefreshingRef.current) return; // skip if already running
+      isRefreshingRef.current = true;
+      try {
+        await refreshAllocationReadData({ withLoader: false });
+      } finally {
+        isRefreshingRef.current = false;
+      }
+    }, 30000); // Increased to 30s (was 15s) to reduce server load
     return () => clearInterval(id);
   }, [refreshAllocationReadData]);
 
@@ -468,7 +469,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   useEffect(() => {
     const handleWsMessage = (data) => {
       if (data && (data.type === 'workload_updated' || data.type === 'allocation_updated' || data.type === 'CAPACITY_UPDATE')) {
-        console.log('[AllocationPage] Real-time synchronization triggered:', data.type);
+
         refreshAllocationReadData({ withLoader: false });
       }
     };
@@ -678,7 +679,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       if (!refetchResult.success) {
         console.warn('⚠️  Allocation saved but refetch failed. UI may show stale data.');
       } else {
-        console.log('✅ Allocation synced in real-time:', refetchResult.data);
+
       }
 
       return { success: true };

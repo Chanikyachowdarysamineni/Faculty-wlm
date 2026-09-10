@@ -39,9 +39,23 @@ const errorHandler = (err, req, res, _next) => {
   // Determine error message to send to client
   let message = err.message || 'An error occurred';
   
-  // Hide sensitive details from clients in production
-  if (!isDevelopment && status >= 500) {
-    message = 'An unexpected error occurred. Please try again later.';
+  // L-6 FIX: Sanitize error messages in production to prevent information disclosure.
+  // Mongoose errors can expose field names, schema structure, and internal query details.
+  if (!isDevelopment) {
+    if (status >= 500) {
+      message = 'An unexpected error occurred. Please try again later.';
+    } else if (err.name === 'CastError') {
+      // Already handled above but guard against double-send
+      message = 'Invalid request parameter.';
+    } else if (err.name === 'ValidationError') {
+      // Already handled above but guard
+      message = 'Validation error. Please check your input.';
+    } else if (err.code === 11000) {
+      // Already handled above
+      message = 'Duplicate entry.';
+    }
+    // 4xx application errors from route handlers use sendError() which provides
+    // safe, user-friendly messages — pass those through as-is.
   }
   
   // Build error response
@@ -51,10 +65,8 @@ const errorHandler = (err, req, res, _next) => {
     timestamp: new Date().toISOString(),
   };
   
-  // Include stack trace only in development
-  if (isDevelopment && err.stack) {
-    response.stack = err.stack;
-  }
+  // Prevent stack traces from ever being exposed to the client
+  // Stack traces are securely logged to the console/logger above
   
   res.status(status).json(response);
 };

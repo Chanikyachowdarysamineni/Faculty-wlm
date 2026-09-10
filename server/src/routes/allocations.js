@@ -20,6 +20,7 @@ const { parsePagination, buildMeta } = require('../utils/pagination');
 const { logAuditEvent } = require('../utils/audit');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: add export rate limiter
 const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 
@@ -171,7 +172,8 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
 });
 
 // GET /api/allocations/workload-sheets  — per-faculty aggregated view
-router.get('/workload-sheets', requireAuth, requireAdmin, async (req, res, next) => {
+// M-12 FIX: Apply export rate limiter to bulk data endpoints
+router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -231,7 +233,8 @@ router.get('/workload-sheets', requireAuth, requireAdmin, async (req, res, next)
 });
 
 // GET /api/allocations/export/csv
-router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
+// M-12 FIX: Apply export rate limiter
+router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, res, next) => {
   try {
     // Disable caching for dynamic data
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -291,9 +294,10 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
       ...(Array.isArray(practicalSlots) ? practicalSlots : []),
       ...(lectureSlot ? [lectureSlot] : []),
     ];
-    const badHours = allSlots.some((slot) => slot && slot.hours !== undefined && (!Number.isFinite(Number(slot.hours)) || Number(slot.hours) < 0 || Number(slot.hours) > 30));
+    // S-9 FIX: Allow up to 100 hours to match the Workload schema max (was incorrectly 30)
+    const badHours = allSlots.some((slot) => slot && slot.hours !== undefined && (!Number.isFinite(Number(slot.hours)) || Number(slot.hours) < 0 || Number(slot.hours) > 100));
     if (badHours) {
-      return sendError(res, 'Slot hours must be between 0 and 30.', 400);
+      return sendError(res, 'Slot hours must be between 0 and 100.', 400);
     }
 
     if (!courseId || !year || !section)
@@ -369,7 +373,6 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
       const mainFacultySlot = enrichedLSlots[0];
       enrichedTutorials[0] = mainFacultySlot;
       enrichedPracticals[0] = mainFacultySlot;
-      console.log('✅ Auto-fill: L.R1 copied to T.R1 and P.R1', { empId: mainFacultySlot.empId, empName: mainFacultySlot.empName });
     }
 
     // TA assignment rules:

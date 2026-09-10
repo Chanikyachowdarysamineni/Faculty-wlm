@@ -11,6 +11,7 @@ const facultySchema = new mongoose.Schema(
     empId:       { type: String, required: true, unique: true, trim: true },
     name:        { type: String, required: true, trim: true },
     department:  { type: String, default: 'CSE' },
+    cluster:     { type: String, default: '' },
     designation: { type: String, required: true, trim: true },
     mobile:      { type: String, default: '' },
     email:       { type: String, default: '' },

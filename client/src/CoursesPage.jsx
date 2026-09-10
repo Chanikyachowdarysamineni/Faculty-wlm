@@ -29,7 +29,10 @@ const emptyCourseForm = {
 
 // ── CoursesPage ────────────────────────────────────────────────
 const CoursesPage = ({ isAdmin = true }) => {
-  const { courses: contextCourses, setCourses: setContextCourses } = useSharedData();
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig } = useSharedData();
+
+  const YEAR_OPTIONS = [...(systemConfig?.years || []).filter(y => y.isActive), { value: '__other__', label: 'Others' }];
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
   
   // ── Data state ──
   const [courseList, setCourseList]   = useState([]);

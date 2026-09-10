@@ -16,7 +16,7 @@ const normalizeApiBase = (value) => {
 		const result = withoutSlash
 			.replace(/^https?:\/\//i, 'http://')
 			.replace(/^wss?:\/\//i, 'ws://');
-		console.log('[API Config] Localhost detected, forcing HTTP:', result);
+
 		return result;
 	}
 	
@@ -26,7 +26,7 @@ const normalizeApiBase = (value) => {
 const resolveApiBase = () => {
 	// PRIORITY 1: If localhost, ALWAYS use HTTP (no exceptions)
 	if (isLocalhost()) {
-		console.log('[API Config] Localhost detected (window.location.hostname), forcing HTTP://localhost:5000');
+
 		return 'http://localhost:5000';
 	}
 	
@@ -36,7 +36,7 @@ const resolveApiBase = () => {
 		if (envApi.includes('localhost') && !isLocalhost()) {
 			console.warn(`[API Config] Warning: .env specifies ${envApi} but accessing remotely. Falling back to dynamic resolution.`);
 		} else {
-			console.log('[API Config] Using REACT_APP_API_URL:', envApi);
+
 			return envApi;
 		}
 	}
@@ -46,12 +46,12 @@ const resolveApiBase = () => {
 		const host = window.location.hostname;
 		const protocol = window.location.protocol;
 		const devApi = `${protocol}//${host}:5000`;
-		console.log(`[API Config] Development mode, using ${devApi}`);
+
 		return devApi;
 	}
 	
 	// PRIORITY 4: Production - use relative paths for nginx proxy
-	console.log('[API Config] Production mode, using /csefaculty');
+
 	return '/csefaculty';
 };
 

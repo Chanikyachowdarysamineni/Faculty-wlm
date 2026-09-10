@@ -76,7 +76,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   // Refetch current user's faculty data from backend
   const refetchFacultyProfile = useCallback(async () => {
     try {
-      console.log('[ProfilePage] Refetching faculty profile data for user:', user.id);
+
       const headers = authHeaders();
       const response = await fetch(`${API}/deva/faculty/${user.id}`, {
         method: 'GET',
@@ -86,7 +86,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       
       if (response.ok && data?.success && data?.data) {
         const updatedFaculty = data.data;
-        console.log('[ProfilePage] Received updated faculty data:', updatedFaculty);
+
         
         // Update local faculty list
         setFacultyList(prev => prev.map(f => f.empId === user.id ? updatedFaculty : f));
@@ -94,7 +94,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
         // Update shared context
         setFaculty(prev => prev.map(f => f.empId === user.id ? updatedFaculty : f));
         
-        console.log('[ProfilePage] Faculty profile updated successfully');
+
         return true;
       } else {
         console.warn('[ProfilePage] Failed to refetch faculty profile:', data?.message);
@@ -167,7 +167,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
         }
       });
 
-      console.log('Saving profile changes with payload:', { payload, userId: user.id });
+
 
       const response = await fetch(`${API}/deva/faculty/${user.id}`, {
         method: 'PUT',
@@ -177,7 +177,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
       const data = await response.json();
 
-      console.log('Profile update response:', { status: response.status, data });
+
 
       if (!response.ok || !data?.success) {
         let errorMsg = data?.message || 'Failed to update profile';
@@ -194,7 +194,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       }
 
       // Refetch faculty profile to get fresh data from backend
-      console.log('Profile update successful, refetching faculty profile...');
+
       const refetchSuccess = await refetchFacultyProfile();
       
       if (refetchSuccess) {
@@ -613,7 +613,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
               setPwSaving(true);
               try {
-                console.log('Sending password change request...');
+
                 const res = await fetch(`${API}/deva/auth/change-password`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -624,7 +624,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
                 });
 
                 const data = await res.json();
-                console.log('Password change response:', { status: res.status, data });
+
 
                 if (!res.ok || !data.success) {
                   setPwMsg({ text: data.message || 'Failed to change password. Please check your current password and try again.', ok: false });
@@ -682,7 +682,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
             onMouseOut={(e) => e.target.style.background = '#dc2626'}
             onClick={async () => {
               try {
-                console.log('Logging out...');
+
                 // Call logout endpoint to clear session
                 await fetch(`${API}/deva/auth/logout`, {
                   method: 'POST',

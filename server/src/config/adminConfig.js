@@ -19,11 +19,13 @@ const ENV_ADMIN_IDS = (process.env.ADMIN_EMPLOYEE_IDS || '')
 
 const defaultAdminId = (process.env.ADMIN_ID || 'admin').trim();
 
-// List of employee IDs that should have admin access
-// Falls back to hardcoded IDs only when env var is not set (local dev only)
+// List of employee IDs that should have admin access.
+// B-7 FIX: Do NOT hardcode faculty employee IDs in source code.
+// All admin IDs MUST be configured via ADMIN_EMPLOYEE_IDS environment variable.
+// The ADMIN_ID env var still provides the primary system admin account fallback.
 const ADMIN_EMPLOYEE_IDS = Array.from(new Set([
   defaultAdminId,
-  ...(ENV_ADMIN_IDS.length > 0 ? ENV_ADMIN_IDS : ['189', '675'])
+  ...(ENV_ADMIN_IDS.length > 0 ? ENV_ADMIN_IDS : []) // No hardcoded IDs — use env var
 ])).filter(Boolean);
 
 /**

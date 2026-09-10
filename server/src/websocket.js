@@ -5,6 +5,7 @@
 
 const WebSocket = require('ws');
 const url = require('url');
+const logger = require('./utils/logger');
 
 class WebSocketHandler {
   constructor() {
@@ -26,7 +27,7 @@ class WebSocketHandler {
     // Handle new connections
     this.wss.on('connection', (ws, req) => {
       const clientIp = req.socket.remoteAddress;
-      console.log(`✓ WebSocket client connected from ${clientIp}`);
+      logger.info(`✓ WebSocket client connected from ${clientIp}`);
 
       // Add to clients set
       this.clients.add(ws);
@@ -41,11 +42,11 @@ class WebSocketHandler {
       // Handle messages
       ws.on('message', (data) => {
         try {
-          console.log(`Message from ${clientIp}:`, data);
+          logger.debug(`Message from ${clientIp}:`, data);
           const message = JSON.parse(data);
           this.handleMessage(ws, message, clientIp);
         } catch (error) {
-          console.error('Error parsing message:', error);
+          logger.error('Error parsing message:', { error: error.message });
           ws.send(JSON.stringify({
             type: 'error',
             error: 'Invalid message format',
@@ -55,22 +56,22 @@ class WebSocketHandler {
 
       // Handle errors
       ws.on('error', (error) => {
-        console.error(`WebSocket error from ${clientIp}:`, error);
+        logger.error(`WebSocket error from ${clientIp}:`, { error: error.message });
       });
 
       // Handle disconnection
       ws.on('close', () => {
-        console.log(`✗ WebSocket client disconnected from ${clientIp}`);
+        logger.info(`✗ WebSocket client disconnected from ${clientIp}`);
         this.clients.delete(ws);
       });
     });
 
     // Handle server errors
     this.wss.on('error', (error) => {
-      console.error('WebSocket server error:', error);
+      logger.error('WebSocket server error:', { error: error.message });
     });
 
-    console.log('✓ WebSocket server initialized on /ws');
+    logger.info('✓ WebSocket server initialized on /ws');
   }
 
   /**
@@ -97,7 +98,7 @@ class WebSocketHandler {
         break;
 
       default:
-        console.log(`Unknown message type: ${type}`);
+        logger.warn(`Unknown message type: ${type}`);
         ws.send(JSON.stringify({
           type: 'error',
           error: `Unknown message type: ${type}`,
@@ -120,7 +121,7 @@ class WebSocketHandler {
     });
 
     if (broadcastCount > 0) {
-      console.log(`Broadcasted message to ${broadcastCount} clients`);
+      logger.debug(`Broadcasted message to ${broadcastCount} clients`);
     }
   }
 
@@ -150,7 +151,7 @@ class WebSocketHandler {
       client.close();
     });
     this.wss.close();
-    console.log('✓ WebSocket server closed');
+    logger.info('✓ WebSocket server closed');
   }
 }
 

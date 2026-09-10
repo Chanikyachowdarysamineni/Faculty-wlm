@@ -174,56 +174,70 @@ const getFacultyWorkloadReport = async (year = null) => {
   try {
     // H-8: Exclude soft-deleted faculty from reports
     const allFaculty = await Faculty.find({ isDeleted: { $ne: true } }).lean();
-    // C-3: Exclude cancelled/unallocated and soft-deleted workloads
-    const allWorkloads = await Workload.find({
+    
+    // P-2 FIX: Offload data grouping and load calculation to MongoDB aggregation
+    const workloadMatch = {
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
       isDeleted: { $ne: true },
-    }).lean();
-    
-    // Group workloads by empId
-    const workloadsByEmp = {};
-    for (const w of allWorkloads) {
-      if (!workloadsByEmp[w.empId]) workloadsByEmp[w.empId] = [];
-      workloadsByEmp[w.empId].push(w);
+    };
+    if (year) {
+      workloadMatch.year = String(year);
     }
 
-    const report = [];
-
-    for (const faculty of allFaculty) {
-      const capacity = Number(faculty.capacity || 18);
-      const facultyWorkloads = workloadsByEmp[faculty.empId] || [];
-      
-      let currentLoad = 0;
-      const assignments = [];
-      
-      for (const w of facultyWorkloads) {
-        const L = Number(w.manualL !== undefined && w.manualL !== null ? w.manualL : (w.fixedL || 0));
-        const T = Number(w.manualT !== undefined && w.manualT !== null ? w.manualT : (w.fixedT || 0));
-        const P = Number(w.manualP !== undefined && w.manualP !== null ? w.manualP : (w.fixedP || 0));
-        const hoursForThisAssignment = L + T + P;
-        
-        currentLoad += hoursForThisAssignment;
-        
-        assignments.push({
-          id: String(w._id),
-          empId: w.empId,
-          subjectCode: w.subjectCode,
-          subjectName: w.subjectName,
-          year: w.year,
-          section: w.section,
-          role: w.facultyRole,
-          lectureHours: L,
-          tutorialHours: T,
-          practicalHours: P,
-          totalHours: hoursForThisAssignment
-        });
+    const pipeline = [
+      { $match: workloadMatch },
+      {
+        $group: {
+          _id: '$empId',
+          currentLoad: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] },
+                { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+                { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
+              ]
+            }
+          },
+          assignments: {
+            $push: {
+              id: '$_id',
+              empId: '$empId',
+              subjectCode: '$subjectCode',
+              subjectName: '$subjectName',
+              year: '$year',
+              section: '$section',
+              role: '$facultyRole',
+              lectureHours: { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] },
+              tutorialHours: { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+              practicalHours: { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] },
+              totalHours: {
+                $add: [
+                  { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] },
+                  { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+                  { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
+                ]
+              }
+            }
+          }
+        }
       }
-      
-      const filteredAssignments = year ? assignments.filter(a => a.year === String(year)) : assignments;
+    ];
+
+    const aggregated = await Workload.aggregate(pipeline);
+    
+    const workloadMap = aggregated.reduce((acc, curr) => {
+      acc[curr._id] = curr;
+      return acc;
+    }, {});
+
+    const report = allFaculty.map(faculty => {
+      const capacity = Number(faculty.capacity || 18);
+      const data = workloadMap[faculty.empId] || { currentLoad: 0, assignments: [] };
+      const currentLoad = data.currentLoad;
       const remaining = capacity - currentLoad;
       const workloadPercentage = capacity > 0 ? ((currentLoad / capacity) * 100).toFixed(2) : 0;
-
-      report.push({
+      
+      return {
         empId: faculty.empId,
         name: faculty.name,
         designation: faculty.designation,
@@ -233,10 +247,10 @@ const getFacultyWorkloadReport = async (year = null) => {
         remainingHours: remaining,
         utilizationPercent: parseFloat(workloadPercentage),
         isOverAllocated: currentLoad > capacity,
-        assignmentCount: filteredAssignments.length,
-        assignments: filteredAssignments
-      });
-    }
+        assignmentCount: data.assignments.length,
+        assignments: data.assignments
+      };
+    });
 
     return report.sort((a, b) => b.utilizationPercent - a.utilizationPercent);
   } catch (err) {

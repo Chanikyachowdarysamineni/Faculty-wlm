@@ -28,14 +28,14 @@ export const checkAuthStatus = () => {
 export const logAuthDiagnostics = () => {
   const status = checkAuthStatus();
   console.group('[AUTH DIAGNOSTICS]');
-  console.log('Token present:', status.hasToken);
-  console.log('Token length:', status.tokenLength);
-  console.log('User present:', status.hasUser);
+
+
+
   if (status.userObj) {
-    console.log('User ID:', status.userObj.id);
-    console.log('User role:', status.userObj.role);
+
+
   }
-  console.log('Full status:', status);
+
   console.groupEnd();
 };
 

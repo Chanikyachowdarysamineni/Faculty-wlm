@@ -71,7 +71,6 @@ const YEAR_OPTIONS = [
 ];
 const COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
 const FACULTY_ROLES = ['Main Faculty', 'Supporting Faculty', 'TA'];
-const AUTO_REFRESH_MS = 60000;
 
 const normalizeCourseTypeKey = (courseType = '') => {
   const normalized = String(courseType || '').trim().toLowerCase();
@@ -100,7 +99,12 @@ const authHeader = () => authJsonHeaders();
 
 // ─────────────────────────────────────────────────
 const WorkloadPage = ({ submissions }) => {
-  const { faculty: contextFaculty, courses: contextCourses } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+
+  const YEARS = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
+  const YEAR_OPTIONS = [...(systemConfig?.years || []).filter(y => y.isActive), { value: '__other__', label: 'Others' }];
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
+  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value);
   
   const [workloads,    setWorkloads]    = useState([]);
   const [loading,      setLoading]      = useState(true);

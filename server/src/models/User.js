@@ -12,6 +12,8 @@ const userSchema = new mongoose.Schema(
     passwordHash:  { type: String, required: true },
     role:          { type: String, default: 'faculty' }, // Now references dynamic Role name
     forcePasswordChange: { type: Boolean, default: true },
+    // B-8 FIX: Increments on password change to invalidate older tokens
+    tokenVersion: { type: Number, default: 0 },
     // true only for the one faculty who can also access the admin dashboard
     canAccessAdmin: { type: Boolean, default: false },
     failedLoginAttempts: { type: Number, default: 0 },

@@ -143,6 +143,7 @@ router.post(
         name:           user.name,
         canAccessAdmin: user.canAccessAdmin || isAdminUser,
         forcePasswordChange: user.forcePasswordChange,
+        tokenVersion:   user.tokenVersion || 0, // B-8 FIX: Include tokenVersion
       };
       const token = signToken(payload);
 
@@ -246,12 +247,15 @@ router.post(
       // Verify and mark token as used
       await resetDoc.verifyAndUse();
 
-      // Update user password and clear locked status
+      // Update user password, clear locked status, and increment tokenVersion (B-8 FIX)
       const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
       const passwordHash = await bcrypt.hash(req.body.newPassword, BCRYPT_ROUNDS);
       await User.updateOne(
         { _id: user._id },
-        { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null } }
+        { 
+          $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null },
+          $inc: { tokenVersion: 1 } // B-8 FIX: invalidates active JWTs
+        }
       );
 
       logger.info('Password reset completed successfully', { empId: user.empId });
@@ -294,7 +298,10 @@ router.put(
       const passwordHash = await bcrypt.hash(req.body.newPassword, BCRYPT_ROUNDS);
       await User.updateOne(
         { _id: user._id }, 
-        { $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null, forcePasswordChange: false } }
+        { 
+          $set: { passwordHash, failedLoginAttempts: 0, lockUntil: null, forcePasswordChange: false },
+          $inc: { tokenVersion: 1 } // B-8 FIX: invalidates active JWTs
+        }
       );
       
       // Update token so the client knows forcePasswordChange is false now
@@ -308,6 +315,7 @@ router.put(
         name:           user.name,
         canAccessAdmin: user.canAccessAdmin || isAdminUser,
         forcePasswordChange: false,
+        tokenVersion:   (user.tokenVersion || 0) + 1, // B-8 FIX: Include updated version
       };
       const newToken = signToken(payload);
 

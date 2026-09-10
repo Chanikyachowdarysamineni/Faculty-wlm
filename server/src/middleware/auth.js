@@ -30,6 +30,17 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Session expired (logged out).' });
     }
 
+    // B-8 FIX: Verify tokenVersion to instantly invalidate old tokens on password change
+    // This requires a DB lookup, but it's necessary for secure token revocation
+    const user = await User.findOne({ empId: req.user.id }).select('tokenVersion');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+    const tokenVer = req.user.tokenVersion || 0;
+    if (tokenVer < (user.tokenVersion || 0)) {
+      return res.status(401).json({ success: false, message: 'Session expired due to password change.' });
+    }
+
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
@@ -60,10 +71,12 @@ const validateActiveSession = async (req, res, next) => {
 /**
  * Require the authenticated user to have the 'admin' role OR canAccessAdmin flag.
  * Must be used after requireAuth.
+ * Accepts both 'admin' (JWT payload) and 'Admin' (legacy DB value) case variants.
  */
 const requireAdmin = (req, res, next) => {
   const { role, canAccessAdmin } = req.user || {};
-  if (role === 'admin' || canAccessAdmin === true) {
+  const normalizedRole = String(role || '').toLowerCase();
+  if (normalizedRole === 'admin' || canAccessAdmin === true) {
     return next();
   }
   return res.status(403).json({ success: false, message: 'Admin access required.' });
@@ -75,7 +88,8 @@ const requireAdmin = (req, res, next) => {
  */
 const requireSelfOrAdmin = (req, res, next) => {
   const { role, id, canAccessAdmin } = req.user || {};
-  if (role === 'admin' || canAccessAdmin === true || id === req.params.empId) {
+  const normalizedRole = String(role || '').toLowerCase();
+  if (normalizedRole === 'admin' || canAccessAdmin === true || id === req.params.empId) {
     return next();
   }
   return res.status(403).json({ success: false, message: 'Access denied.' });

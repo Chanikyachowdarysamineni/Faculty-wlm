@@ -58,15 +58,25 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
   ];
 
   if (sort) pipeline.push({ $sort: sort });
-  if (skip) pipeline.push({ $skip: skip });
-  if (limit) pipeline.push({ $limit: limit });
+  if (skip !== undefined && skip !== null) pipeline.push({ $skip: Number(skip) });
+  if (limit !== undefined && limit !== null) pipeline.push({ $limit: Number(limit) });
 
   pipeline.push(
     {
+      // B-1/M-8 FIX: Use pipeline-based $lookup to exclude soft-deleted and cancelled
+      // workloads from faculty hour calculations. Simple $lookup joins all docs.
       $lookup: {
         from: 'workloads',
-        localField: 'empId',
-        foreignField: 'empId',
+        let: { empId: '$empId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$$empId', '$empId'] },
+              isDeleted: { $ne: true },
+              allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+            }
+          }
+        ],
         as: 'workloads'
       }
     },
@@ -322,16 +332,18 @@ router.put(
         workingHours, joiningDate, address, gender, dob,
         profilePicture, researchArea, specialization,
       } = req.body;
-      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+      const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
       
       const allowedUpdates = {};
       if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
-      if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
+      // S-8 FIX: designation is admin-only — a non-admin cannot forge their own title
+      // and have it propagate to all workload records via Workload.updateMany
       if (mobile !== undefined) allowedUpdates.mobile = String(mobile).trim();
       if (email !== undefined && String(email).trim()) allowedUpdates.email = String(email).trim();
       
       if (isAdmin) {
+        if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
         if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
         if (slNo !== undefined) allowedUpdates.slNo = Number(slNo);
         if (capacity !== undefined) allowedUpdates.capacity = Number(capacity);

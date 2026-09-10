@@ -5,12 +5,7 @@
 
 const { mongoose } = require('../db');
 
-const normalizeCourseTypeKey = (courseType = '') => {
-  const normalized = String(courseType || '').trim().toLowerCase();
-  if (normalized === 'de' || normalized === 'department elective') return 'DE';
-  if (normalized === 'mandatory') return 'MANDATORY';
-  return 'OTHER';
-};
+const { normalizeCourseTypeKey } = require('../utils/courseUtils');
 
 const workloadSchema = new mongoose.Schema(
   {
@@ -35,6 +30,13 @@ const workloadSchema = new mongoose.Schema(
     program:       { type: String, default: '' },
     C:             { type: Number, default: 0 },          // credits
 
+    // ── First-Year Specific Fields ───────────────────────────────────────
+    academicYear:  { type: String, default: '2023-2024' },
+    branch:        { type: String, default: '' },
+    sections:      { type: [String], default: [] },
+    workloadText:  { type: String, default: '' },
+    cluster:       { type: String, default: '' },
+
     // Faculty-level denormalized data
     designation:   { type: String, default: '' },
     mobile:        { type: String, default: '' },
@@ -43,19 +45,18 @@ const workloadSchema = new mongoose.Schema(
     // Role of this faculty member for this course+section
     facultyRole: {
       type: String,
-      enum: ['Main Faculty', 'Supporting Faculty', 'TA'],
       default: 'Main Faculty',
     },
 
     // ── Hour fields ───────────────────────────────────────────────────────
     // fixedL/T/P = values from Course at time of assignment (immutable copy)
-    fixedL: { type: Number, default: 0 },
-    fixedT: { type: Number, default: 0 },
-    fixedP: { type: Number, default: 0 },
+    fixedL: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    fixedT: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    fixedP: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
     // manualL/T/P = admin-overridden values (used for capacity calculation)
-    manualL: { type: Number, default: 0 },
-    manualT: { type: Number, default: 0 },
-    manualP: { type: Number, default: 0 },
+    manualL: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    manualT: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    manualP: { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
 
     // Whether this workload is visible to the faculty member
     isVisible: { type: Boolean, default: false },
@@ -74,7 +75,7 @@ const workloadSchema = new mongoose.Schema(
     deletedAt:  { type: Date,    default: null },
     updatedBy:  { type: String,  default: '' },
   },
-  { timestamps: true, collection: 'workloads' }
+  { timestamps: true, collection: 'workloads', autoIndex: false }
 );
 
 
@@ -90,8 +91,18 @@ workloadSchema.index(
   { courseId: 1, year: 1, section: 1, facultyRole: 1 },
   {
     unique: true,
-    partialFilterExpression: { facultyRole: 'TA' },
+    partialFilterExpression: { facultyRole: 'TA', year: { $in: ['II', 'III', 'IV'] } },
     name: 'uniq_ta_per_course_section_year',
+  }
+);
+
+// Only one Main Faculty assignment per course + year + section.
+workloadSchema.index(
+  { courseId: 1, year: 1, section: 1, facultyRole: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { facultyRole: 'Main Faculty', year: { $in: ['II', 'III', 'IV'] } },
+    name: 'uniq_main_per_course_section_year',
   }
 );
 

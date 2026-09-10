@@ -27,6 +27,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, validatePagination } = require('../middleware/validators');
+const { normalizeCourseTypeKey } = require('../utils/courseUtils');
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const wsHandler = require('../websocket');
@@ -58,12 +59,7 @@ const normalizeYear = (year) => {
 const isDuplicateKeyError = (err) =>
   !!err && (err.code === 11000 || err.code === 11001);
 
-const normalizeCourseTypeKey = (courseType = '') => {
-  const normalized = String(courseType || '').trim().toLowerCase();
-  if (normalized === 'de' || normalized === 'department elective') return 'DE';
-  if (normalized === 'mandatory') return 'MANDATORY';
-  return 'OTHER';
-};
+// L-3 FIX: normalizeCourseTypeKey removed (now imported from courseUtils)
 
 const isRestrictedDeYear = (year = '') => ['I', 'II', 'III'].includes(String(year || '').trim());
 
@@ -444,7 +440,20 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
       return sendError(res, 'Both year and section are required.', 400);
     }
 
-    const filter = { year, section };
+    // B-6 FIX: Exclude soft-deleted and cancelled/unallocated workloads
+    const filter = {
+      year,
+      section,
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+    };
+
+    // M-11 FIX: Restrict non-admin faculty to only view their own workloads
+    const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
+    if (!isAdmin) {
+      filter.empId = req.user.id;
+    }
+
     const docs = await Workload.find(filter)
       .select('empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP allocationRow createdAt')
       .sort({ facultyRole: 1, subjectCode: 1, createdAt: -1 })
@@ -514,6 +523,15 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
           subjectCode: w.subjectCode,
           subjectName: w.subjectName,
         };
+      } else {
+        // M-2 FIX: Log when silent deduplication occurs to surface data anomalies
+        logger.warn('Duplicate Main Faculty assignment found', {
+          courseId: w.courseId,
+          section: w.section,
+          year: w.year,
+          keptEmpId: map[key].empId,
+          droppedEmpId: w.empId
+        });
       }
     }
     logger.info('Main faculty mapping retrieved', { userId: req.user.id, year: normalizedYear, total: Object.keys(map).length });
@@ -657,6 +675,26 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       { new: true }
     ).lean();
 
+    // S-6 FIX: Sync updated hours to CourseAllocation for Main Faculty
+    if (result && String(result.facultyRole || 'Main Faculty') === 'Main Faculty') {
+      try {
+        await syncMainFacultyToAllocation({
+          courseId: result.courseId,
+          year: result.year,
+          section: result.section,
+          faculty: {
+            empId: result.empId,
+            empName: result.empName,
+            designation: result.designation,
+          },
+        });
+        logger.info('Synced allocation after period update', { id, empId: result.empId });
+      } catch (syncErr) {
+        logger.error('Failed to sync allocation after period update', { id, empId: result.empId, error: syncErr.message });
+        // Non-fatal — log but do not fail the request
+      }
+    }
+
     await logAuditEvent({
       req,
       action: 'workload.periods.update',
@@ -664,9 +702,9 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       entityId: id,
       metadata: {
         empId: workload.empId,
-        previousL: workload.manualL || workload.fixedL,
-        previousT: workload.manualT || workload.fixedT,
-        previousP: workload.manualP || workload.fixedP,
+        previousL: workload.manualL !== undefined && workload.manualL !== null ? workload.manualL : workload.fixedL,
+        previousT: workload.manualT !== undefined && workload.manualT !== null ? workload.manualT : workload.fixedT,
+        previousP: workload.manualP !== undefined && workload.manualP !== null ? workload.manualP : workload.fixedP,
         newL,
         newT,
         newP,
@@ -687,6 +725,9 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       excessHours,
       userId: req.user.id
     });
+
+    // S-6 FIX: Recalculate capacity after period change
+    await recalculateCapacity(workload.empId, { updatedBy: req.user.empId });
 
     sendSuccess(res, {
       ...toClient(result),
@@ -1532,6 +1573,8 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
 });
 
 // DELETE /api/workloads/:id  (admin)
+// S-7 FIX: Soft-delete only — never physically destroy workload records.
+// Sets isDeleted=true and deletedAt timestamp to preserve audit trail.
 router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -1542,11 +1585,26 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
       return sendValidationError(res, errors.array());
     }
 
-    const doc = await Workload.findByIdAndDelete(req.params.id, { session });
+    // Find the record first (do not delete yet)
+    const doc = await Workload.findById(req.params.id).session(session).lean();
     if (!doc) {
       logger.warn('Workload entry not found for deletion', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
     }
+
+    // Already soft-deleted — idempotent
+    if (doc.isDeleted) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendSuccess(res, { message: 'Workload entry already deleted.' }, 200);
+    }
+
+    // S-7 FIX: Soft-delete instead of hard delete
+    await Workload.findByIdAndUpdate(
+      req.params.id,
+      { $set: { isDeleted: true, deletedAt: new Date(), allocationStatus: 'CANCELLED' } },
+      { session }
+    );
 
     if (String(doc.facultyRole || 'Main Faculty') === 'Main Faculty') {
       await clearMainFacultyFromAllocation({
@@ -1566,8 +1624,8 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
       });
     }
 
-    await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
-    logger.info('Workload deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
+    await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, softDelete: true } });
+    logger.info('Workload soft-deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
 
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit (outside transaction scope)

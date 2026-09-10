@@ -54,6 +54,9 @@ const auditLogsRoutes   = require('./routes/auditLogs');
 const facultyPreferencesRoutes = require('./routes/faculty-preferences');
 const facultyCapacityRoutes = require('./routes/facultyCapacity');
 const designationsRoutes = require('./routes/designations');
+const sectionsRoutes = require('./routes/sections');
+const firstYearRoutes = require('./routes/firstYear');
+const configRoutes = require('./routes/config');
 
 // ── Import WebSocket handler ────────────────────────────────
 const WebSocketHandler  = require('./websocket');
@@ -64,10 +67,14 @@ const Setting     = require('./models/Setting');
 const Workload    = require('./models/Workload');
 const Course      = require('./models/Course');
 const CourseAllocation = require('./models/CourseAllocation');
+const { normalizeCourseTypeKey } = require('./utils/courseUtils'); // L-3 FIX: import instead of duplicate
 const AuditLog = require('./models/AuditLog');
 const Counter = require('./models/Counter');
 const PasswordResetToken = require('./models/PasswordResetToken');
+const TokenBlacklist = require('./models/TokenBlacklist');
+const SystemConfig = require('./models/SystemConfig');
 const { syncAuthAndRBAC } = require('./utils/authSync');
+const { refreshConfig } = require('./utils/configManager');
 
 // L-2 FIX: Align Year IV sections to include 1-19 AND 51-59 (for Computing Ethics 22CS310)
 // This must match the definition in workloads.js and allocations.js
@@ -81,12 +88,7 @@ const DEFAULT_SECTIONS = {
   ],
 };
 
-const normalizeCourseTypeKey = (courseType = '') => {
-  const normalized = String(courseType || '').trim().toLowerCase();
-  if (normalized === 'de' || normalized === 'department elective') return 'DE';
-  if (normalized === 'mandatory') return 'MANDATORY';
-  return 'OTHER';
-};
+// L-3 FIX: normalizeCourseTypeKey removed (now imported from courseUtils)
 
 const backfillWorkloadCourseTypeKeys = async () => {
   const docs = await Workload.find(
@@ -173,6 +175,9 @@ const baselineAllowedOrigins = [
 const allowedOrigins = Array.from(new Set([...configuredOrigins, ...baselineAllowedOrigins]));
 
 // ── Helmet Security Middleware ────────────────────────────
+// NOTE: trust proxy MUST be set before CORS so X-Forwarded-For is read correctly
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -204,7 +209,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.set('trust proxy', 1);
+// NOTE: trust proxy is set above (before CORS) — do not set it again here
 
 // ── HTTPS Enforcement Middleware (Production) ──────────────────────
 // Redirect HTTP to HTTPS and enforce secure headers — skipped for localhost
@@ -295,7 +300,11 @@ app.use(compression());
 // ── API routes ─────────────────────────────────────────────
 app.use('/deva/auth',                  authRoutes);
 app.use('/deva/designations',          designationsRoutes);
-app.use('/deva/faculty',               facultyRoutes);
+// B-10 FIX: facultyCapacityRoutes uses /:empId/capacity sub-routes so must be mounted
+// under /deva/faculty BEFORE facultyRoutes to avoid /:empId wildcard shadowing.
+// Both are mounted on /deva/faculty — Express processes in registration order.
+app.use('/deva/faculty',               facultyCapacityRoutes); // capacity sub-routes first
+app.use('/deva/faculty',               facultyRoutes);         // general faculty routes
 app.use('/deva/courses',               coursesRoutes);
 app.use('/deva/submissions',           submissionsRoutes);
 app.use('/deva/workloads',             workloadsRoutes);
@@ -305,7 +314,9 @@ app.use('/deva/stats',                 statsRoutes);
 app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/audit-logs',            auditLogsRoutes);
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
-app.use('/deva/faculty',               facultyCapacityRoutes);
+// NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
+app.use('/deva/first-year/assignments',firstYearRoutes);
+app.use('/deva/config', configRoutes);
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything
@@ -375,10 +386,16 @@ process.on('uncaughtException', (err) => {
         return;
       }
 
-      // Old DE index (no facultyRole filter) conflicts with new Main-Faculty-only index.
       if (isIndexOptionsConflict && model?.modelName === 'Workload') {
         await dropIndexSafe(model, 'uniq_de_per_section_upto_third_year');
+        await dropIndexSafe(model, 'uniq_main_per_course_section_year');
+        await dropIndexSafe(model, 'uniq_ta_per_course_section_year');
         await model.syncIndexes();
+        return;
+      }
+
+      if (Number(err?.code) === 11000) {
+        console.warn(`⚠️  Skipping index build for ${model?.modelName} due to existing duplicate keys: ${errMsg}`);
         return;
       }
 

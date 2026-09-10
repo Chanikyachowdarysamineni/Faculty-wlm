@@ -36,10 +36,10 @@ const courseAllocationSchema = new mongoose.Schema(
     program:        { type: String, default: '' },
     year:           { type: String, required: true },
     section:        { type: String, required: true },
-    fixedL:         { type: Number, default: 0 },
-    fixedT:         { type: Number, default: 0 },
-    fixedP:         { type: Number, default: 0 },
-    C:              { type: Number, default: 0 },
+    fixedL:         { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    fixedT:         { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    fixedP:         { type: Number, default: 0, min: 0, max: 100, validate: { validator: Number.isInteger } },
+    C:              { type: Number, default: 0, min: 0, max: 50, validate: { validator: Number.isInteger } },
 
     // Lecture: array (index 0 = main faculty; mirrors lectureSlot for backward compat)
     lectureSlots:   { type: [facultySlotSchema], default: () => [] },

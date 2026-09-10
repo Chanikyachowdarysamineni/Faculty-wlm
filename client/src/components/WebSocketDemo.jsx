@@ -20,7 +20,7 @@ function WebSocketDemo() {
   const { isConnected, send, disconnect, connect } = useWebSocket({
     autoConnect: true,
     onMessage: (data) => {
-      console.log('📨 Message received:', data);
+
       setMessages((prev) => [
         ...prev,
         {
@@ -31,7 +31,7 @@ function WebSocketDemo() {
       ]);
     },
     onConnect: () => {
-      console.log('✓ WebSocket connected');
+
       setMessages((prev) => [
         ...prev,
         {
@@ -42,7 +42,7 @@ function WebSocketDemo() {
       ]);
     },
     onDisconnect: () => {
-      console.log('✗ WebSocket disconnected');
+
       setMessages((prev) => [
         ...prev,
         {

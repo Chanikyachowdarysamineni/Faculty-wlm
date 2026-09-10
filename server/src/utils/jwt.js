@@ -31,7 +31,7 @@ const EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
  * @returns {string} signed token
  */
 const signToken = (payload) =>
-  jwt.sign(payload, SECRET, { expiresIn: EXPIRES });
+  jwt.sign(payload, SECRET, { expiresIn: EXPIRES, algorithm: 'HS256' });
 
 /**
  * Verify and decode a JWT.
@@ -40,6 +40,6 @@ const signToken = (payload) =>
  * @throws {JsonWebTokenError} if invalid
  */
 const verifyToken = (token) =>
-  jwt.verify(token, SECRET);
+  jwt.verify(token, SECRET, { algorithms: ['HS256'] });
 
 module.exports = { signToken, verifyToken };

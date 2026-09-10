@@ -57,7 +57,7 @@ const FacultyPage = ({ isAdmin = false }) => {
         const deduplicated = deduplicateList(response.data);
         setList(deduplicated);
         setFaculty(deduplicated);
-        console.log('[FacultyPage] Fresh data fetched from server - ' + deduplicated.length + ' unique records');
+
       } else {
         console.warn('[FacultyPage] Refetch returned invalid data:', response);
       }
@@ -391,7 +391,7 @@ const FacultyPage = ({ isAdmin = false }) => {
     };
     try {
       setSyncing(true);
-      console.log('[FacultyPage] Saving faculty:', { isEdit: !!editTarget, payload });
+
       const res = await fetch(
         editTarget ? `${API}/deva/faculty/${encodeURIComponent(editTarget.empId)}` : `${API}/deva/faculty`,
         {
@@ -401,7 +401,7 @@ const FacultyPage = ({ isAdmin = false }) => {
         }
       );
       const data = await res.json();
-      console.log('[FacultyPage] Response:', { status: res.status, ok: res.ok, success: data?.success, message: data?.message, receivedData: !!data?.data });
+
       if (!res.ok || !data?.success) {
         console.error('[FacultyPage] Save failed:', { status: res.status, message: data?.message });
         const errMsg = data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Could not save faculty record.');
@@ -432,13 +432,13 @@ const FacultyPage = ({ isAdmin = false }) => {
   const handleDelete = async () => {
     try {
       setSyncing(true);
-      console.log('[FacultyPage] Deleting faculty:', { empId: deleteConfirm.empId });
+
       const res = await fetch(`${API}/deva/faculty/${encodeURIComponent(deleteConfirm.empId)}`, {
         method: 'DELETE',
         headers: authHeaders(),
       });
       const data = await res.json();
-      console.log('[FacultyPage] Delete response:', { status: res.status, ok: res.ok, success: data?.success, message: data?.message });
+
       if (!res.ok || !data?.success) {
         console.error('[FacultyPage] Delete failed:', { status: res.status, message: data?.message });
         showToast(data?.message || 'Could not delete faculty record.');
