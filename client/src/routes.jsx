@@ -22,7 +22,6 @@ const AllocationPage = lazy(() => import('./AllocationPage'));
 const SectionManagementPage = lazy(() => import('./SectionManagementPage'));
 const ProfilePage = lazy(() => import('./ProfilePage'));
 const MySubmissionsPage = lazy(() => import('./MySubmissionsPage'));
-const ExtraFacultyPage = lazy(() => import('./ExtraFacultyPage'));
 const AuditLogPage = lazy(() => import('./AuditLogPage'));
 const FirstYearPage = lazy(() => import('./FirstYearPage'));
 const SystemSettingsPage = lazy(() => import('./SystemSettingsPage'));
@@ -160,11 +159,6 @@ export const protectedRoutes = [
     path: '/submissions',
     element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading submissions..." />}><MySubmissionsPage /></Suspense></ProtectedRoute>,
     title: 'Submissions'
-  },
-  {
-    path: '/extra-faculty',
-    element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading extra faculty..." />}><ExtraFacultyPage /></Suspense></ProtectedRoute>,
-    title: 'Extra Faculty'
   },
   {
     path: '/first-year',

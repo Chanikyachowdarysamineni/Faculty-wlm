@@ -17,6 +17,8 @@ import {
   hasFacultySubmittedPreferences,
 } from './utils/facultyPreferencesApi';
 
+const AUTO_REFRESH_MS = 60000;
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * WORKLOAD PAGE - COURSE SELECTION & AUTO-YEAR FETCHING
@@ -101,10 +103,14 @@ const authHeader = () => authJsonHeaders();
 const WorkloadPage = ({ submissions }) => {
   const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
 
-  const YEARS = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
-  const YEAR_OPTIONS = [...(systemConfig?.years || []).filter(y => y.isActive), { value: '__other__', label: 'Others' }];
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
-  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value);
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
+  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const YEAR_OPTIONS = activeYearsRaw.length > 0 
+    ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }] 
+    : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
+  
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'DE', 'Other'];
+  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value).length > 0 ? (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value) : ['Main Faculty', 'Supporting Faculty', 'TA'];
   
   const [workloads,    setWorkloads]    = useState([]);
   const [loading,      setLoading]      = useState(true);

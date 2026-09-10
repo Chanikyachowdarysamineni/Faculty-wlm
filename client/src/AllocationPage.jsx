@@ -223,7 +223,8 @@ const CellPicker = ({
 const AllocationPage = ({ isAdmin = true }) => {
   const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
 
-  const YEARS_BTECH = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
