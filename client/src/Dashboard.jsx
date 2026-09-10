@@ -11,6 +11,7 @@ import MyWorkloadPage       from './MyWorkloadPage';
 import ProfilePage          from './ProfilePage';
 import AuditLogPage         from './AuditLogPage';
 import OverloadedFacultyModal from './OverloadedFacultyModal';
+import FirstYearPage        from './FirstYearPage';
 import API                  from './config';
 import { fetchAllPages, fetchJsonWithRetry }    from './utils/apiFetchAll';
 import { fetchSectionsConfig } from './utils/sectionsApi';
@@ -238,7 +239,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     return headers;
   }, []);
 
-  const { setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig } = useSharedData();
+  const { setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig } = useSharedData();
   const [dashboardData, setDashboardData] = useState({
     loading: false,
     error: '',
@@ -514,14 +515,16 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }
 
     try {
-      const [fReq, cReq] = await Promise.allSettled([
+      const [fReq, cReq, configReq] = await Promise.allSettled([
         fetchAllPages('/deva/faculty', {}, { headers }),
         fetchAllPages('/deva/courses', {}, { headers }),
+        fetchJsonWithRetry(`${API}/deva/config`, { headers })
       ]);
 
       const facultyOk = fReq.status === 'fulfilled' && fReq.value?.success;
       const coursesOk = cReq.status === 'fulfilled' && cReq.value?.success;
-      const hasAnySuccess = facultyOk || coursesOk;
+      const configOk = configReq.status === 'fulfilled' && configReq.value?.success;
+      const hasAnySuccess = facultyOk || coursesOk || configOk;
 
       setMasterData(prev => ({
         faculty: facultyOk ? (Array.isArray(fReq.value.data) ? fReq.value.data : []) : prev.faculty,
@@ -531,6 +534,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       // Also update shared context
       if (facultyOk) setFaculty(Array.isArray(fReq.value.data) ? fReq.value.data : []);
       if (coursesOk) setCourses(Array.isArray(cReq.value.data) ? cReq.value.data : []);
+      if (configOk) setSystemConfig(configReq.value.data || {});
 
       if (hasAnySuccess) {
         setDashboardLastSyncedAt(new Date());
@@ -1169,6 +1173,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
        activeNav === 'systemconfig'   ? <SystemSettingsPage /> :
        activeNav === 'workload'       ? <WorkloadPage submissions={submissions} /> :
        activeNav === 'allocation'     ? <AllocationPage isAdmin={isAdmin} /> :
+       activeNav === 'firstyear'      ? <FirstYearPage /> :
        activeNav === 'myworkload'     ? <MyWorkloadPage currentUser={user} /> :
        activeNav === 'facultyform'    ? (
          <FacultyFormPage
