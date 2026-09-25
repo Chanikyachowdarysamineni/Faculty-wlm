@@ -55,7 +55,6 @@ const facultyPreferencesRoutes = require('./routes/faculty-preferences');
 const facultyCapacityRoutes = require('./routes/facultyCapacity');
 const designationsRoutes = require('./routes/designations');
 const sectionsRoutes = require('./routes/sections');
-const firstYearRoutes = require('./routes/firstYear');
 const configRoutes = require('./routes/config');
 
 // ── Import WebSocket handler ────────────────────────────────
@@ -315,7 +314,6 @@ app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/audit-logs',            auditLogsRoutes);
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 // NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
-app.use('/deva/first-year/assignments',firstYearRoutes);
 app.use('/deva/config', configRoutes);
 
 // ── Serve React production build ───────────────────────────

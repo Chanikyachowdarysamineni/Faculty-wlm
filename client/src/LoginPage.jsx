@@ -45,16 +45,11 @@ const LoginPage = ({ onLogin }) => {
       if (!data.success) {
         setError(data.message || 'Login failed.');
       } else if (data.data && data.data.token && data.data.user) {
-        if (data.data.user.forcePasswordChange) {
-           setTempAuthData(data.data);
-           setShowForceChange(true);
-        } else {
-           // Successfully logged in - store token and user info
-           localStorage.setItem('wlm_token', data.data.token);
-           localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
+        // Successfully logged in - store token and user info
+        localStorage.setItem('wlm_token', data.data.token);
+        localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
 
-           onLogin(data.data.user);
-        }
+        onLogin(data.data.user);
       } else {
         setError('Invalid login response. Please try again.');
       }

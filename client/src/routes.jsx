@@ -23,7 +23,6 @@ const SectionManagementPage = lazy(() => import('./SectionManagementPage'));
 const ProfilePage = lazy(() => import('./ProfilePage'));
 const MySubmissionsPage = lazy(() => import('./MySubmissionsPage'));
 const AuditLogPage = lazy(() => import('./AuditLogPage'));
-const FirstYearPage = lazy(() => import('./FirstYearPage'));
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -157,11 +156,6 @@ export const protectedRoutes = [
     path: '/submissions',
     element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading submissions..." />}><MySubmissionsPage /></Suspense></ProtectedRoute>,
     title: 'Submissions'
-  },
-  {
-    path: '/first-year',
-    element: <ProtectedRoute roles={['admin']}><Suspense fallback={<LoadingIndicator message="Loading 1st Year..." />}><FirstYearPage /></Suspense></ProtectedRoute>,
-    title: '1st Year Courses'
   },
   {
     path: '/audit-logs',
