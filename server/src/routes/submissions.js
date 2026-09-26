@@ -18,7 +18,6 @@ const Course      = require('../models/Course');
 const Faculty     = require('../models/Faculty');
 const Setting     = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
-const { logAuditEvent } = require('../utils/audit');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound, sendForbidden } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -164,7 +163,6 @@ router.put(
         return sendNotFound(res, 'No submission found to update.');
       }
 
-      await logAuditEvent({ req, action: 'submission.update', entity: 'submission', entityId: String(doc._id), metadata: { empId: doc.empId, prefCount: prefs.length } });
       logger.info('Submission updated', { empId: req.params.empId, prefCount: prefs.length, userId: req.user.id });
 
       sendSuccess(res, toClient(doc), 200);
@@ -236,7 +234,6 @@ router.post(
         prefs,
       });
 
-      await logAuditEvent({ req, action: 'submission.create', entity: 'submission', entityId: String(doc._id), metadata: { empId: doc.empId, prefCount: prefs.length } });
       logger.info('Submission created', { empId: doc.empId, prefCount: prefs.length, userId: req.user.id });
 
       sendCreated(res, toClient(doc));
@@ -291,12 +288,6 @@ router.get('/export', requireAuth, requireAdmin, async (req, res, next) => {
 
     const exportResult = await exportSubmissions(submissions, courses, format);
 
-    await logAuditEvent({ 
-      req, 
-      action: 'submission.export', 
-      entity: 'submission', 
-      metadata: { format, totalRecords: submissions.length } 
-    });
     logger.info('Submissions exported', { format, total: submissions.length, userId: req.user.id });
 
     res.setHeader('Content-Type', exportResult.contentType);
@@ -321,7 +312,6 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       logger.warn('Submission not found for deletion', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Submission not found.');
     }
-    await logAuditEvent({ req, action: 'submission.delete', entity: 'submission', entityId: String(req.params.id), metadata: { empId: doc.empId } });
     logger.info('Submission deleted', { id: req.params.id, empId: doc.empId, userId: req.user.id });
     sendSuccess(res, { message: 'Submission deleted.' }, 200);
   } catch (err) { 

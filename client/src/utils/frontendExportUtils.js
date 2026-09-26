@@ -173,51 +173,7 @@ export const exportAllocationsListExcel = (allocationsList) => {
   });
 };
 
-/**
- * Export Audit Logs
- */
-export const exportAuditLogs = (auditLogs) => {
-  const columns = [
-    { key: 'userId', header: 'User ID' },
-    { key: 'action', header: 'Action' },
-    { key: 'module', header: 'Module' },
-    { key: 'details', header: 'Details' },
-    { 
-      key: 'timestamp',
-      header: 'Timestamp',
-      value: (row) => new Date(row.timestamp).toLocaleString()
-    },
-    { key: 'ipAddress', header: 'IP Address' },
-  ];
 
-  exportAsCSV({
-    fileName: `audit-logs-${new Date().toISOString().split('T')[0]}.csv`,
-    columns,
-    rows: auditLogs,
-  });
-};
-
-export const exportAuditLogsExcel = (auditLogs) => {
-  const columns = [
-    { key: 'userId', header: 'User ID' },
-    { key: 'action', header: 'Action' },
-    { key: 'module', header: 'Module' },
-    { key: 'details', header: 'Details' },
-    { 
-      key: 'timestamp',
-      header: 'Timestamp',
-      value: (row) => new Date(row.timestamp).toLocaleString()
-    },
-    { key: 'ipAddress', header: 'IP Address' },
-  ];
-
-  exportAsExcel({
-    fileName: `audit-logs-${new Date().toISOString().split('T')[0]}.xlsx`,
-    columns,
-    rows: auditLogs,
-    sheetName: 'Audit Logs',
-  });
-};
 
 /**
  * Print utility - for printing any table data

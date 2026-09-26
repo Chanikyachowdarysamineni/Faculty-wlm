@@ -125,15 +125,13 @@ const FacultyPage = ({ isAdmin = false }) => {
     dragSrcIdx.current = null;
 
     try {
-      await Promise.all(
-        reordered.map((f) =>
-          fetch(`${API}/deva/faculty/${encodeURIComponent(f.empId)}`, {
-            method: 'PUT',
-            headers: authHeaders(),
-            body: JSON.stringify({ slNo: f.slNo }),
-          })
-        )
-      );
+      const updates = reordered.map(f => ({ empId: f.empId, slNo: f.slNo }));
+      const response = await fetch(`${API}/deva/faculty/bulk-update`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ updates }),
+      });
+      if (!response.ok) throw new Error('Bulk update failed');
       showToast('Order saved successfully.');
     } catch {
       showToast('Order updated locally but could not save to server.');
@@ -164,21 +162,20 @@ const FacultyPage = ({ isAdmin = false }) => {
     
     setSyncing(true);
     try {
-      await Promise.all(
-        reordered.map((f) =>
-          fetch(`${API}/deva/faculty/${encodeURIComponent(f.empId)}`, {
-            method: 'PUT',
-            headers: authHeaders(),
-            body: JSON.stringify({ slNo: f.slNo })
-          })
-        )
-      );
+      const updates = reordered.map(f => ({ empId: f.empId, slNo: f.slNo }));
+      const response = await fetch(`${API}/deva/faculty/bulk-update`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ updates })
+      });
+      if (!response.ok) throw new Error('Bulk update failed');
       showToast('✅ List reordered by designation!');
     } catch (err) {
       console.error('Sort error:', err);
       showToast('❌ Failed to save new order.');
+    } finally {
+      setSyncing(false);
     }
-    setSyncing(false);
   };
 
   const handleDragEnd = () => {
@@ -615,6 +612,7 @@ const FacultyPage = ({ isAdmin = false }) => {
           <thead>
             <tr>
               {isDragMode && <th className="fp-th-grip" title="Drag to reorder">⠿</th>}
+              <th>S.No.</th>
               <th>Emp ID</th>
               <th>Name of the Faculty</th>
               <th>Designation</th>
@@ -632,7 +630,7 @@ const FacultyPage = ({ isAdmin = false }) => {
           </thead>
           <tbody>
             {(restoreMode ? deletedList : (isDragMode ? mergedList : filtered)).length === 0 ? (
-              <tr><td colSpan={isDragMode ? 12 : 13} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
+              <tr><td colSpan={isDragMode ? 13 : 14} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
             ) : (
               (isDragMode ? mergedList : filtered).map((f, i) => (
                 <tr
@@ -653,6 +651,7 @@ const FacultyPage = ({ isAdmin = false }) => {
                       <span className="fp-grip-icon" title="Drag to reorder">⠿</span>
                     </td>
                   )}
+                  <td>{i + 1}</td>
                   <td className="fp-td-empid">{f.empId}</td>
                   <td className="fp-td-name">{f.name}</td>
                   <td>

@@ -6,8 +6,7 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const Faculty = require('../models/Faculty');
-const AuditLog = require('../models/AuditLog');
-const { recalculateCapacity, logCapacityChange } = require('../utils/capacityUtils');
+const { recalculateCapacity } = require('../utils/capacityUtils');
 
 // Helper to send errors
 const sendError = (res, message, status = 400) => {
@@ -73,17 +72,7 @@ router.put(
       // Recalculate
       const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
-      await logCapacityChange({
-        empId,
-        adminId: adminEmpId,
-        oldCapacity,
-        newCapacity: capacity,
-        action: 'UPDATE_CAPACITY',
-        reason: reason || 'Manual Admin Update',
-        ip: req.ip,
-        userAgent: req.get('user-agent'),
-        session
-      });
+
 
       await session.commitTransaction();
       res.json({ success: true, data: updatedFaculty });
@@ -116,17 +105,7 @@ router.post('/:empId/reset-capacity', requireAuth, requireAdmin, async (req, res
 
     const updatedFaculty = await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
-    await logCapacityChange({
-      empId,
-      adminId: adminEmpId,
-      oldCapacity,
-      newCapacity: 18,
-      action: 'RESET_CAPACITY',
-      reason: 'Admin Reset',
-      ip: req.ip,
-      userAgent: req.get('user-agent'),
-      session
-    });
+
 
     await session.commitTransaction();
     res.json({ success: true, data: updatedFaculty });
@@ -174,17 +153,7 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
 
       await recalculateCapacity(empId, { session, updatedBy: adminEmpId });
 
-      await logCapacityChange({
-        empId,
-        adminId: adminEmpId,
-        oldCapacity,
-        newCapacity: faculty.capacity,
-        action: 'BULK_UPDATE_CAPACITY',
-        reason: 'Bulk Import',
-        ip: req.ip,
-        userAgent: req.get('user-agent'),
-        session
-      });
+
       successCount++;
     }
 
@@ -198,16 +167,6 @@ router.post('/bulk-capacity', requireAuth, requireAdmin, async (req, res, next) 
   }
 });
 
-// 5. GET Capacity History
-router.get('/:empId/capacity-history', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const logs = await AuditLog.find({ entity: 'faculty_capacity', entityId: req.params.empId })
-      .sort({ createdAt: -1 })
-      .lean();
-    res.json({ success: true, data: logs });
-  } catch (err) {
-    next(err);
-  }
-});
+
 
 module.exports = router;

@@ -76,6 +76,7 @@ const MyWorkloadPage = ({ currentUser }) => {
   const designation = workloads[0]?.designation || '';
   const target = 18;
   const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
+  const uniqueCoursesCount = new Set(workloads.map(w => w.subjectCode)).size;
 
   const grouped = workloads.reduce((acc, w) => {
     const key = w.year || 'Other';
@@ -140,7 +141,7 @@ const MyWorkloadPage = ({ currentUser }) => {
           {/* ── Summary cards ── */}
           <div className="mwl-summary">
             <div className="mwl-sum-card">
-              <span className="mwl-sum-val mwl-val-total">{workloads.length}</span>
+              <span className="mwl-sum-val mwl-val-total">{uniqueCoursesCount}</span>
               <span className="mwl-sum-label">Courses Assigned</span>
             </div>
             {[
@@ -180,7 +181,9 @@ const MyWorkloadPage = ({ currentUser }) => {
           )}
 
           {/* ── Per-year groups ── */}
-          {sortedYears.map(year => (
+          {sortedYears.map(year => {
+            const uniqueCoursesInYear = new Set(grouped[year].map(w => w.subjectCode)).size;
+            return (
             <div key={year} className="mwl-year-group">
               <div className="mwl-year-heading">
                 <span
@@ -193,7 +196,7 @@ const MyWorkloadPage = ({ currentUser }) => {
                 >
                   {`Year ${year}`}
                 </span>
-                <span className="mwl-year-count">{grouped[year].length} course{grouped[year].length !== 1 ? 's' : ''}</span>
+                <span className="mwl-year-count">{uniqueCoursesInYear} course{uniqueCoursesInYear !== 1 ? 's' : ''}</span>
               </div>
 
               <div className="mwl-table-wrap">
@@ -254,7 +257,8 @@ const MyWorkloadPage = ({ currentUser }) => {
                 </table>
               </div>
             </div>
-          ))}
+          );
+          })}
         </>
       )}
 

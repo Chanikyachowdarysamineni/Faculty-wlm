@@ -17,7 +17,6 @@ const Course           = require('../models/Course');
 const Faculty          = require('../models/Faculty');
 const Setting          = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
-const { logAuditEvent } = require('../utils/audit');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: add export rate limiter
@@ -480,7 +479,6 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    await logAuditEvent({ req, action: 'allocation.upsert', entity: 'allocation', entityId: String(doc._id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
 
     sendCreated(res, toClient(doc));
   } catch (err) {
@@ -511,7 +509,6 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       await recalculateCapacity(empId, { updatedBy: req.user?.id });
     }
 
-    await logAuditEvent({ req, action: 'allocation.delete', entity: 'allocation', entityId: String(req.params.id), metadata: { courseId: doc.courseId, year: doc.year, section: doc.section } });
     sendSuccess(res, { message: 'Allocation removed.' }, 200);
   } catch (err) { next(err); }
 });

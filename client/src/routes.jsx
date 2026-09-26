@@ -22,7 +22,7 @@ const AllocationPage = lazy(() => import('./AllocationPage'));
 const SectionManagementPage = lazy(() => import('./SectionManagementPage'));
 const ProfilePage = lazy(() => import('./ProfilePage'));
 const MySubmissionsPage = lazy(() => import('./MySubmissionsPage'));
-const AuditLogPage = lazy(() => import('./AuditLogPage'));
+
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -157,12 +157,7 @@ export const protectedRoutes = [
     element: <ProtectedRoute><Suspense fallback={<LoadingIndicator message="Loading submissions..." />}><MySubmissionsPage /></Suspense></ProtectedRoute>,
     title: 'Submissions'
   },
-  {
-    path: '/audit-logs',
-    // H-4 FIX: Audit logs are admin-only
-    element: <ProtectedRoute roles={['admin']}><Suspense fallback={<LoadingIndicator message="Loading logs..." />}><AuditLogPage /></Suspense></ProtectedRoute>,
-    title: 'Audit Logs'
-  },
+
 ];
 
 /**

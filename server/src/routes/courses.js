@@ -18,7 +18,6 @@ const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
-const { logAuditEvent } = require('../utils/audit');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -190,7 +189,6 @@ router.post(
         isDeleted: false,
         allowedSections: Array.isArray(allowedSections) ? allowedSections.map(s => String(s).trim()).filter(Boolean) : [],
       });
-      await logAuditEvent({ req, action: 'course.create', entity: 'course', entityId: String(doc.courseId) });
       logger.info('Course created', { courseId: doc.courseId, subjectCode: doc.subjectCode, userId: req.user.id });
       sendCreated(res, toClient(doc));
     } catch (err) {
@@ -261,7 +259,35 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       return sendNotFound(res, 'Course not found.');
     }
 
-    await logAuditEvent({ req, action: 'course.update', entity: 'course', entityId: String(courseId), metadata: { fields: Object.keys(updates) } });
+    const cascadeUpdates = {};
+    if (updates.subjectCode !== undefined && updates.subjectCode !== current.subjectCode) cascadeUpdates.subjectCode = updates.subjectCode;
+    if (updates.subjectName !== undefined && updates.subjectName !== current.subjectName) cascadeUpdates.subjectName = updates.subjectName;
+    if (updates.courseType !== undefined && updates.courseType !== current.courseType) cascadeUpdates.courseType = updates.courseType;
+    if (updates.shortName !== undefined && updates.shortName !== current.shortName) cascadeUpdates.shortName = updates.shortName;
+    if (updates.program !== undefined && updates.program !== current.program) cascadeUpdates.program = updates.program;
+    if (updates.C !== undefined && updates.C !== current.C) cascadeUpdates.C = updates.C;
+    if (updates.L !== undefined && updates.L !== current.L) cascadeUpdates.fixedL = updates.L;
+    if (updates.T !== undefined && updates.T !== current.T) cascadeUpdates.fixedT = updates.T;
+    if (updates.P !== undefined && updates.P !== current.P) cascadeUpdates.fixedP = updates.P;
+
+    if (Object.keys(cascadeUpdates).length > 0) {
+      await Workload.updateMany({ courseId }, { $set: cascadeUpdates }, { session });
+      
+      const allocUpdates = {};
+      if (cascadeUpdates.subjectCode !== undefined) allocUpdates.subjectCode = cascadeUpdates.subjectCode;
+      if (cascadeUpdates.subjectName !== undefined) allocUpdates.subjectName = cascadeUpdates.subjectName;
+      if (cascadeUpdates.shortName !== undefined) allocUpdates.shortName = cascadeUpdates.shortName;
+      if (cascadeUpdates.program !== undefined) allocUpdates.program = cascadeUpdates.program;
+      if (cascadeUpdates.C !== undefined) allocUpdates.C = cascadeUpdates.C;
+      if (cascadeUpdates.fixedL !== undefined) allocUpdates.fixedL = cascadeUpdates.fixedL;
+      if (cascadeUpdates.fixedT !== undefined) allocUpdates.fixedT = cascadeUpdates.fixedT;
+      if (cascadeUpdates.fixedP !== undefined) allocUpdates.fixedP = cascadeUpdates.fixedP;
+      
+      if (Object.keys(allocUpdates).length > 0) {
+        await CourseAllocation.updateMany({ courseId }, { $set: allocUpdates }, { session });
+      }
+      logger.info('Cascaded course changes', { courseId, cascadeUpdates });
+    }
 
     await session.commitTransaction();
     session.endSession();
@@ -308,7 +334,6 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       { session }
     );
 
-    await logAuditEvent({ req, action: 'course.delete', entity: 'course', entityId: String(courseId) });
 
     await session.commitTransaction();
     session.endSession();
@@ -353,7 +378,6 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req, res, next) =>
       { session }
     );
 
-    await logAuditEvent({ req, action: 'course.restore', entity: 'course', entityId: String(courseId) });
 
     await session.commitTransaction();
     session.endSession();

@@ -15,7 +15,6 @@ const Setting  = require('../models/Setting');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const { mongoose } = require('../db');
-const { logAuditEvent } = require('../utils/audit');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -84,7 +83,6 @@ router.put(
         { value: String(formEnabled) },
         { upsert: true, new: true }
       );
-      await logAuditEvent({ req, action: 'settings.form.toggle', entity: 'settings', entityId: 'form_enabled', metadata: { formEnabled } });
       sendSuccess(res, { formEnabled: Boolean(formEnabled) }, 200);
     } catch (err) { next(err); }
   }
@@ -121,7 +119,6 @@ router.post('/sections/:year', requireAuth, requireAdmin, async (req, res, next)
     }
     current[year].push(section);
     const sections = await saveSectionsConfig(current);
-    await logAuditEvent({ req, action: 'settings.section.add', entity: 'settings.sections', entityId: year, metadata: { section } });
     sendCreated(res, sections);
   } catch (err) { next(err); }
 });
@@ -154,7 +151,6 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
       { upsert: true, new: true, session }
     );
     await session.commitTransaction();
-    await logAuditEvent({ req, action: 'settings.section.rename', entity: 'settings.sections', entityId: year, metadata: { oldSection, newSection } });
     const sections = normalized;
     sendSuccess(res, sections, 200);
   } catch (err) {
@@ -187,7 +183,6 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
       { upsert: true, new: true, session }
     );
     await session.commitTransaction();
-    await logAuditEvent({ req, action: 'settings.section.delete', entity: 'settings.sections', entityId: year, metadata: { section } });
     const sections = normalized;
     sendSuccess(res, sections, 200);
   } catch (err) {
@@ -222,7 +217,6 @@ router.put(
         { value: String(editEnabled) },
         { upsert: true, new: true }
       );
-      await logAuditEvent({ req, action: 'settings.edit.toggle', entity: 'settings', entityId: 'edit_enabled', metadata: { editEnabled } });
       sendSuccess(res, { editEnabled: Boolean(editEnabled) }, 200);
     } catch (err) { next(err); }
   }

@@ -327,7 +327,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
     if (year && year !== 'All') matchStage.year = String(year);
     if (section && section !== 'All') matchStage.section = String(section);
 
-    const [facultyList, workloadAgg, courseAllocations, courses, sectionsConfig] = await Promise.all([
+    const [facultyList, workloadAgg] = await Promise.all([
       Faculty.find().lean(),
       Workload.aggregate([
         { $match: matchStage },
@@ -348,10 +348,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
             }
           }
         }
-      ]),
-      CourseAllocation.find(matchStage).lean(),
-      Course.find(year && year !== 'All' ? { year: String(year) } : {}).lean(),
-      getSectionsConfig()
+      ])
     ]);
 
     const workloadMap = new Map();
@@ -396,109 +393,12 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
     pending.sort((a, b) => b.assignedHours - a.assignedHours);
     perfect.sort((a, b) => b.assignedHours - a.assignedHours);
 
-    const fullyAllocatedCourses = [];
-    const partiallyAllocatedCourses = [];
-    const notAllocatedCourses = [];
-
-    // Group course allocations by courseId and year
-    const allocationMap = new Map();
-    courseAllocations.forEach(c => {
-      const isAllocated = 
-        (c.lectureSlots && c.lectureSlots.some(s => s?.empId)) ||
-        (c.lectureSlot && c.lectureSlot.empId) ||
-        (c.tutorialSlots && c.tutorialSlots.some(s => s?.empId)) ||
-        (c.practicalSlots && c.practicalSlots.some(s => s?.empId));
-      
-      const key = `${c.courseId}_${c.year}`;
-      if (!allocationMap.has(key)) {
-        allocationMap.set(key, { sections: new Map() });
-      }
-      
-      const courseGroup = allocationMap.get(key);
-      const assignedFacultyNames = [];
-      const extractNames = (slots) => {
-        if (!slots) return;
-        slots.forEach(s => {
-          if (s?.empId) {
-            const fac = facultyList.find(f => String(f.empId) === String(s.empId));
-            if (fac) assignedFacultyNames.push(fac.name);
-          }
-        });
-      };
-      extractNames(c.lectureSlots);
-      if (c.lectureSlot?.empId) extractNames([c.lectureSlot]);
-      extractNames(c.tutorialSlots);
-      extractNames(c.practicalSlots);
-
-      courseGroup.sections.set(c.section, {
-        isAllocated,
-        assignedFaculty: assignedFacultyNames
-      });
-    });
-
-    courses.forEach(course => {
-      // If course has no year defined, we cannot determine its target sections, so skip.
-      if (!course.year) return;
-      
-      // Get expected sections based on course year
-      const expectedSections = sectionsConfig[course.year] || [];
-      if (expectedSections.length === 0) return;
-
-      const key = `${course.courseId}_${course.year}`;
-      const courseAllocationsData = allocationMap.get(key) || { sections: new Map() };
-      
-      const allocatedSectionsList = [];
-      const remainingSectionsList = [];
-      const assignedFacultySet = new Set();
-
-      expectedSections.forEach(sec => {
-        // If a sectionFilter is applied, we only consider that section for status calculation
-        if (section && section !== 'All' && String(sec) !== String(section)) return;
-
-        const allocData = courseAllocationsData.sections.get(String(sec));
-        if (allocData && allocData.isAllocated) {
-          allocatedSectionsList.push(String(sec));
-          allocData.assignedFaculty.forEach(name => assignedFacultySet.add(name));
-        } else {
-          remainingSectionsList.push(String(sec));
-        }
-      });
-
-      // If filtering section caused all expected sections to be skipped, skip this course
-      if (allocatedSectionsList.length === 0 && remainingSectionsList.length === 0) return;
-
-      const courseStat = {
-        courseId: course.courseId,
-        subjectCode: course.subjectCode || '',
-        subjectName: course.subjectName || '',
-        year: course.year || '',
-        allocatedSections: allocatedSectionsList.join(', '),
-        remainingSections: remainingSectionsList.join(', '),
-        assignedFaculty: Array.from(assignedFacultySet).join(', ') || 'None',
-        status: ''
-      };
-
-      if (remainingSectionsList.length === 0) {
-        courseStat.status = 'Fully Allocated';
-        fullyAllocatedCourses.push(courseStat);
-      } else if (allocatedSectionsList.length > 0) {
-        courseStat.status = 'Partially Allocated';
-        partiallyAllocatedCourses.push(courseStat);
-      } else {
-        courseStat.status = 'Not Allocated';
-        notAllocatedCourses.push(courseStat);
-      }
-    });
-
     res.json({
       success: true,
       data: {
         overloaded,
         pending,
-        perfect,
-        fullyAllocatedCourses,
-        partiallyAllocatedCourses,
-        notAllocatedCourses
+        perfect
       }
     });
   } catch (err) {

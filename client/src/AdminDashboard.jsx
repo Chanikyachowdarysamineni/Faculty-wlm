@@ -112,12 +112,7 @@ const AdminDashboard = () => {
               >
                 ⏱️ Capacity Management
               </button>
-              <button
-                className={`nav-link ${activeTab === 'audit' ? 'active' : ''}`}
-                onClick={() => handleNavClick('audit', '/audit-logs')}
-              >
-                📋 Audit Logs
-              </button>
+
               <button
                 className={`nav-link ${activeTab === 'sections' ? 'active' : ''}`}
                 onClick={() => handleNavClick('sections', '/sections')}
@@ -150,7 +145,7 @@ const AdminOverview = ({ user }) => {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [yearFilter, setYearFilter] = useState('All');
+
 
   // UI state
   const [expandedCard, setExpandedCard] = useState(null); // 'overloaded', 'pending', 'perfect'
@@ -162,7 +157,7 @@ const AdminOverview = ({ user }) => {
         const headers = authJsonHeaders();
         // M-4 FIX: Use server-side analytics endpoint instead of fetching all data client-side
         const params = new URLSearchParams();
-        if (yearFilter !== 'All') params.set('year', yearFilter);
+
         const res = await fetch(`${API}/deva/stats/dashboard-analytics?${params}`, { headers });
         const json = await res.json();
         if (json.success && json.data) {
@@ -179,7 +174,7 @@ const AdminOverview = ({ user }) => {
       }
     };
     fetchData();
-  }, [yearFilter]);
+  }, []);
 
   const handleCardClick = (cardType) => {
     setExpandedCard(expandedCard === cardType ? null : cardType);
@@ -201,19 +196,7 @@ const AdminOverview = ({ user }) => {
         <p className="emp-id">Employee ID: {user.id}</p>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Year</label>
-          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
-            <option value="All">All Years</option>
-            <option value="I">I</option>
-            <option value="II">II</option>
-            <option value="III">III</option>
-            <option value="IV">IV</option>
-          </select>
-        </div>
-      </div>
+
 
       {/* Analytics Cards */}
       <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>

@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import FacultyPage          from './FacultyPage';
-import CoursesPage          from './CoursesPage';
+import CoursesPage from './CoursesPage';
 import SectionManagementPage from './SectionManagementPage';
-import WorkloadPage         from './WorkloadPage';
-import AllocationPage       from './AllocationPage';
-import FacultyFormPage      from './FacultyFormPage';
-import MySubmissionsPage    from './MySubmissionsPage';
-import MyWorkloadPage       from './MyWorkloadPage';
-import ProfilePage          from './ProfilePage';
-import AuditLogPage         from './AuditLogPage';
+import WorkloadPage from './WorkloadPage';
+import AllocationPage from './AllocationPage';
+import FacultyFormPage from './FacultyFormPage';
+import MySubmissionsPage from './MySubmissionsPage';
+import MyWorkloadPage from './MyWorkloadPage';
+import ProfilePage from './ProfilePage';
+
 import OverloadedFacultyModal from './OverloadedFacultyModal';
-import API                  from './config';
-import { fetchAllPages, fetchJsonWithRetry }    from './utils/apiFetchAll';
+import API from './config';
+import { fetchAllPages, fetchJsonWithRetry } from './utils/apiFetchAll';
 import { fetchSectionsConfig } from './utils/sectionsApi';
 import { logAuthDiagnostics } from './utils/authDiagnostics';
 import { useSharedData } from './DataContext';
@@ -26,10 +26,10 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7"/>
-        <rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/>
-        <rect x="3" y="14" width="7" height="7"/>
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
       </svg>
     ),
   },
@@ -41,10 +41,10 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
   },
@@ -55,8 +55,8 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
       </svg>
     ),
   },
@@ -68,10 +68,10 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="8" cy="5" r="3"/>
-        <path d="M11 7H21M11 12H21M11 17H21"/>
-        <circle cx="8" cy="12" r="3"/>
-        <circle cx="8" cy="19" r="3"/>
+        <circle cx="8" cy="5" r="3" />
+        <path d="M11 7H21M11 12H21M11 17H21" />
+        <circle cx="8" cy="12" r="3" />
+        <circle cx="8" cy="19" r="3" />
       </svg>
     ),
   },
@@ -83,9 +83,9 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="17" x2="12" y2="21"/>
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
   },
@@ -97,14 +97,12 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
       </svg>
     ),
   },
 
-  {
-  },
   {
     key: 'facultyform',
     label: 'Faculty Form',
@@ -112,11 +110,11 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-        <polyline points="10 9 9 9 8 9"/>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
       </svg>
     ),
   },
@@ -128,9 +126,9 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="17" x2="12" y2="21"/>
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
   },
@@ -142,27 +140,12 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="9 11 12 14 22 4"/>
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
     ),
   },
-  {
-    key: 'auditlogs',
-    label: 'Audit Logs',
-    colorClass: 'nav-color-purple',
-    adminOnly: true,
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-        <polyline points="10 9 9 9 8 9"/>
-      </svg>
-    ),
-  },
+
 ];
 
 const toPct = (value) => Math.max(0, Math.min(100, value));
@@ -174,7 +157,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashMode, setDashMode] = useState(null);
-  const [yearFilter, setYearFilter] = useState('All');
+
   const [expandedCard, setExpandedCard] = useState(null);
 
   // Helper to format session time
@@ -185,13 +168,13 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   };
 
   // ── Shared state across pages ──────────────────
-  const [formEnabled,  setFormEnabled]  = useState(true);
-  const [editEnabled,  setEditEnabled]  = useState(true);
-  const [submissions,  setSubmissions]  = useState([]);
+  const [formEnabled, setFormEnabled] = useState(true);
+  const [editEnabled, setEditEnabled] = useState(true);
+  const [submissions, setSubmissions] = useState([]);
 
-  const handleNewSubmission    = sub  => setSubmissions(prev => [...prev, sub]);
-  const handleDelSubmission    = id   => setSubmissions(prev => prev.filter(s => s.id !== id));
-  const handleUpdateSubmission = sub  => setSubmissions(prev => prev.map(s => s.id === sub.id ? sub : s));
+  const handleNewSubmission = sub => setSubmissions(prev => [...prev, sub]);
+  const handleDelSubmission = id => setSubmissions(prev => prev.filter(s => s.id !== id));
+  const handleUpdateSubmission = sub => setSubmissions(prev => prev.map(s => s.id === sub.id ? sub : s));
 
   const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.canAccessAdmin === true);
 
@@ -225,9 +208,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     overloaded: [],
     pending: [],
     perfect: [],
-    fullyAllocatedCourses: [],
-    partiallyAllocatedCourses: [],
-    notAllocatedCourses: [],
   });
   const [dashboardLastSyncedAt, setDashboardLastSyncedAt] = useState(null);
   const [submissionsLastSyncedAt, setSubmissionsLastSyncedAt] = useState(null);
@@ -237,6 +217,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const [sectionYear, setSectionYear] = useState('I');
   const [masterData, setMasterData] = useState({ faculty: [], courses: [] });
   const [showOverloadedModal, setShowOverloadedModal] = useState(false);
+  const [myAssignedCourseCount, setMyAssignedCourseCount] = useState(0);
 
   // Listen to WebSocket for real-time workload updates
   useEffect(() => {
@@ -285,20 +266,20 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }
 
     try {
-      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}`, { 
+      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}`, {
         headers,
         silentMode: true // Suppress logs for expected 404 (no submission yet)
       });
       const data = result.data || {};
-      
-      // 404 is expected if the faculty hasn't submitted yet � just ignore it
+
+      // 404 is expected if the faculty hasn't submitted yet - just ignore it
       if (result.status === 404) {
         setSubmissions([]);
         setSubmissionsSyncError('');
         setSubmissionsLastSyncedAt(new Date());
         return;
       }
-      
+
       if (result.success && data.success) {
         const list = Array.isArray(data.data) ? data.data : (data.data ? [data.data] : []);
         setSubmissions(list);
@@ -322,8 +303,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         fetchJsonWithRetry(`${API}/deva/settings/form-status`, { headers }),
         fetchJsonWithRetry(`${API}/deva/settings/edit-status`, { headers }),
       ]);
-      const formData = formResult.data || {};
-      const editData = editResult.data || {};
+      const formData = formResult.data?.data || formResult.data || {};
+      const editData = editResult.data?.data || editResult.data || {};
 
       if (formResult.success && typeof formData.formEnabled === 'boolean') {
         setFormEnabled(formData.formEnabled);
@@ -333,10 +314,21 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       }
     };
 
+    const refreshAssignedCourses = async () => {
+      if (isAdmin) return;
+      const result = await fetchAllPages('/deva/workloads', { empId: user.id }, { headers });
+      if (result.success) {
+        const uniqueSubjects = new Set();
+        (result.data || []).forEach(w => uniqueSubjects.add(w.subjectCode));
+        setMyAssignedCourseCount(uniqueSubjects.size);
+      }
+    };
+
     // For non-admin: Fetch submissions ONCE on mount (no repeated refresh)
     if (!isAdmin) {
       refreshSubmissions();
       refreshSettings();
+      refreshAssignedCourses();
       return;
     }
 
@@ -353,7 +345,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
   const refreshDashboardData = useCallback(async () => {
     if (!isAdmin) return;
-    
+
     // Validate token before making requests
     const headers = authHeaders();
     if (!headers.Authorization.replace('Bearer ', '').trim()) {
@@ -454,7 +446,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       setAnalytics(prev => ({ ...prev, loading: true }));
       try {
         const headers = authHeaders();
-        const res = await fetch(`${API}/deva/stats/dashboard-analytics?year=${encodeURIComponent(yearFilter)}`, { headers });
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics`, { headers });
         if (!res.ok) throw new Error('Analytics fetch failed');
         const json = await res.json();
         if (isMounted && json.success) {
@@ -463,9 +455,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             overloaded: json.data.overloaded || [],
             pending: json.data.pending || [],
             perfect: json.data.perfect || [],
-            fullyAllocatedCourses: json.data.fullyAllocatedCourses || [],
-            partiallyAllocatedCourses: json.data.partiallyAllocatedCourses || [],
-            notAllocatedCourses: json.data.notAllocatedCourses || []
           });
         }
       } catch (err) {
@@ -474,11 +463,11 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     };
     fetchAnalytics();
     return () => { isMounted = false; };
-  }, [isAdmin, yearFilter, authHeaders, dashboardLastSyncedAt]);
+  }, [isAdmin, authHeaders, dashboardLastSyncedAt]);
 
   const refreshMasterData = useCallback(async () => {
     if (!user?.id) return;
-    
+
     // Validate token before making requests
     const headers = authHeaders();
     if (!headers.Authorization.replace('Bearer ', '').trim()) {
@@ -558,7 +547,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
   const fetchIntegrity = useCallback(async () => {
     if (!isAdmin) return;
-    
+
     // Validate token before making requests
     const headers = authHeaders();
     if (!headers.Authorization.replace('Bearer ', '').trim()) {
@@ -570,9 +559,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     setIntegrityLoading(true);
     setIntegrityError('');
     try {
-      const res = await fetch(`${API}/deva/stats/integrity`, { 
+      const res = await fetch(`${API}/deva/stats/integrity`, {
         method: 'GET',
-        headers 
+        headers
       });
       const data = await res.json();
       if (data.success) {
@@ -640,7 +629,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   };
   // ───────────────────────────────────────────────
   const visibleNav = NAV_ITEMS.filter(item => {
-    if (item.adminOnly)  return isAdmin;
+    if (item.adminOnly) return isAdmin;
     if (item.facultyOnly) return !isAdmin;
     return true;
   });
@@ -666,7 +655,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     const rawAllocations = dashboardData.allocations || [];
     const allocationDocs = rawAllocations.filter(a => {
-      if (yearFilter !== 'All' && String(a.year) !== yearFilter) return false;
+
       return true;
     });
     const facultyMap = new Map((liveFaculty || []).map(f => [f.empId, f]));
@@ -754,25 +743,25 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       pendingTotalHours: pendingCourses.reduce((s, c) => s + c.pendingTotal, 0),
       pendingFacultyNeeded: pendingCourses.reduce((s, c) => s + c.missingTypes.length, 0),
     };
-  }, [isAdmin, dashboardData.allocations, liveFaculty, yearFilter, analytics]);
+  }, [isAdmin, dashboardData.allocations, liveFaculty, analytics]);
 
   // Compute faculty-specific stats
   const getMyStats = useMemo(() => {
-      // Capacity Calculations
-      let totalCapacity = 0;
-      let totalAllocated = 0;
-      let overloadedCount = 0;
-      let availableCount = 0;
+    // Capacity Calculations
+    let totalCapacity = 0;
+    let totalAllocated = 0;
+    let overloadedCount = 0;
+    let availableCount = 0;
 
-      (liveFaculty || []).forEach(f => {
-        totalCapacity += Number(f.capacity);
-        totalAllocated += (f.allocated || 0);
-        if (f.status === 'Overloaded') overloadedCount++;
-        if (f.status === 'Available') availableCount++;
-      });
-      
-      const remainingCapacity = totalCapacity - totalAllocated;
-      const avgUtilization = totalCapacity > 0 ? ((totalAllocated / totalCapacity) * 100).toFixed(1) : 0;
+    (liveFaculty || []).forEach(f => {
+      totalCapacity += Number(f.capacity);
+      totalAllocated += (f.allocated || 0);
+      if (f.status === 'Overloaded') overloadedCount++;
+      if (f.status === 'Available') availableCount++;
+    });
+
+    const remainingCapacity = totalCapacity - totalAllocated;
+    const avgUtilization = totalCapacity > 0 ? ((totalAllocated / totalCapacity) * 100).toFixed(1) : 0;
 
     if (isAdmin) {
       const summaryStats = [
@@ -781,7 +770,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           value: totalCapacity,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
             </svg>
           ),
           color: '#3b82f6', bg: '#eff6ff',
@@ -791,7 +780,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           value: totalAllocated,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
           ),
           color: '#8b5cf6', bg: '#f5f3ff',
@@ -801,7 +790,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           value: remainingCapacity,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
           ),
           color: '#22c55e', bg: '#f0fdf4',
@@ -811,7 +800,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           value: `${avgUtilization}%`,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83" /><path d="M22 12A10 10 0 0 0 12 2v10z" />
             </svg>
           ),
           color: '#eab308', bg: '#fefce8',
@@ -822,7 +811,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
             </svg>
           ),
           color: '#10b981', bg: '#ecfdf5',
@@ -836,10 +825,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           ),
           color: '#6b74e8', bg: '#eef0fd',
@@ -850,7 +839,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
           ),
           color: '#ec4899', bg: '#fce7f3',
@@ -861,7 +850,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
           ),
           color: '#ca8a04', bg: '#fef9c3',
@@ -872,40 +861,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
             </svg>
           ),
           color: '#16a34a', bg: '#dcfce7',
-        },
-        {
-          label: 'Fully Allocated',
-          value: analytics.fullyAllocatedCourses ? analytics.fullyAllocatedCourses.length : 0,
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-          ),
-          color: '#16a34a', bg: '#dcfce7',
-        },
-        {
-          label: 'Partially Allocated',
-          value: analytics.partiallyAllocatedCourses ? analytics.partiallyAllocatedCourses.length : 0,
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          ),
-          color: '#eab308', bg: '#fef08a',
-        },
-        {
-          label: 'Not Allocated',
-          value: analytics.notAllocatedCourses ? analytics.notAllocatedCourses.length : 0,
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
-          ),
-          color: '#ef4444', bg: '#fee2e2',
         },
       ];
 
@@ -913,17 +872,15 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }
 
     // Faculty stats - show faculty-specific metrics based on submissions and form status
-    const myCourseCount = mySubmission?.courses ? mySubmission.courses.length : 0;
-
     const summaryStats = [
       {
         label: 'My Courses',
-        value: myCourseCount,
+        value: myAssignedCourseCount,
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
         ),
         color: '#22c55e', bg: '#dcfce7',
@@ -934,15 +891,15 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 11l3 3L22 4"/>
-            <path d="M20 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/>
+            <path d="M9 11l3 3L22 4" />
+            <path d="M20 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11" />
           </svg>
         ),
         color: '#3b82f6', bg: '#dbeafe',
       },
     ];
     return { summaryStats, analyticsStats: [] };
-  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, liveFaculty?.length, analytics]);
+  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, liveFaculty?.length, analytics, myAssignedCourseCount]);
 
   const { summaryStats, analyticsStats } = getMyStats;
 
@@ -964,7 +921,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             <img src={`${publicUrl}/logo.webp`} alt="Logo" className="rp-brand-logo" />
             <div>
               <div className="rp-brand-name">Faculty Workload Management</div>
-              <div className="rp-brand-sub">Vignan Foundation For Science Technology & Research � CSE Department</div>
+              <div className="rp-brand-sub">Vignan Foundation For Science Technology & Research - CSE Department</div>
             </div>
           </div>
 
@@ -983,7 +940,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
               <div className="rp-card-icon-wrap rp-icon-admin">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
               </div>
               <div className="rp-card-badge rp-badge-admin">ADMIN</div>
@@ -1004,8 +961,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
               <div className="rp-card-icon-wrap rp-icon-faculty">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
                 </svg>
               </div>
               <div className="rp-card-badge rp-badge-faculty">FACULTY</div>
@@ -1027,9 +984,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             <button className="rp-logout-btn" onClick={onLogout}>
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
               Logout
             </button>
@@ -1051,9 +1008,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
 
@@ -1064,11 +1021,11 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
             <span className="dash-breadcrumb">
               {isAdmin
                 ? <span className="dash-role-badge dash-role-admin">
-                    Admin
-                    {user.canAccessAdmin && (
-                      <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.75 }}>(dual-access)</span>
-                    )}
-                  </span>
+                  Admin
+                  {user.canAccessAdmin && (
+                    <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.75 }}>(dual-access)</span>
+                  )}
+                </span>
                 : <span className="dash-role-badge dash-role-faculty">Faculty &middot; {user.id}</span>
               }
             </span>
@@ -1088,9 +1045,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           <button className="dash-logout-btn" onClick={onLogout}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
             Logout
           </button>
@@ -1125,8 +1082,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
               <span className="sidebar-nav-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
               </span>
               <span className="sidebar-nav-label">Profile</span>
@@ -1140,407 +1097,374 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         {/* Page content */}
         <div className="dash-page">
 
-      {activeNav === 'faculty'        ? <FacultyPage isAdmin={isAdmin} /> :
-       activeNav === 'courses'        ? <CoursesPage isAdmin={isAdmin} /> :
-       activeNav === 'sections'       ? <SectionManagementPage /> :
-       activeNav === 'workload'       ? <WorkloadPage submissions={submissions} /> :
-       activeNav === 'allocation'     ? <AllocationPage isAdmin={isAdmin} /> :
-       activeNav === 'myworkload'     ? <MyWorkloadPage currentUser={user} /> :
-       activeNav === 'facultyform'    ? (
-         <FacultyFormPage
-           formEnabled={formEnabled}
-           setFormEnabled={setFormEnabled}
-           editEnabled={editEnabled}
-           setEditEnabled={setEditEnabled}
-           submissions={submissions}
-           onSubmit={handleNewSubmission}
-           onUpdateSubmission={handleUpdateSubmission}
-           onDeleteSubmission={handleDelSubmission}
-           isAdmin={isAdmin}
-           currentUser={user}
-         />
-       ) :
-       activeNav === 'mysubmissions'  ? (
-         <MySubmissionsPage
-           currentUser={user}
-           submissions={submissions}
-           editEnabled={editEnabled}
-           onUpdateSubmission={handleUpdateSubmission}
-           onNavigateToForm={() => setActiveNav('facultyform')}
-         />
-       ) :
-       activeNav === 'profile'        ? (
-         <ProfilePage user={user} submissions={submissions} onLogout={onLogout} />
-       ) :
-       activeNav === 'auditlogs'     ? <AuditLogPage /> :
-       /* ── Dashboard overview ── */
-       <main className="dash-main">
-        <h1 className="dash-heading">
-          {isAdmin ? 'Admin Overview' : `Welcome, ${user.name || 'Faculty'}`}
-        </h1>
+          {activeNav === 'faculty' ? <FacultyPage isAdmin={isAdmin} /> :
+            activeNav === 'courses' ? <CoursesPage isAdmin={isAdmin} /> :
+              activeNav === 'sections' ? <SectionManagementPage /> :
+                activeNav === 'workload' ? <WorkloadPage submissions={submissions} /> :
+                  activeNav === 'allocation' ? <AllocationPage isAdmin={isAdmin} /> :
+                    activeNav === 'myworkload' ? <MyWorkloadPage currentUser={user} /> :
+                      activeNav === 'facultyform' ? (
+                        <FacultyFormPage
+                          formEnabled={formEnabled}
+                          setFormEnabled={setFormEnabled}
+                          editEnabled={editEnabled}
+                          setEditEnabled={setEditEnabled}
+                          submissions={submissions}
+                          onSubmit={handleNewSubmission}
+                          onUpdateSubmission={handleUpdateSubmission}
+                          onDeleteSubmission={handleDelSubmission}
+                          isAdmin={isAdmin}
+                          currentUser={user}
+                        />
+                      ) :
+                        activeNav === 'mysubmissions' ? (
+                          <MySubmissionsPage
+                            currentUser={user}
+                            submissions={submissions}
+                            editEnabled={editEnabled}
+                            onUpdateSubmission={handleUpdateSubmission}
+                            onNavigateToForm={() => setActiveNav('facultyform')}
+                          />
+                        ) :
+                          activeNav === 'profile' ? (
+                            <ProfilePage user={user} submissions={submissions} onLogout={onLogout} />
+                          ) :
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-          padding: `${remainingSeconds < 300 ? '14px' : '12px'} 16px`,
-          background: remainingSeconds < 300 
-            ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' 
-            : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-          border: `2px solid ${remainingSeconds < 300 ? '#f59e0b' : '#93c5fd'}`,
-          borderRadius: '8px',
-          fontSize: '13px',
-          fontWeight: '600',
-          color: remainingSeconds < 300 ? '#92400e' : '#1e40af',
-          boxShadow: remainingSeconds < 300 
-            ? '0 4px 12px rgba(245, 158, 11, 0.2)' 
-            : '0 2px 8px rgba(59, 130, 246, 0.1)',
-          transition: 'all 0.3s ease',
-        }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: remainingSeconds < 300 ? '16px' : '14px' }}>
-              {remainingSeconds < 300 
-                ? '?? Session ending soon' 
-                : '? Active session'}
-            </span>
-          </span>
-          <span style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '6px',
-            padding: '6px 12px',
-            background: remainingSeconds < 300 ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)',
-            borderRadius: '6px',
-            fontSize: remainingSeconds < 300 ? '14px' : '13px',
-          }}>
-            Time remaining: 
-            <strong style={{ 
-              fontFamily: 'monospace', 
-              fontSize: remainingSeconds < 300 ? '15px' : '14px',
-              letterSpacing: '1px',
-            }}>
-              {formatSessionTime(remainingSeconds)}
-            </strong>
-          </span>
-        </div>
+                            /* ── Dashboard overview ── */
+                            <main className="dash-main">
+                              <h1 className="dash-heading">
+                                {isAdmin ? 'Admin Overview' : `Welcome, ${user.name || 'Faculty'}`}
+                              </h1>
 
-          <div className="dash-sync-row">
-            <span className="dash-sync-pill">Dashboard sync: {formatSyncedAt(dashboardLastSyncedAt)}</span>
-            <span className="dash-sync-pill">Submissions sync: {formatSyncedAt(submissionsLastSyncedAt)}</span>
-            <button
-              className="dash-sync-retry"
-              onClick={() => {
-                refreshSubmissions();
-                if (isAdmin) {
-                  refreshDashboardData();
-                  fetchSections();
-                } else {
-                  refreshMasterData();
-                }
-              }}
-            >
-              ? Retry Sync
-            </button>
-          </div>
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '16px',
+                                padding: `${remainingSeconds < 300 ? '14px' : '12px'} 16px`,
+                                background: remainingSeconds < 300
+                                  ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
+                                  : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                                border: `2px solid ${remainingSeconds < 300 ? '#f59e0b' : '#93c5fd'}`,
+                                borderRadius: '8px',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                color: remainingSeconds < 300 ? '#92400e' : '#1e40af',
+                                boxShadow: remainingSeconds < 300
+                                  ? '0 4px 12px rgba(245, 158, 11, 0.2)'
+                                  : '0 2px 8px rgba(59, 130, 246, 0.1)',
+                                transition: 'all 0.3s ease',
+                              }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: remainingSeconds < 300 ? '16px' : '14px' }}>
+                                    {remainingSeconds < 300
+                                      ? '⏱️ Session ending soon'
+                                      : '✅ Active session'}
+                                  </span>
+                                </span>
+                                <span style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  background: remainingSeconds < 300 ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)',
+                                  borderRadius: '6px',
+                                  fontSize: remainingSeconds < 300 ? '14px' : '13px',
+                                }}>
+                                  Time remaining:
+                                  <strong style={{
+                                    fontFamily: 'monospace',
+                                    fontSize: remainingSeconds < 300 ? '15px' : '14px',
+                                    letterSpacing: '1px',
+                                  }}>
+                                    {formatSessionTime(remainingSeconds)}
+                                  </strong>
+                                </span>
+                              </div>
 
-          {(dashboardSyncError || submissionsSyncError) && (
-            <div className="dash-live-warning dash-live-warning-row">
-              <span>?? {dashboardSyncError || submissionsSyncError}</span>
-              <button
-                className="dash-inline-retry"
-                onClick={() => {
-                  refreshSubmissions();
-                  if (isAdmin) {
-                    refreshDashboardData();
-                    fetchSections();
-                  } else {
-                    refreshMasterData();
-                  }
-                }}
-              >
-                Retry
-              </button>
-            </div>
-          )}
+                              <div className="dash-sync-row">
+                                <span className="dash-sync-pill">Dashboard sync: {formatSyncedAt(dashboardLastSyncedAt)}</span>
+                                <span className="dash-sync-pill">Submissions sync: {formatSyncedAt(submissionsLastSyncedAt)}</span>
+                                <button
+                                  className="dash-sync-retry"
+                                  onClick={() => {
+                                    refreshSubmissions();
+                                    if (isAdmin) {
+                                      refreshDashboardData();
+                                      fetchSections();
+                                    } else {
+                                      refreshMasterData();
+                                    }
+                                  }}
+                                >↻ Retry Sync</button>
+                              </div>
 
-        {isAdmin && dashboardData.error && (
-          <div className="dash-live-warning">{dashboardData.error}</div>
-        )}
+                              {(dashboardSyncError || submissionsSyncError) && (
+                                <div className="dash-live-warning dash-live-warning-row">
+                                  <span>⚠️ {dashboardSyncError || submissionsSyncError}</span>
+                                  <button
+                                    className="dash-inline-retry"
+                                    onClick={() => {
+                                      refreshSubmissions();
+                                      if (isAdmin) {
+                                        refreshDashboardData();
+                                        fetchSections();
+                                      } else {
+                                        refreshMasterData();
+                                      }
+                                    }}
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              )}
 
-        {isAdmin && dashboardData.loading && (
-          <div className="dash-live-note">Refreshing dashboard data�</div>
-        )}
+                              {isAdmin && dashboardData.error && (
+                                <div className="dash-live-warning">{dashboardData.error}</div>
+                              )}
+
+                              {isAdmin && dashboardData.loading && (
+                                <div className="dash-live-note">Refreshing dashboard data...</div>
+                              )}
 
 
 
-        {/* ── Filters ── */}
-        {isAdmin && (
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '13px', color: '#4b5563' }}>Filter by Year</label>
-              <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '120px' }}>
-                <option value="All">All Years</option>
-                {sectionsConfig && Object.keys(sectionsConfig).map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
 
-        {/* ── Summary Cards (New items below Header/Filters) ── */}
-        {isAdmin && (
-          <>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px' }}>Summary</h2>
-            <div className="dash-cards">
-              {summaryStats.map((s) => (
-                <div
-                  className="dash-card"
-                  key={s.label}
-                >
-                  <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
-                    {s.icon}
-                  </div>
-                  <div className="dash-card-info">
-                    <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
-                    <span className="dash-card-label">{s.label}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
-        {/* ── Analytics Section (Restored to previous layout) ── */}
-        {isAdmin && (
-          <>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Analytics</h2>
-            <div className="dash-cards">
-              {analyticsStats.map((s) => (
-                <div
-                  className="dash-card"
-                  key={s.label}
-                  style={{
-                    cursor: ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? 'pointer' : 'default',
-                    border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
-                  }}
-                  onClick={() => {
-                    if (['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label)) {
-                      setExpandedCard(expandedCard === s.label ? null : s.label);
-                    }
-                  }}
-                  title={['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned', 'Fully Allocated', 'Partially Allocated', 'Not Allocated'].includes(s.label) ? `Click to view detailed list` : ''}
-                >
-                  <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
-                    {s.icon}
-                  </div>
-                  <div className="dash-card-info">
-                    <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
-                    <span className="dash-card-label">{s.label}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+                              {/* ── Summary Cards (New items below Header/Filters) ── */}
+                              {isAdmin && (
+                                <>
+                                  <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px' }}>Summary</h2>
+                                  <div className="dash-cards">
+                                    {summaryStats.map((s) => (
+                                      <div
+                                        className="dash-card"
+                                        key={s.label}
+                                      >
+                                        <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                                          {s.icon}
+                                        </div>
+                                        <div className="dash-card-info">
+                                          <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                                          <span className="dash-card-label">{s.label}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
 
-        {!isAdmin && (
-          <div className="dash-cards">
-            {summaryStats.map((s) => (
-              <div
-                className="dash-card"
-                key={s.label}
-              >
-                <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
-                  {s.icon}
-                </div>
-                <div className="dash-card-info">
-                  <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
-                  <span className="dash-card-label">{s.label}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                              {/* ── Analytics Section (Restored to previous layout) ── */}
+                              {isAdmin && (
+                                <>
+                                  <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Analytics</h2>
+                                  <div className="dash-cards">
+                                    {analyticsStats.map((s) => (
+                                      <div
+                                        className="dash-card"
+                                        key={s.label}
+                                        style={{
+                                          cursor: ['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned'].includes(s.label) ? 'pointer' : 'default',
+                                          border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
+                                        }}
+                                        onClick={() => {
+                                          if (['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned'].includes(s.label)) {
+                                            setExpandedCard(expandedCard === s.label ? null : s.label);
+                                          }
+                                        }}
+                                        title={['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned'].includes(s.label) ? `Click to view detailed list` : ''}
+                                      >
+                                        <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                                          {s.icon}
+                                        </div>
+                                        <div className="dash-card-info">
+                                          <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                                          <span className="dash-card-label">{s.label}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
 
-        {/* Detailed List (Expanded) */}
-        {isAdmin && expandedCard && (() => {
-          let activeList = null;
-          let listType = 'faculty';
-          if (expandedCard === 'Overloaded Faculty') activeList = { title: 'Overloaded Faculty', data: dashboardComputed.overloadedFaculty || [], color: '#dc2626' };
-          if (expandedCard === 'Pending Faculty') activeList = { title: 'Pending Faculty', data: dashboardComputed.availableFaculty || [], color: '#ca8a04' };
-          if (expandedCard === 'Perfectly Assigned') activeList = { title: 'Perfectly Assigned Faculty', data: dashboardComputed.fullyLoadedFaculty || [], color: '#16a34a' };
-          if (expandedCard === 'Fully Allocated') { activeList = { title: 'Fully Allocated Courses', data: analytics.fullyAllocatedCourses || [], color: '#16a34a' }; listType = 'course'; }
-          if (expandedCard === 'Partially Allocated') { activeList = { title: 'Partially Allocated Courses', data: analytics.partiallyAllocatedCourses || [], color: '#eab308' }; listType = 'course'; }
-          if (expandedCard === 'Not Allocated') { activeList = { title: 'Not Allocated Courses', data: analytics.notAllocatedCourses || [], color: '#ef4444' }; listType = 'course'; }
-          
-          if (!activeList) return null;
+                              {!isAdmin && (
+                                <div className="dash-cards">
+                                  {summaryStats.map((s) => (
+                                    <div
+                                      className="dash-card"
+                                      key={s.label}
+                                    >
+                                      <div className="dash-card-icon" style={{ background: s.bg, color: s.color }}>
+                                        {s.icon}
+                                      </div>
+                                      <div className="dash-card-info">
+                                        <span className="dash-card-value" style={{ color: s.color }}>{s.value}</span>
+                                        <span className="dash-card-label">{s.label}</span>
+                                      </div>
+                                    </div>
+                                  ))}
 
-          return (
-            <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${activeList.color}`, paddingBottom: '12px', marginBottom: '16px' }}>
-                <h3 style={{ margin: 0, color: activeList.color }}>{activeList.title} ({activeList.data.length})</h3>
-                <button onClick={() => setExpandedCard(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#6b7280' }}>×</button>
-              </div>
-              {activeList.data.length === 0 ? (
-                <p style={{ color: '#6b7280', fontStyle: 'italic' }}>No records found in this category.</p>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                    <thead>
-                      <tr style={{ background: '#f3f4f6', textAlign: 'left' }}>
-                        {listType === 'faculty' ? (
-                          <>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Emp ID</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Name</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Capacity</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Remaining</th>
-                          </>
-                        ) : (
-                          <>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Course ID</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Code</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Name</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Year</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Allocated Sections</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Pending Sections</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned Faculty</th>
-                            <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Status</th>
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeList.data.map((item, i) => (
-                        <tr key={listType === 'faculty' ? item.empId : `${item.courseId}_${item.year}_${item.section}`} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb', color: '#000' }}>
-                          {listType === 'faculty' ? (
-                            <>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.empId}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.name}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.capacity}h</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{item.assignedHours}h</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: item.overloadStatus === 'Overload' ? '#dc2626' : item.pendingLoad > 0 ? '#ca8a04' : '#16a34a' }}>
-                                {item.pendingLoad > 0 ? `+${item.pendingLoad}h` : `${item.pendingLoad}h`}
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.courseId}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectCode}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectName}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.year}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#16a34a' }}>{item.allocatedSections || '-'}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>{item.remainingSections || '-'}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.assignedFaculty}</td>
-                              <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>
-                                {item.status}
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+                                  <div className="dash-card">
+                                    <div className="dash-card-icon" style={{ background: '#dbeafe', color: '#3b82f6' }}>
+                                      <span style={{ fontSize: '1.25rem' }}>✅</span>
+                                    </div>
+                                    <div className="dash-card-info">
+                                      <span className="dash-card-value" style={{ color: '#3b82f6' }}>{liveCourses.length}</span>
+                                      <span className="dash-card-label">Available Courses</span>
+                                    </div>
+                                  </div>
 
-        {/* ── Features Section (Restored to previous layout) ── */}
-        {isAdmin && (
-          <>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Features</h2>
-            <div className="dash-table-card" style={{ marginTop: '0' }}>
-              <div className="dash-table-header">
-                <span className="dash-table-title">Overloaded Faculty Alert</span>
-                <span className="dash-table-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                  {dashboardComputed.overloadedFaculty.length} overloaded
-                </span>
-              </div>
-              <div className="dash-alert-wrap">
-                {dashboardComputed.overloadedFaculty.length === 0
-                  ? <span className="dash-muted">No overloads detected.</span>
-                  : dashboardComputed.overloadedFaculty.map(f => (
-                    <div key={f.empId} className="dash-overload-row">
-                      <strong>{f.name} ({f.empId})</strong>
-                      <span>Assigned {f.assignedHours}h / Capacity {f.capacity}h</span>
-                      <span className="dash-over-badge">Excess {Math.abs(f.pendingLoad).toFixed(2)}h</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </>
-        )}
+                                  <div className="dash-card">
+                                    <div className="dash-card-icon" style={{ background: formEnabled ? '#ede9fe' : '#f3f4f6', color: formEnabled ? '#8b5cf6' : '#9ca3af' }}>
+                                      <span style={{ fontSize: '1.25rem' }}>📝</span>
+                                    </div>
+                                    <div className="dash-card-info">
+                                      <span className="dash-card-value" style={{ color: formEnabled ? '#8b5cf6' : '#9ca3af' }}>{formEnabled ? 'Open' : 'Closed'}</span>
+                                      <span className="dash-card-label">Form Status</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
-        {/* Overloaded Faculty Modal */}
-        {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} />}
+                              {/* Detailed List (Expanded) */}
+                              {isAdmin && expandedCard && (() => {
+                                let activeList = null;
+                                let listType = 'faculty';
+                                if (expandedCard === 'Overloaded Faculty') activeList = { title: 'Overloaded Faculty', data: dashboardComputed.overloadedFaculty || [], color: '#dc2626' };
+                                if (expandedCard === 'Pending Faculty') activeList = { title: 'Pending Faculty', data: dashboardComputed.availableFaculty || [], color: '#ca8a04' };
+                                if (expandedCard === 'Perfectly Assigned') activeList = { title: 'Perfectly Assigned Faculty', data: dashboardComputed.fullyLoadedFaculty || [], color: '#16a34a' };
 
-        {!isAdmin && (
-          <>
-            {/* Faculty Dashboard Content */}
+                                if (!activeList) return null;
 
-            {/* Quick Actions Row */}
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              {/* Available Courses */}
-              <div className="faculty-compact-card">
-                <div className="faculty-compact-header">
-                  <span className="faculty-compact-title">?? Available</span>
-                </div>
-                <div className="faculty-compact-value" style={{ color: '#3b82f6' }}>
-                  {liveCourses.length}
-                </div>
-                <div className="faculty-compact-label">Courses</div>
-              </div>
+                                return (
+                                  <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '24px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${activeList.color}`, paddingBottom: '12px', marginBottom: '16px' }}>
+                                      <h3 style={{ margin: 0, color: activeList.color }}>{activeList.title} ({activeList.data.length})</h3>
+                                      <button onClick={() => setExpandedCard(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#6b7280' }}>×</button>
+                                    </div>
+                                    {activeList.data.length === 0 ? (
+                                      <p style={{ color: '#6b7280', fontStyle: 'italic' }}>No records found in this category.</p>
+                                    ) : (
+                                      <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                                          <thead>
+                                            <tr style={{ background: '#f3f4f6', textAlign: 'left' }}>
+                                              {listType === 'faculty' ? (
+                                                <>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Emp ID</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Name</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Capacity</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Remaining</th>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Course ID</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Code</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Subject Name</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Year</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Allocated Sections</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Pending Sections</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned Faculty</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Status</th>
+                                                </>
+                                              )}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {activeList.data.map((item, i) => (
+                                              <tr key={listType === 'faculty' ? item.empId : `${item.courseId}_${item.year}_${item.section}`} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb', color: '#000' }}>
+                                                {listType === 'faculty' ? (
+                                                  <>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.empId}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.name}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.capacity}h</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{item.assignedHours}h</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: item.overloadStatus === 'Overload' ? '#dc2626' : item.pendingLoad > 0 ? '#ca8a04' : '#16a34a' }}>
+                                                      {item.pendingLoad > 0 ? `+${item.pendingLoad}h` : `${item.pendingLoad}h`}
+                                                    </td>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.courseId}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectCode}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.subjectName}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.year}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#16a34a' }}>{item.allocatedSections || '-'}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: '#ef4444' }}>{item.remainingSections || '-'}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.assignedFaculty}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>
+                                                      {item.status}
+                                                    </td>
+                                                  </>
+                                                )}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
-              {/* Faculty Form */}
-              <div className="faculty-compact-card">
-                <div className="faculty-compact-header">
-                  <span className="faculty-compact-title">?? Form</span>
-                </div>
-                <div className="faculty-compact-value" style={{ color: formEnabled ? '#8b5cf6' : '#d1d5db' }}>
-                  {formEnabled ? '? Open' : '? Closed'}
-                </div>
-                <div className="faculty-compact-label">Status</div>
-              </div>
+                              {/* ── Features Section (Restored to previous layout) ── */}
+                              {isAdmin && (
+                                <>
+                                  <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Features</h2>
+                                  <div className="dash-table-card" style={{ marginTop: '0' }}>
+                                    <div className="dash-table-header">
+                                      <span className="dash-table-title">Overloaded Faculty Alert</span>
+                                      <span className="dash-table-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                                        {dashboardComputed.overloadedFaculty.length} overloaded
+                                      </span>
+                                    </div>
+                                    <div className="dash-alert-wrap">
+                                      {dashboardComputed.overloadedFaculty.length === 0
+                                        ? <span className="dash-muted">No overloads detected.</span>
+                                        : dashboardComputed.overloadedFaculty.map(f => (
+                                          <div key={f.empId} className="dash-overload-row">
+                                            <strong>{f.name} ({f.empId})</strong>
+                                            <span>Assigned {f.assignedHours}h / Capacity {f.capacity}h</span>
+                                            <span className="dash-over-badge">Excess {Math.abs(f.pendingLoad).toFixed(2)}h</span>
+                                          </div>
+                                        ))}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
 
-              {/* My Submissions */}
-              <div className="faculty-compact-card">
-                <div className="faculty-compact-header">
-                  <span className="faculty-compact-title">? Submissions</span>
-                </div>
-                <div className="faculty-compact-value" style={{ color: '#a855f7' }}>
-                  {submissions.length}
-                </div>
-                <div className="faculty-compact-label">Submitted</div>
-              </div>
-            </div>
+                              {/* Overloaded Faculty Modal */}
+                              {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} />}
 
-            {/* System Information */}
-            <div className="faculty-dashboard-card">
-              <div className="faculty-dashboard-header">
-                <span className="faculty-dashboard-title">?? System Information</span>
-              </div>
-              <div className="dash-alert-wrap">
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: '0.9rem', color: '#666', padding: '12px 16px' }}>
-                  <span><strong>Employee ID:</strong></span>
-                  <span>{user.id}</span>
-                  <span><strong>Name:</strong></span>
-                  <span>{user.name}</span>
-                  <span><strong>Role:</strong></span>
-                  <span>Faculty</span>
-                  <span><strong>Form Status:</strong></span>
-                  <span>{formEnabled ? '?? Open' : '?? Closed'}</span>
-                  <span><strong>Edit Status:</strong></span>
-                  <span>{editEnabled ? '?? Allowed' : '?? Not Allowed'}</span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </main>}
+                              {!isAdmin && (
+                                <>
+                                  {/* Faculty Dashboard Content */}
+
+
+                                  {/* System Information */}
+                                  <div className="faculty-dashboard-card">
+                                    <div className="faculty-dashboard-header">
+                                      <span className="faculty-dashboard-title">ℹ️ System Information</span>
+                                    </div>
+                                    <div className="dash-alert-wrap">
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: '0.9rem', color: '#666', padding: '12px 16px' }}>
+                                        <span><strong>Employee ID:</strong></span>
+                                        <span>{user.id}</span>
+                                        <span><strong>Name:</strong></span>
+                                        <span>{user.name}</span>
+                                        <span><strong>Role:</strong></span>
+                                        <span>Faculty</span>
+                                        <span><strong>Form Status:</strong></span>
+                                        <span>{formEnabled ? '✅ Open' : '❌ Closed'}</span>
+                                        <span><strong>Edit Status:</strong></span>
+                                        <span>{editEnabled ? '✅ Allowed' : '❌ Not Allowed'}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </main>}
         </div>{/* end dash-page */}
       </div>{/* end dash-layout */}
       {/* -- Section management modal -- */}
@@ -1549,11 +1473,11 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           <div className="cp-modal cp-modal-sm" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
             <div className="cp-modal-head">
               <h3>
-                {sectionModal.mode === 'add' && `Add Section � ${sectionYear}`}
+                {sectionModal.mode === 'add' && `Add Section - ${sectionYear}`}
                 {sectionModal.mode === 'rename' && `Rename Section '${sectionModal.section}'`}
                 {sectionModal.mode === 'delete' && `Delete Section '${sectionModal.section}'`}
               </h3>
-              <button className="cp-modal-x" onClick={closeSectionModal}>?</button>
+              <button className="cp-modal-x" onClick={closeSectionModal}>×</button>
             </div>
             <div className="cp-modal-body">
               {sectionModal.mode === 'delete' ? (
@@ -1565,7 +1489,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                   autoFocus
                   className="cp-input"
                   style={{ width: '100%', boxSizing: 'border-box' }}
-                  placeholder={sectionModal.mode === 'add' ? 'Section name / number�' : 'New section name�'}
+                  placeholder={sectionModal.mode === 'add' ? 'Section name / number...' : 'New section name...'}
                   value={sectionModal.input}
                   onChange={e => setSectionModal(prev => ({ ...prev, input: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter') confirmSectionModal(); if (e.key === 'Escape') closeSectionModal(); }}
@@ -1577,8 +1501,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
               {sectionModal.mode === 'delete'
                 ? <button className="cp-btn cp-btn-danger" onClick={confirmSectionModal}>Yes, Delete</button>
                 : <button className="cp-btn cp-btn-save" onClick={confirmSectionModal}>
-                    {sectionModal.mode === 'add' ? 'Add' : 'Rename'}
-                  </button>
+                  {sectionModal.mode === 'add' ? 'Add' : 'Rename'}
+                </button>
               }
             </div>
           </div>

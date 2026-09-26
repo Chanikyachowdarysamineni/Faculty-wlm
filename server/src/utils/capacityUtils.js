@@ -3,7 +3,6 @@
 const mongoose = require('mongoose');
 const Faculty = require('../models/Faculty');
 const Workload = require('../models/Workload');
-const AuditLog = require('../models/AuditLog');
 const wsHandler = require('../websocket'); // Adjust path if needed
 
 /**
@@ -89,30 +88,8 @@ const recalculateCapacity = async (empId, options = {}) => {
   return faculty;
 };
 
-/**
- * Logs a capacity change to AuditLog
- * @param {Object} params - { empId, adminId, oldCapacity, newCapacity, action, reason, ip, userAgent, session }
- */
-const logCapacityChange = async ({ empId, adminId, oldCapacity, newCapacity, action, reason, ip, userAgent, session }) => {
-  const log = new AuditLog({
-    actorEmpId: adminId,
-    actorRole: 'admin',
-    action: action,
-    entity: 'faculty_capacity',
-    entityId: empId,
-    metadata: {
-      oldCapacity,
-      newCapacity,
-      reason
-    },
-    ip,
-    userAgent
-  });
-  await log.save({ session });
-};
 
 module.exports = {
   getStatus,
-  recalculateCapacity,
-  logCapacityChange
+  recalculateCapacity
 };

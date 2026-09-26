@@ -36,7 +36,7 @@
     "http-proxy-agent": "^5.0.0"
   },
   "scripts": {
-    "start": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first HOST=127.0.0.1 react-scripts start",
+    "start": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first react-scripts start",
     "server": "node server.js",
     "build": "react-scripts build",
     "build:start": "npm run build && npm run server",
@@ -62,6 +62,6 @@
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.5.1",
     "cross-env": "^10.1.0",
-    "http-proxy-middleware": "^2.0.9"
+    "http-proxy-middleware": "^2.0.10"
   }
 }

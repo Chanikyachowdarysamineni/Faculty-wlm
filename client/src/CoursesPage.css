@@ -430,9 +430,11 @@
 .cp-table tbody tr:hover td { background: #f5f0ff !important; }
 
 /* ── Table cell variants ── */
+.cp-th-sno { text-align: center; width: 48px; }
 .cp-th-num { text-align: center; width: 48px; }
 .cp-th-c   { color: #059669 !important; }
 
+.cp-td-sno     { text-align: center; font-weight: 600; color: #64748b; }
 .cp-td-num     { text-align: center; font-weight: 600; color: #374151; }
 .cp-td-c       { color: #059669; font-weight: 700; }
 .cp-td-editable { color: #0369a1; font-weight: 700; }

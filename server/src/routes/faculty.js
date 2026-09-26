@@ -21,7 +21,6 @@ const Submission = require('../models/Submission');
 const User = require('../models/User');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
-const { logAuditEvent } = require('../utils/audit');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -288,7 +287,6 @@ router.post(
       await session.commitTransaction();
       session.endSession();
 
-      await logAuditEvent({ req, action: 'faculty.create', entity: 'faculty', entityId: doc.empId });
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
       
       // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
@@ -302,7 +300,36 @@ router.post(
     }
   }
 );
-
+// PUT /api/faculty/bulk-update (admin)
+router.put(
+  '/bulk-update',
+  requireAuth, requireAdmin,
+  async (req, res, next) => {
+    try {
+      const { updates } = req.body;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return sendError(res, 'Updates array is required', 400);
+      }
+      
+      const bulkOps = updates.map(update => {
+        const updateFields = {};
+        if (update.slNo !== undefined) updateFields.slNo = Number(update.slNo);
+        
+        return {
+          updateOne: {
+            filter: { empId: String(update.empId).trim() },
+            update: { $set: updateFields }
+          }
+        };
+      });
+      
+      await Faculty.bulkWrite(bulkOps);
+      sendSuccess(res, { count: bulkOps.length }, 200, { message: 'Bulk update successful' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 // PUT /api/faculty/:empId  (admin or self)
 router.put(
   '/:empId',
@@ -330,7 +357,7 @@ router.put(
         name, department, designation, mobile, email, slNo, capacity,
         status, role, username, qualification, experience,
         workingHours, joiningDate, address, gender, dob,
-        profilePicture, researchArea, specialization,
+        profilePicture, researchArea, specialization, empId: newEmpId,
       } = req.body;
       const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
@@ -350,6 +377,9 @@ router.put(
         if (status !== undefined) allowedUpdates.status = String(status).trim();
         if (role !== undefined) allowedUpdates.role = String(role).trim();
         if (username !== undefined) allowedUpdates.username = String(username).trim();
+        if (newEmpId !== undefined && String(newEmpId).trim() && String(newEmpId).trim() !== empId) {
+          allowedUpdates.empId = String(newEmpId).trim();
+        }
       }
 
       if (qualification !== undefined) allowedUpdates.qualification = String(qualification).trim();
@@ -377,11 +407,12 @@ router.put(
         return sendNotFound(res, 'Faculty member not found.');
       }
 
-      if (allowedUpdates.mobile || allowedUpdates.name || allowedUpdates.designation || allowedUpdates.email) {
+      if (allowedUpdates.mobile || allowedUpdates.name || allowedUpdates.designation || allowedUpdates.email || allowedUpdates.empId) {
         const userUpdates = {};
         if (allowedUpdates.name) userUpdates.name = allowedUpdates.name;
         if (allowedUpdates.designation) userUpdates.designation = allowedUpdates.designation;
         if (allowedUpdates.email) userUpdates.email = allowedUpdates.email;
+        if (allowedUpdates.empId) userUpdates.empId = allowedUpdates.empId;
         if (allowedUpdates.mobile && allowedUpdates.mobile.trim()) {
           userUpdates.mobile = allowedUpdates.mobile;
           userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
@@ -394,23 +425,65 @@ router.put(
             { new: true, runValidators: true, session }
           );
           if (!userUpdateResult) {
-            await session.abortTransaction();
-            session.endSession();
-            return sendError(res, 'User account not found - cannot update login credentials', 500);
+            // Non-blocking: some faculties might not have User accounts yet
+            logger.warn('User account not found - login credentials not updated', { empId });
           }
         }
       }
 
-      // M-5: Propagate name/designation changes to existing Workload records so they stay fresh
+      // M-5: Propagate name/designation/empId changes to existing Workload records so they stay fresh
       const workloadUpdates = {};
       if (allowedUpdates.name) workloadUpdates.empName = allowedUpdates.name;
       if (allowedUpdates.designation) workloadUpdates.designation = allowedUpdates.designation;
+      if (allowedUpdates.empId) workloadUpdates.empId = allowedUpdates.empId;
       if (Object.keys(workloadUpdates).length > 0) {
         await Workload.updateMany({ empId }, { $set: workloadUpdates }, { session });
-        logger.info('Propagated faculty name/designation to workload records', { empId, workloadUpdates });
+        logger.info('Propagated faculty changes to workload records', { empId, workloadUpdates });
       }
 
-      await logAuditEvent({ req, action: 'faculty.update', entity: 'faculty', entityId: empId, metadata: { fields: Object.keys(allowedUpdates), isSelfEdit: isSelf } });
+      // Propagate empId changes to CourseAllocation
+      if (allowedUpdates.empId) {
+        const allocs = await CourseAllocation.find({
+          $or: [
+            { "lectureSlots.empId": empId },
+            { "lectureSlot.empId": empId },
+            { "tutorialSlots.empId": empId },
+            { "practicalSlots.empId": empId }
+          ]
+        }).session(session);
+
+        for (const alloc of allocs) {
+          const updSlot = (s) => {
+            if (s && String(s.empId) === String(empId)) {
+              s.empId = allowedUpdates.empId;
+            }
+          };
+          if (alloc.lectureSlots) alloc.lectureSlots.forEach(updSlot);
+          if (alloc.lectureSlot) updSlot(alloc.lectureSlot);
+          if (alloc.tutorialSlots) alloc.tutorialSlots.forEach(updSlot);
+          if (alloc.practicalSlots) alloc.practicalSlots.forEach(updSlot);
+          
+          alloc.markModified('lectureSlots');
+          alloc.markModified('lectureSlot');
+          alloc.markModified('tutorialSlots');
+          alloc.markModified('practicalSlots');
+          await alloc.save({ session });
+        }
+        logger.info('Propagated faculty empId changes to CourseAllocation', { empId, newEmpId: allowedUpdates.empId });
+      }
+
+      // Propagate empId/name changes to Submissions
+      if (allowedUpdates.empId || allowedUpdates.name) {
+        const subUpdates = {};
+        if (allowedUpdates.empId) subUpdates.empId = allowedUpdates.empId;
+        if (allowedUpdates.name) subUpdates.empName = allowedUpdates.name;
+        await mongoose.connection.db.collection('submissions').updateMany(
+          { empId },
+          { $set: subUpdates },
+          { session }
+        );
+      }
+
       
       await session.commitTransaction();
       session.endSession();
@@ -488,7 +561,6 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
     }
     counters.allocations = allocations.length;
 
-    await logAuditEvent({ req, action: 'faculty.delete_soft', entity: 'faculty', entityId: empId, details: { name: doc.name, cleanupStats: counters } });
     
     await session.commitTransaction();
     session.endSession();
@@ -525,7 +597,6 @@ router.post('/:empId/restore', requireAuth, requireAdmin, async (req, res, next)
     await Submission.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
     await User.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
 
-    await logAuditEvent({ req, action: 'faculty.restore', entity: 'faculty', entityId: empId });
     
     await session.commitTransaction();
     session.endSession();

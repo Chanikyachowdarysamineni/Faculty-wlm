@@ -5,7 +5,6 @@ const { body, validationResult } = require('express-validator');
 const Section = require('../models/Section');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendCreated } = require('../utils/response');
-const { logAuditEvent } = require('../utils/audit');
 const { parsePagination } = require('../utils/pagination');
 
 const router = express.Router();
@@ -66,7 +65,6 @@ router.post('/', requireAuth, requireAdmin, sectionValidation, async (req, res, 
     
     await newSection.save();
     
-    await logAuditEvent({ req, action: 'section.create', entity: 'section', entityId: String(newSection._id), metadata: { name: newSection.name, year: newSection.year } });
     sendCreated(res, newSection);
   } catch (err) {
     next(err);
@@ -89,7 +87,6 @@ router.put('/:id', requireAuth, requireAdmin, sectionValidation, async (req, res
     
     if (!updated) return res.status(404).json({ success: false, message: 'Section not found' });
     
-    await logAuditEvent({ req, action: 'section.update', entity: 'section', entityId: String(req.params.id), metadata: { name: updated.name, year: updated.year } });
     sendSuccess(res, updated);
   } catch (err) {
     next(err);
@@ -107,7 +104,6 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     
     if (!section) return res.status(404).json({ success: false, message: 'Section not found' });
     
-    await logAuditEvent({ req, action: 'section.delete', entity: 'section', entityId: String(req.params.id), metadata: { name: section.name, year: section.year } });
     sendSuccess(res, { message: 'Section deleted successfully' });
   } catch (err) {
     next(err);

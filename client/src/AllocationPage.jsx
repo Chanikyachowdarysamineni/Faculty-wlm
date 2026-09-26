@@ -878,7 +878,7 @@ const AllocationPage = ({ isAdmin = true }) => {
     });
     
     // Validation logging
-    console.log('?? Allocation Export Rows Generation:', {
+    console.log('ℹ️ Allocation Export Rows Generation:', {
       totalRowsGenerated: rows.length,
       skippedEmptySlots: skippedCount,
       byType: {
@@ -927,7 +927,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const colCount = 3 + sections.length;
 
-  if (loading) return <div className="ap-loading">Loading allocations�</div>;
+  if (loading) return <div className="ap-loading">Loading allocations...</div>;
 
   return (
     <div className="ap-wrapper">
@@ -936,7 +936,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       <div className="ap-topbar">
         <div className="ap-topbar-left">
           <h2 className="ap-heading">Faculty Workload Allocation</h2>
-          {unsaved && <span className="ap-unsaved-badge">? Unsaved changes</span>}
+          {unsaved && <span className="ap-unsaved-badge">⚠️ Unsaved changes</span>}
           <span className="ap-sync-meta">Last synced: {formatSyncedAt(lastSyncedAt)}</span>
         </div>
         <div className="ap-topbar-right">
@@ -945,37 +945,29 @@ const AllocationPage = ({ isAdmin = true }) => {
               <button
                 className="ap-btn ap-btn-export"
                 onClick={() => refreshAllocationReadData({ withLoader: false })}
-              >
-                ? Retry Sync
-              </button>
+              >↻ Retry Sync</button>
               <button
                 className="ap-btn ap-btn-save"
                 onClick={saveAll}
                 disabled={saving || !unsaved}
               >
-                {saving ? 'Saving�' : '?? Save All'}
+                {saving ? 'Saving...' : '💾 Save All'}
               </button>
               <button
                 className="ap-btn ap-btn-export"
                 onClick={() => exportAllocations('csv')}
                 disabled={allocationExportRows.length === 0}
-              >
-                ? CSV
-              </button>
+              >📥 CSV</button>
               <button
                 className="ap-btn ap-btn-export"
                 onClick={() => exportAllocations('excel')}
                 disabled={allocationExportRows.length === 0}
-              >
-                ? Excel
-              </button>
+              >📊 Excel</button>
               <button
                 className="ap-btn ap-btn-export"
                 onClick={() => exportAllocations('pdf')}
                 disabled={allocationExportRows.length === 0}
-              >
-                ? PDF
-              </button>
+              >📄 PDF</button>
             </>
           )}
         </div>
@@ -983,7 +975,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
       {apiError && (
         <div className="ap-error-banner">
-          <span>?? {apiError}</span>
+          <span>⚠️ {apiError}</span>
           <button className="ap-error-retry" onClick={() => refreshAllocationReadData({ withLoader: true })}>Retry</button>
         </div>
       )}
@@ -1028,11 +1020,11 @@ const AllocationPage = ({ isAdmin = true }) => {
 
       {/* -- Legend -- */}
       <div className="ap-legend">
-        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-L" />L � Lecture</span>
-        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-T" />T � Tutorial</span>
-        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-P" />P � Practical</span>
-        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-auto" />? Auto-filled (L R1 ? T/P R1 &amp; T?P same row)</span>
-        <span className="ap-leg-item"><span className="ap-leg-star">?</span> Main Faculty (L Row 1)</span>
+        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-L" />L — Lecture</span>
+        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-T" />T — Tutorial</span>
+        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-P" />P — Practical</span>
+        <span className="ap-leg-item"><span className="ap-leg-dot ap-leg-dot-auto" />⚡ Auto-filled (L R1 → T/P R1 &amp; T↔P same row)</span>
+        <span className="ap-leg-item"><span className="ap-leg-star">★</span> Main Faculty (L Row 1)</span>
       </div>
 
       {isAdmin && (
@@ -1092,7 +1084,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                           rowIdx === rowCount - 1 ? 'ap-tr-type-last' : '',
                         ].filter(Boolean).join(' ')}
                       >
-                        {/* Course cell � one per course, rowSpan = all type rows */}
+                        {/* Course cell — one per course, rowSpan = all type rows */}
                         {isFirstOfCourse && (
                           <td rowSpan={totalRows} className="ap-td-course">
                             <div className="ap-course-code">{course.subjectCode}</div>
@@ -1106,7 +1098,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                           </td>
                         )}
 
-                        {/* Type badge � one per type group, rowSpan = sub-rows of that type */}
+                        {/* Type badge — one per type group, rowSpan = sub-rows of that type */}
                         {isFirstOfType && (
                           <td rowSpan={rowCount} className={`ap-td-type ap-td-type-${type.toLowerCase()}`}>
                             <span className={`ap-type-badge ap-type-${type.toLowerCase()}`}>{type}</span>
@@ -1190,8 +1182,8 @@ const AllocationPage = ({ isAdmin = true }) => {
         )}
       </div>
 
-      {saving && <div className="ap-saving-indicator">Saving�</div>}
-      {workloadsLoading && <div className="ap-saving-indicator">Syncing workloads�</div>}
+      {saving && <div className="ap-saving-indicator">Saving...</div>}
+      {workloadsLoading && <div className="ap-saving-indicator">Syncing workloads...</div>}
       {toast  && <div className="ap-toast">{toast}</div>}
     </div>
   );

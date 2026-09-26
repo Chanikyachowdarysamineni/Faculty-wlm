@@ -20,7 +20,7 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 const TokenBlacklist = require('../models/TokenBlacklist');
 const { signToken } = require('../utils/jwt');
 const { requireAuth, validateActiveSession } = require('../middleware/auth');
-const { logAuditEvent, getIp } = require('../utils/audit');
+const getIp = (req) => req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 const { sendSuccess, sendError, sendUnauthorized, sendValidationError } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateLogin, validatePasswordReset, validateChangePassword } = require('../middleware/validators');
@@ -79,7 +79,6 @@ router.post(
       const user = await User.findOne({ empId: id });
       if (!user) {
         logger.warn('Login attempted for non-existent user', { empId: id, ip: getIp(req) });
-        await logAuditEvent({ req, action: 'auth.login.failed', entity: 'user', entityId: id, metadata: { reason: 'user-not-found' } });
         return sendError(res, 'Employee ID not found.', 401);
       }
 
@@ -87,7 +86,6 @@ router.post(
       if (user.lockUntil && user.lockUntil > new Date()) {
         const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
         logger.warn('Login attempt on locked account', { empId: user.empId, lockUntil: user.lockUntil });
-        await logAuditEvent({ req, action: 'auth.login.locked', entity: 'user', entityId: user.empId, metadata: { minutesLeft } });
         return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
       }
 
@@ -105,17 +103,6 @@ router.post(
 
         await User.updateOne({ _id: user._id }, lockUpdate);
         logger.info('Failed login attempt', { empId: user.empId, attempt: failedAttempts, locked: failedAttempts >= MAX_FAILED });
-        await logAuditEvent({
-          req,
-          action: 'auth.login.failed',
-          entity: 'user',
-          entityId: user.empId,
-          metadata: {
-            reason: 'invalid-password',
-            failedAttempts,
-            locked: failedAttempts >= MAX_FAILED,
-          },
-        });
         if (failedAttempts >= MAX_FAILED) {
           return sendError(res, `Account locked due to too many failed attempts. Try again after ${LOCK_MINUTES} minutes.`, 401);
         }
@@ -160,7 +147,6 @@ router.post(
       );
 
       logger.info('User logged in successfully', { empId: user.empId, role: userRole, isAdmin: isAdminUser, ip: getIp(req) });
-      await logAuditEvent({ req, action: 'auth.login.success', entity: 'user', entityId: user.empId, metadata: { ip: getIp(req), role: userRole, isAdmin: isAdminUser } });
       return sendSuccess(res, { token, user: payload }, 200, { message: 'Login successful' });
     } catch (err) {
       logger.error('Login error', { error: err.message });
@@ -187,7 +173,6 @@ router.post(
       const user = await User.findOne({ empId });
       if (!user) {
         logger.info('Password reset requested for non-existent user', { empId });
-        await logAuditEvent({ req, action: 'auth.reset.request.unknown', entity: 'user', entityId: empId });
         return sendSuccess(res, null, 200, { message: 'If an account exists, a reset link has been sent.' });
       }
 
@@ -195,7 +180,6 @@ router.post(
       const rawToken = await PasswordResetToken.createReset(user.empId, RESET_TOKEN_TTL_MINUTES);
       
       logger.info('Password reset requested', { empId: user.empId });
-      await logAuditEvent({ req, action: 'auth.reset.requested', entity: 'user', entityId: user.empId });
 
       // Send email if the user has one on file
       if (user.email) {
@@ -259,7 +243,6 @@ router.post(
       );
 
       logger.info('Password reset completed successfully', { empId: user.empId });
-      await logAuditEvent({ req, action: 'auth.reset.completed', entity: 'user', entityId: user.empId });
       return sendSuccess(res, null, 200, { message: 'Password has been reset successfully.' });
     } catch (err) {
       logger.error('Reset password error', { error: err.message });
@@ -320,7 +303,6 @@ router.put(
       const newToken = signToken(payload);
 
       logger.info('Password changed successfully', { empId: user.empId });
-      await logAuditEvent({ req, action: 'auth.password.changed', entity: 'user', entityId: user.empId });
       return sendSuccess(res, { token: newToken }, 200, { message: 'Password changed successfully.' });
     } catch (err) {
       logger.error('Change password error', { error: err.message });
@@ -368,7 +350,6 @@ router.post('/logout', requireAuth, async (req, res, next) => {
     }
 
     logger.info('User logged out successfully', { empId: req.user.id });
-    await logAuditEvent({ req, action: 'auth.logout', entity: 'user', entityId: req.user.id });
     return sendSuccess(res, null, 200, { message: 'Logged out successfully.' });
   } catch (err) {
     logger.error('Logout error', { error: err.message });

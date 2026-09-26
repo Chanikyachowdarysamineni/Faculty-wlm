@@ -20,7 +20,6 @@ const Faculty = require('../models/Faculty');
 const Course = require('../models/Course');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendNotFound, sendCreated, sendConflict } = require('../utils/response');
-const { logAuditEvent } = require('../utils/audit');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -255,14 +254,6 @@ router.post(
         { upsert: true, new: true }
       );
 
-      // Log audit event
-      await logAuditEvent({
-        req,
-        action: 'faculty_preference.create',
-        entity: 'FacultyPreference',
-        entityId: empId,
-        metadata: { courseCount: courseIds.length, courseIds },
-      });
 
       return sendCreated(res, {
         empId: preferences.empId,
@@ -343,14 +334,6 @@ router.put(
         { new: true }
       );
 
-      // Log audit event
-      await logAuditEvent({
-        req,
-        action: 'faculty_preference.update',
-        entity: 'FacultyPreference',
-        entityId: empId,
-        metadata: { courseCount: preferredCourseIds?.length },
-      });
 
       return sendSuccess(res, {
         empId: updatedPreferences.empId,
@@ -397,14 +380,6 @@ router.delete(
         return sendNotFound(res, `No preferences found for faculty ${empId}`);
       }
 
-      // Log audit event
-      await logAuditEvent({
-        req,
-        action: 'faculty_preference.delete',
-        entity: 'FacultyPreference',
-        entityId: empId,
-        metadata: {},
-      });
 
       return sendSuccess(res, {
         empId,

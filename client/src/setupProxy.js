@@ -67,5 +67,11 @@ module.exports = function (app) {
         }
       },      logLevel: 'warn',    })
   );
+
+  // ─ Root Redirect ───────────────────────────────────────
+  // Redirect local http://localhost:3000/ to /csefaculty
+  app.get(/^\/$/, (req, res) => {
+    res.redirect('/csefaculty');
+  });
 };
 

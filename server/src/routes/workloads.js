@@ -22,7 +22,7 @@ const Course    = require('../models/Course');
 const CourseAllocation = require('../models/CourseAllocation');
 const Setting   = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
-const { logAuditEvent } = require('../utils/audit');
+
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -697,24 +697,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       }
     }
 
-    await logAuditEvent({
-      req,
-      action: 'workload.periods.update',
-      entity: 'workload',
-      entityId: id,
-      metadata: {
-        empId: workload.empId,
-        previousL: workload.manualL !== undefined && workload.manualL !== null ? workload.manualL : workload.fixedL,
-        previousT: workload.manualT !== undefined && workload.manualT !== null ? workload.manualT : workload.fixedT,
-        previousP: workload.manualP !== undefined && workload.manualP !== null ? workload.manualP : workload.fixedP,
-        newL,
-        newT,
-        newP,
-        isOverAllocated: updatedTotal > totalCapacity,
-        excessHours,
-        totalCapacity,
-      }
-    });
+
 
     logger.info('Workload periods updated', {
       id,
@@ -827,17 +810,7 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
       { $set: { isVisible: boolIsVisible } }
     );
 
-    await logAuditEvent({
-      req,
-      action: 'workload.bulk_visibility.toggle',
-      entity: 'workload',
-      entityId: 'all',
-      metadata: { 
-        isVisible: boolIsVisible, 
-        modifiedCount: result.modifiedCount,
-        matchedCount: result.matchedCount 
-      }
-    });
+
 
     logger.info('Global workload visibility toggled', {
       isVisible: boolIsVisible,
@@ -932,16 +905,7 @@ router.patch('/:id/visibility', requireAuth, requireAdmin, async (req, res, next
       return sendNotFound(res, 'Workload entry not found.');
     }
 
-    await logAuditEvent({
-      req,
-      action: 'workload.visibility.toggle',
-      entity: 'workload',
-      entityId: id,
-      metadata: {
-        empId: result.empId,
-        isVisible: boolIsVisible,
-      }
-    });
+
 
     logger.info('Workload visibility toggled', {
       id,
@@ -1212,7 +1176,7 @@ router.post(
         }, session); // H-5: Pass session
       }
 
-      await logAuditEvent({ req, action: 'workload.create', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
+
       logger.info('Workload created', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
       
       await session.commitTransaction();
@@ -1549,7 +1513,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       }, session); // H-5: Pass session
     }
 
-    await logAuditEvent({ req, action: 'workload.update', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section } });
+
     logger.info('Workload updated', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
 
     await session.commitTransaction();
@@ -1633,7 +1597,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
       }, session);
     }
 
-    await logAuditEvent({ req, action: 'workload.delete', entity: 'workload', entityId: String(doc._id), metadata: { empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, softDelete: true } });
+
     logger.info('Workload soft-deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
 
     await session.commitTransaction();

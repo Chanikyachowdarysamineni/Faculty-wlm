@@ -50,7 +50,7 @@ const workloadsRoutes   = require('./routes/workloads');
 const settingsRoutes    = require('./routes/settings');
 const statsRoutes       = require('./routes/stats');
 const allocationsRoutes = require('./routes/allocations');
-const auditLogsRoutes   = require('./routes/auditLogs');
+
 const facultyPreferencesRoutes = require('./routes/faculty-preferences');
 const facultyCapacityRoutes = require('./routes/facultyCapacity');
 const designationsRoutes = require('./routes/designations');
@@ -67,7 +67,6 @@ const Workload    = require('./models/Workload');
 const Course      = require('./models/Course');
 const CourseAllocation = require('./models/CourseAllocation');
 const { normalizeCourseTypeKey } = require('./utils/courseUtils'); // L-3 FIX: import instead of duplicate
-const AuditLog = require('./models/AuditLog');
 const Counter = require('./models/Counter');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const TokenBlacklist = require('./models/TokenBlacklist');
@@ -144,8 +143,6 @@ const baselineAllowedOrigins = [
   'https://wlm-client.onrender.com',
   'https://faculty-workload-management-1.onrender.com',
   'https://160.187.169.41',
-  'http://160.187.169.41',
-  'http://160.187.169.41:3000',
   'https://160.187.169.41:3000',
   // Local development (localhost for testing)
   'http://localhost:3000',
@@ -311,7 +308,7 @@ app.use('/deva/settings',              settingsRoutes);
 app.use('/deva/sections',              require('./routes/sections'));
 app.use('/deva/stats',                 statsRoutes);
 app.use('/deva/allocations',           allocationsRoutes);
-app.use('/deva/audit-logs',            auditLogsRoutes);
+
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 // NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
 app.use('/deva/config', configRoutes);
@@ -405,7 +402,7 @@ process.on('uncaughtException', (err) => {
   await syncIndexesSafe(Course);
   await syncIndexesSafe(CourseAllocation);
   await syncIndexesSafe(Counter);
-  await syncIndexesSafe(AuditLog);
+
   await syncIndexesSafe(PasswordResetToken);
   await backfillWorkloadCourseTypeKeys();
 

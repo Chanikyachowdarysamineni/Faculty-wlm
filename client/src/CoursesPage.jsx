@@ -209,7 +209,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   const courseCredits = (courseId) =>
     courseList.find(c => c.id === +courseId)?.C ?? '—';
 
-  const colCount = isAdmin ? 9 : 8;
+  const colCount = isAdmin ? 10 : 9;
 
   if (loadingCourses) {
     return <div className="cp-wrapper"><div className="cp-empty-state">Loading courses…</div></div>;
@@ -325,6 +325,7 @@ const CoursesPage = ({ isAdmin = true }) => {
           <table className="cp-table">
             <thead>
               <tr>
+                <th className="cp-th-sno">S.No.</th>
                 <th>Course Code</th>
                 <th>Course Name</th>
                 <th>Course Short Name</th>
@@ -341,6 +342,7 @@ const CoursesPage = ({ isAdmin = true }) => {
                 <tr><td colSpan={colCount} className="cp-td-empty">No courses found for {activeProgram === 'B.Tech' ? `${activeYear} Year` : 'M.Tech'}</td></tr>
               ) : filteredCourses.map((c, i) => (
                 <tr key={c.id} className={i % 2 === 0 ? 'cp-tr-even' : 'cp-tr-odd'}>
+                  <td className="cp-td-sno">{i + 1}</td>
                   <td className="cp-td-code">{c.subjectCode}</td>
                   <td className="cp-td-name">{c.subjectName}</td>
                   <td><span className="cp-short-pill">{c.shortName}</span></td>
