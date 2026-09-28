@@ -195,7 +195,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     return headers;
   }, []);
 
-  const { setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig } = useSharedData();
+  const { 
+    setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig,
+    selectedSemester, setSelectedSemester
+  } = useSharedData();
   const [dashboardData, setDashboardData] = useState({
     loading: false,
     error: '',
@@ -251,7 +254,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     if (isAdmin) {
       try {
-        const data = await fetchAllPages('/deva/submissions', {}, { headers });
+        const data = await fetchAllPages('/deva/submissions', { semester: selectedSemester }, { headers });
         if (!data.success) {
           setSubmissionsSyncError(data.message || 'Failed to refresh submissions.');
           return;
@@ -266,7 +269,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }
 
     try {
-      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}`, {
+      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}?semester=${selectedSemester}`, {
         headers,
         silentMode: true // Suppress logs for expected 404 (no submission yet)
       });
@@ -291,7 +294,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     } catch {
       setSubmissionsSyncError('Failed to refresh submissions.');
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, selectedSemester]);
 
   // Fetch submissions + toggle settings from the server
   useEffect(() => {
@@ -316,7 +319,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     const refreshAssignedCourses = async () => {
       if (isAdmin) return;
-      const result = await fetchAllPages('/deva/workloads', { empId: user.id }, { headers });
+      const result = await fetchAllPages('/deva/workloads', { empId: user.id, semester: selectedSemester }, { headers });
       if (result.success) {
         const uniqueSubjects = new Set();
         (result.data || []).forEach(w => uniqueSubjects.add(w.subjectCode));
@@ -361,9 +364,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     setDashboardData(prev => ({ ...prev, loading: true, error: '' }));
     try {
       const [fReq, aReq, cReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/allocations', {}, { headers }),
-        fetchAllPages('/deva/courses', {}, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/allocations', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
       ]);
 
       const nextData = {};
@@ -430,7 +433,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       }));
       setDashboardSyncError('Could not refresh dashboard data. Showing latest available data.');
     }
-  }, [isAdmin, authHeaders]);
+  }, [isAdmin, authHeaders, selectedSemester, setFaculty, setAllocations, setCourses]);
 
   useEffect(() => {
     if (!isAdmin || activeNav !== 'dashboard') return;
@@ -446,7 +449,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       setAnalytics(prev => ({ ...prev, loading: true }));
       try {
         const headers = authHeaders();
-        const res = await fetch(`${API}/deva/stats/dashboard-analytics`, { headers });
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?semester=${selectedSemester}`, { headers });
         if (!res.ok) throw new Error('Analytics fetch failed');
         const json = await res.json();
         if (isMounted && json.success) {
@@ -463,7 +466,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     };
     fetchAnalytics();
     return () => { isMounted = false; };
-  }, [isAdmin, authHeaders, dashboardLastSyncedAt]);
+  }, [isAdmin, authHeaders, dashboardLastSyncedAt, selectedSemester]);
 
   const refreshMasterData = useCallback(async () => {
     if (!user?.id) return;
@@ -478,8 +481,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     try {
       const [fReq, cReq, configReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/courses', {}, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
         fetchJsonWithRetry(`${API}/deva/config`, { headers })
       ]);
 
@@ -511,7 +514,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     } catch {
       setDashboardSyncError('Could not refresh dashboard data. Showing latest available data.');
     }
-  }, [user?.id, authHeaders]);
+  }, [user?.id, authHeaders, selectedSemester, setFaculty, setCourses, setSystemConfig]);
 
   useEffect(() => {
     refreshMasterData();
@@ -1033,13 +1036,30 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         </div>
 
         <div className="dash-topbar-right">
+          <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
+            <button 
+              className={`dash-switch-btn ${selectedSemester === 'ODD' ? 'active' : ''}`}
+              style={{ background: selectedSemester === 'ODD' ? '#fff' : 'transparent', color: selectedSemester === 'ODD' ? '#0f172a' : '#fff', border: 'none', margin: 0 }}
+              onClick={() => setSelectedSemester('ODD')}
+            >
+              Odd Sem
+            </button>
+            <button 
+              className={`dash-switch-btn ${selectedSemester === 'EVEN' ? 'active' : ''}`}
+              style={{ background: selectedSemester === 'EVEN' ? '#fff' : 'transparent', color: selectedSemester === 'EVEN' ? '#0f172a' : '#fff', border: 'none', margin: 0 }}
+              onClick={() => setSelectedSemester('EVEN')}
+            >
+              Even Sem
+            </button>
+          </div>
+
           {user.canAccessAdmin && (
             <button
               className="dash-switch-btn"
               title="Switch between Admin and Faculty dashboard"
               onClick={() => { setDashMode(null); setActiveNav('dashboard'); }}
             >
-              Switch
+              Switch Role
             </button>
           )}
           <button className="dash-logout-btn" onClick={onLogout}>
@@ -1435,7 +1455,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                               )}
 
                               {/* Overloaded Faculty Modal */}
-                              {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} />}
+                              {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} selectedSemester={selectedSemester} />}
 
                               {!isAdmin && (
                                 <>

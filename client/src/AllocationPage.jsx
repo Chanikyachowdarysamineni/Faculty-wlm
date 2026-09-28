@@ -221,7 +221,7 @@ const CellPicker = ({
 
 // -- AllocationPage -------------------------------------------------------------
 const AllocationPage = ({ isAdmin = true }) => {
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
   const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
@@ -244,10 +244,10 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty && contextFaculty.length > 0) {
+    if (contextFaculty) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses && contextCourses.length > 0) {
+    if (contextCourses) {
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);
@@ -268,7 +268,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchWorkloads = useCallback(async () => {
     setWorkloadsLoading(true);
     try {
-      const result = await fetchAllPages('/deva/workloads', { year: yearKey }, { headers: authHeader() });
+      const result = await fetchAllPages('/deva/workloads', { year: yearKey, semester: selectedSemester }, { headers: authHeader() });
       if (!result.success) {
         setWorkloads([]);
         console.error('Failed to fetch workloads:', result.message);
@@ -287,7 +287,7 @@ const AllocationPage = ({ isAdmin = true }) => {
     } finally {
       setWorkloadsLoading(false);
     }
-  }, [yearKey]);
+  }, [yearKey, selectedSemester]);
 
   // Main faculty mapping for auto-fill (from backend)
   const [mainFacultyMap, setMainFacultyMap] = useState({});
@@ -400,7 +400,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchAllocations = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
     try {
-      const data = await fetchAllPages('/deva/allocations', { year: yearKey }, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/allocations', { year: yearKey, semester: selectedSemester }, { headers: authHeader() });
       if (!data.success) {
         return { success: false, message: data.message || 'Could not load allocations.' };
       }
@@ -413,7 +413,7 @@ const AllocationPage = ({ isAdmin = true }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [yearKey]);
+  }, [yearKey, selectedSemester]);
 
   const refreshAllocationReadData = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);

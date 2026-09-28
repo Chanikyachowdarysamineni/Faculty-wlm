@@ -3,7 +3,7 @@ import './OverloadedFacultyModal.css';
 import API from './config';
 import { authJsonHeaders } from './utils/apiFetchAll';
 
-const OverloadedFacultyModal = ({ isOpen, onClose }) => {
+const OverloadedFacultyModal = ({ isOpen, onClose, selectedSemester }) => {
   const [overloadedFaculty, setOverloadedFaculty] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +25,7 @@ const OverloadedFacultyModal = ({ isOpen, onClose }) => {
     setError('');
     try {
       const headers = authJsonHeaders();
-      const res = await fetch(`${API}/deva/stats/overloaded-faculty`, { headers });
+      const res = await fetch(`${API}/deva/stats/overloaded-faculty?semester=${selectedSemester}`, { headers });
       const data = await res.json();
 
       if (data.success) {

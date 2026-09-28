@@ -12,11 +12,13 @@ import { useAuth } from './AuthContext';
 import PageHeader from './components/PageHeader';
 import { authJsonHeaders } from './utils/apiFetchAll';
 import API from './config';
+import { useSharedData } from './DataContext';
 import './Dashboard.css';
 
 const AdminDashboard = () => {
   const { currentUser, onLogout } = useAuth();
   const navigate = useNavigate();
+  const { selectedSemester } = useSharedData();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -130,7 +132,7 @@ const AdminDashboard = () => {
         </aside>
 
         <main className="main-content">
-          {activeTab === 'overview' && <AdminOverview user={currentUser} />}
+          {activeTab === 'overview' && <AdminOverview user={currentUser} selectedSemester={selectedSemester} />}
         </main>
       </div>
     </div>
@@ -140,7 +142,7 @@ const AdminDashboard = () => {
 /**
  * Admin Overview Card - Shows key admin information and quick actions
  */
-const AdminOverview = ({ user }) => {
+const AdminOverview = ({ user, selectedSemester }) => {
   const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [] });
   const [loading, setLoading] = useState(true);
 
@@ -157,6 +159,7 @@ const AdminOverview = ({ user }) => {
         const headers = authJsonHeaders();
         // M-4 FIX: Use server-side analytics endpoint instead of fetching all data client-side
         const params = new URLSearchParams();
+        if (selectedSemester) params.append('semester', selectedSemester);
 
         const res = await fetch(`${API}/deva/stats/dashboard-analytics?${params}`, { headers });
         const json = await res.json();
@@ -174,7 +177,7 @@ const AdminOverview = ({ user }) => {
       }
     };
     fetchData();
-  }, []);
+  }, [selectedSemester]);
 
   const handleCardClick = (cardType) => {
     setExpandedCard(expandedCard === cardType ? null : cardType);

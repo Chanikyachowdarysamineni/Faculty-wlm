@@ -25,6 +25,7 @@ const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = require('../middleware/validators');
+const { recalculateCapacity } = require('../utils/capacityUtils');
 
 const router = express.Router();
 
@@ -49,7 +50,7 @@ const toClient = (doc) => ({
   updatedAt:   doc.updatedAt?.toISOString() || null,
 });
 
-const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null) => {
+const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null, semester = 'ODD') => {
   // H-3: Always exclude soft-deleted faculty unless the caller explicitly opts in
   const baseFilter = { isDeleted: { $ne: true }, ...matchFilter };
   const pipeline = [
@@ -73,6 +74,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
               $expr: { $eq: ['$$empId', '$empId'] },
               isDeleted: { $ne: true },
               allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+              semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester
             }
           }
         ],
@@ -80,8 +82,28 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
       }
     },
     {
+      $lookup: {
+        from: 'faculty_capacities',
+        let: { empId: '$empId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$$empId', '$empId'] },
+              semester: semester
+            }
+          }
+        ],
+        as: 'capacityRecord'
+      }
+    },
+    {
       $addFields: {
-        capacity: { $ifNull: ["$capacity", 18] },
+        capacityObj: { $arrayElemAt: ['$capacityRecord', 0] }
+      }
+    },
+    {
+      $addFields: {
+        capacity: { $ifNull: ["$capacityObj.capacity", { $ifNull: ["$capacity", 18] }] },
         lectureHours: {
           $reduce: {
             input: '$workloads',
@@ -165,9 +187,10 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     }
     // H-3: Exclude soft-deleted faculty from count (pipeline already excludes them)
     const countFilter = { isDeleted: { $ne: true }, ...filter };
+    const semester = req.query.semester || 'ODD';
     const [total, docs] = await Promise.all([
       Faculty.countDocuments(countFilter),
-      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit))
+      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, semester))
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
     sendPaginated(res, docs.map(toClient), { total, page, limit }, 200);
@@ -188,7 +211,8 @@ router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
 // GET /api/faculty/:empId
 router.get('/:empId', requireAuth, async (req, res, next) => {
   try {
-    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1);
+    const semester = req.query.semester || 'ODD';
+    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester);
     const docs = await Faculty.aggregate(pipeline);
     const doc = docs[0];
     if (!doc) {
@@ -289,6 +313,9 @@ router.post(
 
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
       
+      // Initialize semester capacity records
+      await recalculateCapacity(doc.empId, { updatedBy: req.user.id });
+      
       // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
       // For now, the creation is successful.
       sendCreated(res, toClient(doc));
@@ -357,7 +384,7 @@ router.put(
         name, department, designation, mobile, email, slNo, capacity,
         status, role, username, qualification, experience,
         workingHours, joiningDate, address, gender, dob,
-        profilePicture, researchArea, specialization, empId: newEmpId,
+        profilePicture, researchArea, specialization, empId: newEmpId, semester
       } = req.body;
       const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
@@ -373,7 +400,7 @@ router.put(
         if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
         if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
         if (slNo !== undefined) allowedUpdates.slNo = Number(slNo);
-        if (capacity !== undefined) allowedUpdates.capacity = Number(capacity);
+        if (capacity !== undefined && !semester) allowedUpdates.capacity = Number(capacity);
         if (status !== undefined) allowedUpdates.status = String(status).trim();
         if (role !== undefined) allowedUpdates.role = String(role).trim();
         if (username !== undefined) allowedUpdates.username = String(username).trim();
@@ -484,12 +511,25 @@ router.put(
         );
       }
 
-      
+      // If semester is provided and capacity is updated, directly update FacultyCapacity for that semester
+      if (isAdmin && capacity !== undefined && semester) {
+        const FacultyCapacity = require('../models/FacultyCapacity');
+        await FacultyCapacity.findOneAndUpdate(
+          { empId: allowedUpdates.empId || empId, semester },
+          { $set: { capacity: Number(capacity) } },
+          { upsert: true, session }
+        );
+      }
+
       await session.commitTransaction();
       session.endSession();
+      
+      // Update semester capacities
+      await recalculateCapacity(allowedUpdates.empId || empId, { updatedBy: req.user.id, semester: semester || null });
 
       // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
-      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1);
+      const refreshSemester = req.query.semester || 'ODD';
+      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester);
       const freshDocs = await Faculty.aggregate(freshPipeline);
       const freshDoc = freshDocs[0] || doc;
       

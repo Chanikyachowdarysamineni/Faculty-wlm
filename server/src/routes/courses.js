@@ -79,6 +79,7 @@ const toClient = (doc) => {
     P: Number(doc.P || 0),
     C: Number(doc.C || 0),
     department: String(doc.department || 'CSE'),
+    semester: String(doc.semester || 'ODD'),
     isDeleted: Boolean(doc.isDeleted),
     createdAt: doc.createdAt?.toISOString() || null,
   };
@@ -96,6 +97,9 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.courseType) filter.courseType = req.query.courseType;
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     if (req.query.year) filter.year = normalizeYear(req.query.year);
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
@@ -208,8 +212,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   session.startTransaction();
   try {
     const courseId = Number(req.params.id);
+    const semesterQuery = req.query.semester;
+
     const current = await Course.findOne({ courseId }).session(session).lean();
-    if (!current) {
+    if (!current || (semesterQuery && current.semester !== semesterQuery && !(semesterQuery === 'ODD' && !current.semester))) {
       await session.abortTransaction();
       session.endSession();
       logger.warn('Course not found for update', { courseId, userId: req.user.id });
@@ -308,9 +314,15 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   session.startTransaction();
   try {
     const courseId = Number(req.params.id);
+    const semesterQuery = req.query.semester;
+
+    const query = { courseId, isDeleted: { $ne: true } };
+    if (semesterQuery) {
+      query.semester = semesterQuery;
+    }
 
     const doc = await Course.findOneAndUpdate(
-      { courseId, isDeleted: { $ne: true } },
+      query,
       { $set: { isDeleted: true, deletedAt: new Date() } },
       { new: true, session }
     );

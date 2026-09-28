@@ -120,6 +120,9 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.section) filter.section = String(req.query.section).trim();
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
     
     // CRITICAL: Always use find() — NEVER findOne()
     // This ensures ALL matching records are returned, not just the first one
@@ -179,7 +182,11 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    const docs = await CourseAllocation.find().lean();
+    const filter = {};
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
+    const docs = await CourseAllocation.find(filter).lean();
 
     // Build a map: empId → { faculty info, rows[] }
     const map = {};
@@ -240,7 +247,11 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, 
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    const docs = await CourseAllocation.find().sort({ courseId: 1, year: 1, section: 1 }).lean();
+    const filter = {};
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
+    const docs = await CourseAllocation.find(filter).sort({ courseId: 1, year: 1, section: 1 }).lean();
 
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const headers = ['Course ID','Subject Code','Subject Name','Year','Section',
@@ -281,7 +292,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const {
       courseId, year: rawYear, section,
-      lectureSlot, lectureSlots, tutorialSlots, practicalSlots,
+      lectureSlot, lectureSlots, tutorialSlots, practicalSlots, semester
     } = req.body;
 
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech)
@@ -310,6 +321,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     const course = await Course.findOne({ courseId: Number(courseId) }).lean();
     if (!course)
       return sendNotFound(res, 'Course not found.');
+
+    const targetSemester = semester || course.semester || 'ODD';
+    if (course.semester !== targetSemester) {
+      return sendError(res, `Course belongs to ${course.semester} semester, but allocation was requested for ${targetSemester} semester.`, 400);
+    }
 
     // Validate/enrich each empId in the slots
     const enrichSlot = async (slot) => {
@@ -341,7 +357,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     let enrichedTutorials = await Promise.all(rawTutorialSlots.map(enrichSlot));
     let enrichedPracticals = await Promise.all(rawPracticalSlots.map(enrichSlot));
 
-    const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section }).lean();
+    const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section, semester: targetSemester }).lean();
 
     // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types
     const lectureHasTa = enrichedLSlots.some((slot) => slot?.empId && isTADesignation(slot?.designation));
@@ -441,7 +457,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     const doc = await CourseAllocation.findOneAndUpdate(
-      { courseId: Number(courseId), year, section },
+      { courseId: Number(courseId), year, section, semester: targetSemester },
       {
         $set: {
           subjectCode:    course.subjectCode,
@@ -452,6 +468,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
           fixedT:         course.T,
           fixedP:         course.P,
           C:              course.C,
+          semester:       course.semester || 'ODD',
           lectureSlots:   enrichedLSlots,
           lectureSlot:    enrichedLecture,
           tutorialSlots:  enrichedTutorials,
@@ -494,8 +511,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 // DELETE /api/allocations/:id
 router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const doc = await CourseAllocation.findByIdAndDelete(req.params.id);
-    if (!doc) return sendNotFound(res, 'Allocation not found.');
+    const doc = await CourseAllocation.findById(req.params.id);
+    if (!doc || (req.query.semester && doc.semester !== req.query.semester && !(req.query.semester === 'ODD' && !doc.semester))) {
+      return sendNotFound(res, 'Allocation not found.');
+    }
+    await CourseAllocation.findByIdAndDelete(req.params.id);
 
     // Recalculate capacity for all affected faculty
     const affectedEmpIds = new Set([
@@ -506,7 +526,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     ].filter(Boolean));
 
     for (const empId of affectedEmpIds) {
-      await recalculateCapacity(empId, { updatedBy: req.user?.id });
+      await recalculateCapacity(empId, { updatedBy: req.user?.id, semester: doc.semester });
     }
 
     sendSuccess(res, { message: 'Allocation removed.' }, 200);

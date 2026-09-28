@@ -244,6 +244,12 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.get('/', requireAuth, async (req, res, next) => {
   try {
+    const semester = req.query.semester || 'ODD';
+    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const baseCourseFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
+    const baseSubmissionFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
+    const baseWorkloadFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
+
     const [
       totalFaculty,
       totalCourses,
@@ -256,14 +262,15 @@ router.get('/', requireAuth, async (req, res, next) => {
       workloadByFaculty,
     ] = await Promise.all([
       Faculty.countDocuments({ isDeleted: { $ne: true } }),
-      Course.countDocuments({ isDeleted: { $ne: true } }),
-      Submission.countDocuments({ isDeleted: { $ne: true } }),
-      Workload.countDocuments({ isDeleted: { $ne: true } }),
-      Course.aggregate([{ $group: { _id: null, total: { $sum: '$C' } } }]),
-      Faculty.aggregate([{ $group: { _id: '$designation', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
-      Course.aggregate([{ $group: { _id: '$program', count: { $sum: 1 } } }]),
-      Course.aggregate([{ $group: { _id: '$courseType', count: { $sum: 1 } } }]),
+      Course.countDocuments(baseCourseFilter),
+      Submission.countDocuments(baseSubmissionFilter),
+      Workload.countDocuments(baseWorkloadFilter),
+      Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: null, total: { $sum: '$C' } } }]),
+      Faculty.aggregate([{ $match: { isDeleted: { $ne: true } } }, { $group: { _id: '$designation', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+      Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: '$program', count: { $sum: 1 } } }]),
+      Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: '$courseType', count: { $sum: 1 } } }]),
       Workload.aggregate([
+        { $match: baseWorkloadFilter },
         {
           $group: {
             _id: '$empId',
@@ -322,13 +329,21 @@ router.get('/', requireAuth, async (req, res, next) => {
 router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { year, section } = req.query;
+    const semester = req.query.semester || 'ODD';
 
-    const matchStage = {};
+    const matchStage = {
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+      semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester,
+    };
     if (year && year !== 'All') matchStage.year = String(year);
     if (section && section !== 'All') matchStage.section = String(section);
 
-    const [facultyList, workloadAgg] = await Promise.all([
-      Faculty.find().lean(),
+    const FacultyCapacity = require('../models/FacultyCapacity');
+
+    const [facultyList, capacityList, workloadAgg] = await Promise.all([
+      Faculty.find({ isDeleted: { $ne: true } }).lean(),
+      FacultyCapacity.find({ semester }).lean(),
       Workload.aggregate([
         { $match: matchStage },
         {
@@ -351,6 +366,13 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
       ])
     ]);
 
+    // Build capacity map: empId -> capacity (semester-specific, fallback to faculty.capacity)
+    const capacityMap = new Map();
+    capacityList.forEach(c => capacityMap.set(c.empId, Number(c.capacity) || 18));
+    facultyList.forEach(f => {
+      if (!capacityMap.has(f.empId)) capacityMap.set(f.empId, Number(f.capacity) || 18);
+    });
+
     const workloadMap = new Map();
     workloadAgg.forEach(w => {
       workloadMap.set(w._id, {
@@ -365,7 +387,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
 
     facultyList.forEach(f => {
       const wData = workloadMap.get(f.empId) || { assignedHours: 0, courseCount: 0 };
-      const capacity = Number(f.capacity);
+      const capacity = capacityMap.get(f.empId) || Number(f.capacity) || 18;
       const assignedHours = wData.assignedHours;
       const pendingLoad = capacity - assignedHours;
 
@@ -413,7 +435,8 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
  */
 router.get('/overloaded-faculty', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const report = await getFacultyWorkloadReport();
+    const semester = req.query.semester || 'ODD';
+    const report = await getFacultyWorkloadReport(null, semester);
     const overloadedFaculty = report.filter(f => f.isOverAllocated);
 
     res.json({
@@ -460,7 +483,8 @@ router.get('/overloaded-faculty', requireAuth, requireAdmin, async (req, res, ne
 router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const summary = await getFacultyWorkloadSummary(empId);
+    const semester = req.query.semester || 'ODD';
+    const summary = await getFacultyWorkloadSummary(empId, null, null, semester);
 
     res.json({
       success: true,

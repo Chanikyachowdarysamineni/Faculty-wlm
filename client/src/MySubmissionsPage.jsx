@@ -18,10 +18,10 @@ const MySubmissionsPage = ({
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty && contextFaculty.length > 0) {
+    if (contextFaculty) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses && contextCourses.length > 0) {
+    if (contextCourses) {
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);

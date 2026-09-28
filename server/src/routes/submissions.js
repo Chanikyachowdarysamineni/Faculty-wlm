@@ -54,7 +54,13 @@ const validatePrefsAgainstCourses = async (prefs = []) => {
 router.get('/', requireAuth, requireAdmin, validatePagination, async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
+    const requestedSemester = req.query.semester || 'ODD';
     const filter = {};
+    if (requestedSemester === 'ODD') {
+      filter.semester = { $in: ['ODD', null] };
+    } else {
+      filter.semester = requestedSemester;
+    }
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [{ empId: { $regex: q, $options: 'i' } }, { empName: { $regex: q, $options: 'i' } }];
@@ -79,7 +85,9 @@ router.get('/', requireAuth, requireAdmin, validatePagination, async (req, res, 
 // GET /api/submissions/by-faculty/:empId  (self or admin)
 router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, async (req, res, next) => {
   try {
-    const doc = await Submission.findOne({ empId: req.params.empId }).lean();
+    const semester = req.query.semester || 'ODD';
+    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const doc = await Submission.findOne({ empId: req.params.empId, semester: semesterFilter }).lean();
     
     if (!doc) {
       // If no submission exists, return an empty submission template
@@ -153,8 +161,9 @@ router.put(
         return sendError(res, prefCheck.message, 400);
       }
 
+      const semester = req.query.semester || 'ODD';
       const doc = await Submission.findOneAndUpdate(
-        { empId: req.params.empId },
+        { empId: req.params.empId, semester },
         { prefs },
         { new: true }
       ).lean();
@@ -220,10 +229,11 @@ router.post(
       const designation = member?.designation ?? (req.body.designation || '');
       const mobile      = member?.mobile      ?? (req.body.mobile      || '');
 
-      const existing = await Submission.findOne({ empId: empId.trim() });
+      const semester = req.body.semester || 'ODD';
+      const existing = await Submission.findOne({ empId: empId.trim(), semester });
       if (existing) {
-        logger.warn('Duplicate submission attempt', { empId, userId: req.user.id });
-        return sendConflict(res, 'This faculty already submitted preferences.');
+        logger.warn('Duplicate submission attempt', { empId, semester, userId: req.user.id });
+        return sendConflict(res, 'This faculty already submitted preferences for this semester.');
       }
 
       const doc = await Submission.create({
@@ -232,6 +242,7 @@ router.post(
         designation,
         mobile,
         prefs,
+        semester,
       });
 
       logger.info('Submission created', { empId: doc.empId, prefCount: prefs.length, userId: req.user.id });
@@ -253,13 +264,14 @@ router.get('/export', requireAuth, requireAdmin, async (req, res, next) => {
       return sendError(res, 'Invalid format. Supported: csv, excel', 400);
     }
 
+    const semester = req.query.semester || 'ODD';
     // Fetch submissions and courses in parallel
     const [docs, courseList] = await Promise.all([
-      Submission.find({})
+      Submission.find({ semester })
         .select('empId empName designation mobile prefs createdAt updatedAt')
         .sort({ createdAt: -1 })
         .lean(),
-      Course.find({})
+      Course.find({ semester })
         .select('courseId shortName')
         .lean(),
     ]);
@@ -307,11 +319,12 @@ router.get('/export', requireAuth, requireAdmin, async (req, res, next) => {
 // DELETE /api/submissions/:id  (admin)
 router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const doc = await Submission.findByIdAndDelete(req.params.id);
-    if (!doc) {
-      logger.warn('Submission not found for deletion', { id: req.params.id, userId: req.user.id });
+    const doc = await Submission.findById(req.params.id);
+    if (!doc || (req.query.semester && doc.semester !== req.query.semester && !(req.query.semester === 'ODD' && !doc.semester))) {
+      logger.warn('Submission not found for deletion or semester mismatch', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Submission not found.');
     }
+    await Submission.findByIdAndDelete(req.params.id);
     logger.info('Submission deleted', { id: req.params.id, empId: doc.empId, userId: req.user.id });
     sendSuccess(res, { message: 'Submission deleted.' }, 200);
   } catch (err) { 

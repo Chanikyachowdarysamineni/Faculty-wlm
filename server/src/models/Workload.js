@@ -13,6 +13,7 @@ const workloadSchema = new mongoose.Schema(
     faculty:    { type: mongoose.Schema.Types.ObjectId, ref: 'Faculty' },
     course:     { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     sectionRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
+    semester:   { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
 
     // ── Denormalized fields (kept in sync by route handlers) ─────────────
     empId:       { type: String, default: '', trim: true },
@@ -82,13 +83,13 @@ const workloadSchema = new mongoose.Schema(
 // ── Indexes ────────────────────────────────────────────────────────────────
 // Prevent duplicate same-role assignment for the same faculty/course/year/section
 workloadSchema.index(
-  { empId: 1, courseId: 1, year: 1, section: 1, facultyRole: 1 },
+  { empId: 1, courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
   { unique: true, name: 'uniq_emp_course_year_section_role' }
 );
 
 // Only one TA assignment per course + year + section.
 workloadSchema.index(
-  { courseId: 1, year: 1, section: 1, facultyRole: 1 },
+  { courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
   {
     unique: true,
     partialFilterExpression: { facultyRole: 'TA', year: { $in: ['II', 'III', 'IV'] } },
@@ -98,7 +99,7 @@ workloadSchema.index(
 
 // Only one Main Faculty assignment per course + year + section.
 workloadSchema.index(
-  { courseId: 1, year: 1, section: 1, facultyRole: 1 },
+  { courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
   {
     unique: true,
     partialFilterExpression: { facultyRole: 'Main Faculty', year: { $in: ['II', 'III', 'IV'] } },
@@ -107,7 +108,7 @@ workloadSchema.index(
 );
 
 // Compound query indexes
-workloadSchema.index({ courseId: 1, year: 1, section: 1, facultyRole: 1 });
+workloadSchema.index({ courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 });
 workloadSchema.index({ year: 1, section: 1, courseId: 1 });
 workloadSchema.index({ subjectCode: 1 });
 workloadSchema.index({ empId: 1, isDeleted: 1 });

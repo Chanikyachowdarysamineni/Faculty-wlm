@@ -7,6 +7,7 @@
 
 const Workload = require('../models/Workload');
 const Faculty = require('../models/Faculty');
+const FacultyCapacity = require('../models/FacultyCapacity');
 
 /**
  * Calculate total teaching hours for a faculty member
@@ -16,7 +17,7 @@ const Faculty = require('../models/Faculty');
  * @param {Object} session - Optional mongoose session
  * @returns {Object} { totalHours, breakdown, workloads }
  */
-const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null) => {
+const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null, semester = null) => {
   try {
     // C-3: Exclude cancelled/unallocated and soft-deleted workloads from capacity calculations
     const query = {
@@ -24,6 +25,9 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
       isDeleted: { $ne: true },
     };
+    if (semester) {
+      query.semester = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    }
     const dbQuery = Workload.find(query).lean();
     if (session) dbQuery.session(session);
     const workloads = await dbQuery.exec();
@@ -87,7 +91,7 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
  * @param {Object} session - Optional mongoose session
  * @returns {Object} { empId, name, capacity, currentLoad, remaining, workloadPercentage, assignments }
  */
-const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null) => {
+const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null, semester = null) => {
   try {
     const query = Faculty.findOne({ empId: String(empId || '').trim() }).lean();
     if (session) query.session(session);
@@ -97,8 +101,14 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
       throw new Error(`Faculty not found: ${empId}`);
     }
 
-    const capacity = Number(faculty.capacity || 18);
-    const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session);
+    // Use semester-specific capacity if available, fallback to faculty.capacity
+    let capacity = Number(faculty.capacity || 18);
+    if (semester) {
+      const capRecord = await FacultyCapacity.findOne({ empId: String(empId).trim(), semester }).lean();
+      if (capRecord) capacity = Number(capRecord.capacity || capacity);
+    }
+
+    const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session, semester);
 
     const currentLoad = workloadData.totalHours;
     const remaining = capacity - currentLoad;
@@ -170,7 +180,7 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
  * @param {String} year - Optional filter by year
  * @returns {Array} Array of faculty with their workload status
  */
-const getFacultyWorkloadReport = async (year = null) => {
+const getFacultyWorkloadReport = async (year = null, semester = null) => {
   try {
     // H-8: Exclude soft-deleted faculty from reports
     const allFaculty = await Faculty.find({ isDeleted: { $ne: true } }).lean();
@@ -182,6 +192,15 @@ const getFacultyWorkloadReport = async (year = null) => {
     };
     if (year) {
       workloadMatch.year = String(year);
+    }
+    if (semester) {
+      workloadMatch.semester = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    }
+
+    let capacityMap = new Map();
+    if (semester) {
+      const capacities = await FacultyCapacity.find({ semester }).lean();
+      capacities.forEach(c => capacityMap.set(c.empId, Number(c.capacity || 18)));
     }
 
     const pipeline = [
@@ -231,7 +250,7 @@ const getFacultyWorkloadReport = async (year = null) => {
     }, {});
 
     const report = allFaculty.map(faculty => {
-      const capacity = Number(faculty.capacity || 18);
+      const capacity = semester && capacityMap.has(faculty.empId) ? capacityMap.get(faculty.empId) : Number(faculty.capacity || 18);
       const data = workloadMap[faculty.empId] || { currentLoad: 0, assignments: [] };
       const currentLoad = data.currentLoad;
       const remaining = capacity - currentLoad;

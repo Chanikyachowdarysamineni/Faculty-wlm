@@ -9,7 +9,7 @@ import './FacultyPage.css';
 const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };
 
 const FacultyPage = ({ isAdmin = false }) => {
-  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations } = useSharedData();
+  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations, selectedSemester } = useSharedData();
   
   const [designations, setLocalDesignations] = useState([]);
   // Local state
@@ -52,7 +52,7 @@ const FacultyPage = ({ isAdmin = false }) => {
   const refetchFaculty = useCallback(async () => {
     try {
       setSyncing(true);
-      const response = await fetchAllPages('/deva/faculty', {}, { headers: authHeaders() });
+      const response = await fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers: authHeaders() });
       if (response?.success && Array.isArray(response.data)) {
         const deduplicated = deduplicateList(response.data);
         setList(deduplicated);
@@ -66,11 +66,11 @@ const FacultyPage = ({ isAdmin = false }) => {
     } finally {
       setSyncing(false);
     }
-  }, [authHeaders, deduplicateList, setFaculty]);
+  }, [authHeaders, deduplicateList, setFaculty, selectedSemester]);
 
   // Sync shared context data to local state and deduplicate
   useEffect(() => {
-    if (contextFaculty && contextFaculty.length > 0) {
+    if (contextFaculty) {
       const deduplicated = deduplicateList(contextFaculty);
       setList(deduplicated);
       setLoading(false);
@@ -92,7 +92,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       }
     };
     
-    if (contextDesignations && contextDesignations.length > 0) {
+    if (contextDesignations) {
       setLocalDesignations(contextDesignations);
     } else {
       fetchDesignations();
@@ -385,6 +385,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       email: form.email || '',
       department: form.department || 'CSE',
       capacity: Number(form.capacity) || 18,
+      semester: selectedSemester,
     };
     try {
       setSyncing(true);

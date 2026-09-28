@@ -101,7 +101,7 @@ const authHeader = () => authJsonHeaders();
 
 // ─────────────────────────────────────────────────
 const WorkloadPage = ({ submissions }) => {
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
@@ -141,10 +141,10 @@ const WorkloadPage = ({ submissions }) => {
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty && contextFaculty.length > 0) {
+    if (contextFaculty) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses && contextCourses.length > 0) {
+    if (contextCourses) {
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);
@@ -176,7 +176,7 @@ const WorkloadPage = ({ submissions }) => {
     const fetchAllocation = async () => {
       setAllocLoading(true);
       try {
-        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}`, { headers: authHeader() });
+        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}&semester=${selectedSemester}`, { headers: authHeader() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setAllocation(data.data[0]);
@@ -190,7 +190,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     };
     fetchAllocation();
-  }, [showForm, form.courseId, form.year, form.section]);
+  }, [showForm, form.courseId, form.year, form.section, selectedSemester]);
 
   const loadSectionsConfig = useCallback(async () => {
     try {
@@ -249,7 +249,7 @@ const WorkloadPage = ({ submissions }) => {
     if (withLoader) setLoading(true);
     setFetchError('');
     try {
-      const data = await fetchAllPages('/deva/workloads', {}, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester }, { headers: authHeader() });
       if (data.success) {
         const normalized = (data.data || []).map(w => ({
           ...w,
@@ -306,14 +306,14 @@ const WorkloadPage = ({ submissions }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, []);
+  }, [selectedSemester]);
 
-  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads]);
+  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedSemester]);
 
   useEffect(() => {
     const id = setInterval(() => { fetchWorkloads({ withLoader: false }); }, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [fetchWorkloads]);
+  }, [fetchWorkloads, selectedSemester]);
 
   // ── derived from current form ──
   const facMember      = useMemo(() => facultyList.find(f => f.empId === form.empId), [form.empId, facultyList]);
@@ -405,7 +405,7 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}`, { 
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}`, { 
         headers: authHeader() 
       });
       const data = await res.json();
@@ -692,6 +692,7 @@ const WorkloadPage = ({ submissions }) => {
 
       
       const payload = {
+        semester: selectedSemester,
         empId:    resolvedEmpId,
         courseId: resolvedCrsId,
         facultyRole: selectedRole,
@@ -862,7 +863,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Delete: calls server API ───────────────────────────
   const confirmDelete = async () => {
     try {
-      const res  = await fetch(`${API}/deva/workloads/${deleteTarget.id}`, {
+      const res  = await fetch(`${API}/deva/workloads/${deleteTarget.id}?semester=${selectedSemester}`, {
         method: 'DELETE', headers: authHeader(),
       });
       const data = await res.json();

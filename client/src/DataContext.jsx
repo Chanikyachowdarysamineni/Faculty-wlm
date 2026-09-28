@@ -10,6 +10,16 @@ export const DataProvider = ({ children }) => {
   const [sectionsConfig, setSectionsConfig] = useState(null);
   const [designations, setDesignations] = useState([]);
   const [systemConfig, setSystemConfig] = useState(null);
+  
+  // Semester Context
+  const [selectedSemester, setSelectedSemesterState] = useState(() => {
+    return localStorage.getItem('selectedSemester') || 'ODD';
+  });
+
+  const setSelectedSemester = (semester) => {
+    localStorage.setItem('selectedSemester', semester);
+    setSelectedSemesterState(semester);
+  };
 
   const value = {
     faculty,
@@ -24,6 +34,8 @@ export const DataProvider = ({ children }) => {
     setDesignations,
     systemConfig,
     setSystemConfig,
+    selectedSemester,
+    setSelectedSemester,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

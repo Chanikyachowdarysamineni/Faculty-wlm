@@ -29,7 +29,7 @@ const emptyCourseForm = {
 
 // ── CoursesPage ────────────────────────────────────────────────
 const CoursesPage = ({ isAdmin = true }) => {
-  const { courses: contextCourses, setCourses: setContextCourses, systemConfig } = useSharedData();
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, selectedSemester } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEAR_OPTIONS = activeYearsRaw.length > 0 
@@ -44,7 +44,7 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextCourses && contextCourses.length > 0) {
+    if (contextCourses) {
       setCourseList(contextCourses);
       setLoadingCourses(false);
     }
@@ -72,7 +72,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   const fetchCourses = useCallback(async () => {
     try {
       setLoadingCourses(true);
-      const data = await fetchAllPages('/deva/courses', {}, { headers: authHeaders() });
+      const data = await fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers: authHeaders() });
       if (data?.success && Array.isArray(data.data)) {
         setCourseList(data.data);
         setContextCourses(data.data);
@@ -85,7 +85,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     } finally {
       setLoadingCourses(false);
     }
-  }, [authHeaders, setContextCourses, showToast]);
+  }, [authHeaders, setContextCourses, showToast, selectedSemester]);
 
   // ── Derived lists ──
   const filteredCourses = useMemo(() => {
@@ -140,7 +140,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     const resolvedProgram    = f.program     === '__other__' ? f.programOther.trim()    || 'Other' : f.program;
     const resolvedCourseType = f.courseType  === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
     const resolvedYear       = f.year        === '__other__' ? f.yearOther.trim()       || 'Other' : f.year;
-    const payload = {
+    const payload = { semester: selectedSemester,
       program: resolvedProgram,
       courseType: resolvedCourseType,
       year: resolvedYear,
@@ -185,7 +185,7 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   const confirmDeleteCourse = async () => {
     try {
-      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}`, {
+      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}?semester=${selectedSemester}`, {
         method: 'DELETE',
         headers: authHeaders(),
       });

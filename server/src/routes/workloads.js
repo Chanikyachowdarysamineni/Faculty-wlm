@@ -352,6 +352,9 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.section) filter.section = String(req.query.section).trim();
     if (req.query.courseId) filter.courseId = Number(req.query.courseId);
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
     // Faculty users can only see workloads where isVisible === true
     if (isFacultyOnly) {
       filter.isVisible = true;
@@ -397,10 +400,14 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     // L-8/M-4: Exclude soft-deleted and cancelled/unallocated workloads from CSV export
-    const docs = await Workload.find({
+    const filter = {
       isDeleted: { $ne: true },
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
-    }).sort({ empId: 1, createdAt: 1 }).lean();
+    };
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
+    const docs = await Workload.find(filter).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -447,6 +454,9 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
       isDeleted: { $ne: true },
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
     };
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
 
     // M-11 FIX: Restrict non-admin faculty to only view their own workloads
     const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
@@ -483,13 +493,18 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
     }
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     const normalizedYear = normalizeYear(year);
-    const docs = await Workload.find({
+    const filter = {
       year: normalizedYear,
       facultyRole: 'Main Faculty',
       allocationStatus: 'ALLOCATED',
       empId: { $ne: '' },
       isDeleted: { $ne: true }
-    }).sort({ createdAt: -1 }).lean();
+    };
+    if (req.query.semester) {
+      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    }
+
+    const docs = await Workload.find(filter).sort({ createdAt: -1 }).lean();
 
     // Look up missing faculty names/designations if any
     const missingFacultyIds = docs.filter(w => !w.empName || !w.designation).map(w => w.empId);
@@ -561,7 +576,8 @@ router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
       return sendError(res, 'Unauthorized. You can only view your own workload.', 403);
     }
 
-    const summary = await getFacultyWorkloadSummary(empId);
+    const semester = req.query.semester || null;
+    const summary = await getFacultyWorkloadSummary(empId, null, null, semester);
     logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.capacity, utilizationPercent: summary.workloadPercentage }, userId: req.user.id });
     sendSuccess(res, { data: summary }, 200);
   } catch (err) {
@@ -582,10 +598,11 @@ router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next)
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
-    const { year } = req.query;
+    const { year, semester } = req.query;
     const yearFilter = year ? normalizeYear(year) : null;
+    const semesterFilter = semester || 'ODD';
 
-    const report = await getFacultyWorkloadReport(yearFilter);
+    const report = await getFacultyWorkloadReport(yearFilter, semesterFilter);
     const summary = {
       totalFaculty: report.length,
       overAllocatedCount: report.filter(f => f.isOverAllocated).length,
@@ -757,23 +774,31 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
       return sendError(res, 'capacity must be a positive number.', 400);
     }
 
-    // Update the Faculty collection so future assignments use the new capacity
-    const faculty = await Faculty.findOneAndUpdate(
-      { empId },
+    const semester = req.query.semester || 'ODD';
+
+    const FacultyCapacity = require('../models/FacultyCapacity');
+    // Update the FacultyCapacity collection for the selected semester
+    const capRecord = await FacultyCapacity.findOneAndUpdate(
+      { empId, semester },
       { $set: { capacity: newCapacity } },
-      { new: true }
+      { new: true, upsert: true }
     );
 
-    if (!faculty) {
+    if (!capRecord) {
       logger.warn('Faculty not found for capacity update', { empId, userId: req.user.id });
-      return sendNotFound(res, 'Faculty not found. Cannot update capacity.');
+      return sendNotFound(res, 'Faculty capacity could not be updated.');
     }
 
     // Workload no longer stores capacityHours, so we skip Workload.updateMany
     const modifiedCount = 1;
 
+    // Recalculate capacity to update remaining/percentage
+    const { recalculateCapacity } = require('../utils/capacityUtils');
+    await recalculateCapacity(empId, { semester, updatedBy: req.user.id });
+
     logger.info('Faculty capacity updated', {
       empId,
+      semester,
       capacity: newCapacity,
       modifiedWorkloads: modifiedCount,
       userId: req.user.id,
@@ -1150,6 +1175,7 @@ router.post(
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
+        semester: course ? course.semester : 'ODD',
       }], { session });
       const doc = createdDocs[0];
 
@@ -1181,7 +1207,7 @@ router.post(
       
       await session.commitTransaction();
       // H-6: recalculateCapacity runs AFTER commit so it starts a fresh operation
-      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
+      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
       wsHandler.broadcast({ type: 'workload_updated' });
       sendCreated(res, toClient(doc));
     } catch (err) {
@@ -1406,6 +1432,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       manualT: Number(updates.manualT ?? current.manualT ?? effectiveCourse.T ?? 0),
       manualP: Number(updates.manualP ?? current.manualP ?? effectiveCourse.P ?? 0),
       allocationRow: nextAllocationRow,
+      semester: course ? course.semester : (current.semester || 'ODD'),
     };
 
     // CRITICAL: Validate workload hours capacity
@@ -1518,9 +1545,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
 
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit so it starts fresh (outside transaction)
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
     if (current.empId !== doc.empId) {
-      await recalculateCapacity(current.empId, { updatedBy: req.user.empId });
+      await recalculateCapacity(current.empId, { updatedBy: req.user.empId, semester: doc.semester });
     }
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, toClient(doc), 200);
@@ -1560,8 +1587,8 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
 
     // Find the record first (do not delete yet)
     const doc = await Workload.findById(req.params.id).session(session).lean();
-    if (!doc) {
-      logger.warn('Workload entry not found for deletion', { id: req.params.id, userId: req.user.id });
+    if (!doc || (req.query.semester && doc.semester !== req.query.semester && !(req.query.semester === 'ODD' && !doc.semester))) {
+      logger.warn('Workload entry not found for deletion or semester mismatch', { id: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Workload entry not found.');
     }
 
@@ -1602,7 +1629,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
 
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit (outside transaction scope)
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId });
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, { message: 'Workload entry deleted.' }, 200);
   } catch (err) {

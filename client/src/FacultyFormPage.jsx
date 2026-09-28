@@ -10,7 +10,7 @@ const FacultyFormPage = ({
   submissions, onSubmit, onUpdateSubmission, onDeleteSubmission,
   isAdmin, currentUser,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester } = useSharedData();
   
   // Auto-fill empId for logged-in faculty
   const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
@@ -40,10 +40,10 @@ const FacultyFormPage = ({
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty && contextFaculty.length > 0) {
+    if (contextFaculty) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses && contextCourses.length > 0) {
+    if (contextCourses) {
       setCourseList(contextCourses);
     }
     setLastSyncedAt(new Date());
@@ -64,7 +64,7 @@ const FacultyFormPage = ({
       }
     };
     
-    if (contextDesignations && contextDesignations.length > 0) {
+    if (contextDesignations) {
       setLocalDesignations(contextDesignations);
     } else {
       fetchDesignations();
@@ -87,8 +87,8 @@ const FacultyFormPage = ({
     try {
       const headers = authHeaders();
       const [fReq, cReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/courses', {}, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
       ]);
       const facultyOk = fReq.status === 'fulfilled';
       const coursesOk = cReq.status === 'fulfilled';
@@ -101,7 +101,7 @@ const FacultyFormPage = ({
     } finally {
       if (!silent) setMasterLoading(false);
     }
-  }, []);
+  }, [selectedSemester]);
 
   const foundFaculty = useMemo(
     () => facultyList.find(f => f.empId === empIdInput.trim()),
@@ -156,7 +156,7 @@ const FacultyFormPage = ({
     if (editMode) {
       // PUT /api/submissions/by-faculty/:empId
       try {
-        const res  = await fetch(`${API}/deva/submissions/by-faculty/${foundFaculty.empId}`, {
+        const res  = await fetch(`${API}/deva/submissions/by-faculty/${foundFaculty.empId}?semester=${selectedSemester}`, {
           method: 'PUT', headers: authHeaders(),
           body: JSON.stringify({ prefs: prefs.filter(Boolean).map(Number) }),
         });
@@ -202,6 +202,7 @@ const FacultyFormPage = ({
           empName:     effectiveFaculty.name,
           designation: effectiveFaculty.designation,
           mobile:      effectiveFaculty.mobile,
+          semester:    selectedSemester,
         }),
       });
       const data = await res.json();
@@ -799,7 +800,7 @@ const FacultyFormPage = ({
                                   e.stopPropagation();
                                   if (!window.confirm('Delete this submission?')) return;
                                   try {
-                                    const res = await fetch(`${API}/deva/submissions/${s.id}`, {
+                                    const res = await fetch(`${API}/deva/submissions/${s.id}?semester=${selectedSemester}`, {
                                       method: 'DELETE', headers: authHeaders(),
                                     });
                                     const data = await res.json();
