@@ -891,7 +891,7 @@ const WorkloadPage = ({ submissions }) => {
         const res = await fetch(`${API}/deva/workloads/bulk-visibility`, {
           method: 'PATCH',
           headers: { ...authHeader(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isVisible: newVisibility }),
+          body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester }),
         });
         
         if (!res.ok) {
@@ -929,7 +929,7 @@ const WorkloadPage = ({ submissions }) => {
       const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisible: newVisibility }),
+        body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester }),
       });
       
       if (!res.ok) {

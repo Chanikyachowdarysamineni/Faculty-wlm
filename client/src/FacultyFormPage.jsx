@@ -336,7 +336,7 @@ const FacultyFormPage = ({
                   setEditEnabled(next);
                   await fetch(`${API}/deva/settings/edit-status`, {
                     method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ editEnabled: next }),
+                    body: JSON.stringify({ editEnabled: next, semester: selectedSemester }),
                   }).catch(() => {});
                 }}
                 title={editEnabled ? 'Prevent faculty from editing submitted preferences' : 'Allow faculty to edit submitted preferences'}
@@ -350,7 +350,7 @@ const FacultyFormPage = ({
                   setFormEnabled(next);
                   await fetch(`${API}/deva/settings/form-status`, {
                     method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ formEnabled: next }),
+                    body: JSON.stringify({ formEnabled: next, semester: selectedSemester }),
                   }).catch(() => {});
                 }}
               >

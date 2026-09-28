@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
+import { useSharedData } from './DataContext';
 import './MyWorkloadPage.css';
 
 const authHeader = () => ({
@@ -13,6 +14,7 @@ const YEAR_COLOR = { I: '#6b74e8', II: '#22c55e', III: '#f59e0b', IV: '#ec4899' 
 const AUTO_REFRESH_MS = 60000;
 
 const MyWorkloadPage = ({ currentUser }) => {
+  const { selectedSemester } = useSharedData();
   const [workloads, setWorkloads] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [toast,     setToast]     = useState('');
@@ -30,7 +32,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     if (withLoader) setLoading(true);
     setApiError('');
     try {
-      const params = currentUser?.id ? { empId: String(currentUser.id) } : {};
+      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester } : { semester: selectedSemester };
       const data = await fetchAllPages('/deva/workloads', params, { headers: authHeader() });
       if (!data.success) {
         const msg = data.message || 'Failed to load workloads.';
@@ -49,7 +51,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, selectedSemester]);
 
   useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads]);
 

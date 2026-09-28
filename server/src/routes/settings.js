@@ -62,7 +62,8 @@ const saveSectionsConfig = async (sections) => {
 // GET /api/settings/form-status
 router.get('/form-status', requireAuth, async (req, res, next) => {
   try {
-    const doc = await Setting.findOne({ key: 'form_enabled' }).lean();
+    const semester = req.query.semester || 'ODD';
+    const doc = await Setting.findOne({ key: `form_enabled_${semester}` }).lean();
     sendSuccess(res, { formEnabled: doc ? doc.value === 'true' : true }, 200);
   } catch (err) { next(err); }
 });
@@ -77,9 +78,9 @@ router.put(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
-      const { formEnabled } = req.body;
+      const { formEnabled, semester = 'ODD' } = req.body;
       await Setting.findOneAndUpdate(
-        { key: 'form_enabled' },
+        { key: `form_enabled_${semester}` },
         { value: String(formEnabled) },
         { upsert: true, new: true }
       );
@@ -196,7 +197,8 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
 // GET /api/settings/edit-status
 router.get('/edit-status', requireAuth, async (req, res, next) => {
   try {
-    const doc = await Setting.findOne({ key: 'edit_enabled' }).lean();
+    const semester = req.query.semester || 'ODD';
+    const doc = await Setting.findOne({ key: `edit_enabled_${semester}` }).lean();
     sendSuccess(res, { editEnabled: doc ? doc.value === 'true' : true }, 200);
   } catch (err) { next(err); }
 });
@@ -211,9 +213,9 @@ router.put(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
-      const { editEnabled } = req.body;
+      const { editEnabled, semester = 'ODD' } = req.body;
       await Setting.findOneAndUpdate(
-        { key: 'edit_enabled' },
+        { key: `edit_enabled_${semester}` },
         { value: String(editEnabled) },
         { upsert: true, new: true }
       );

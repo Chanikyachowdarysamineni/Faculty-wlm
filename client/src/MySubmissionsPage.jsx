@@ -11,7 +11,7 @@ const MySubmissionsPage = ({
   onUpdateSubmission,
   onNavigateToForm,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, selectedSemester } = useSharedData();
   
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
@@ -60,7 +60,7 @@ const MySubmissionsPage = ({
       const headers = authHeaders();
       const [fReq, cReq] = await Promise.allSettled([
         fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/courses', {}, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
       ]);
       const facultyOk = fReq.status === 'fulfilled';
       const coursesOk = cReq.status === 'fulfilled';
@@ -73,7 +73,7 @@ const MySubmissionsPage = ({
     } finally {
       if (!silent) setMasterLoading(false);
     }
-  }, []);
+  }, [selectedSemester]);
 
   const getCourse = cid => courseList.find(c => String(c.id) === String(cid));
 

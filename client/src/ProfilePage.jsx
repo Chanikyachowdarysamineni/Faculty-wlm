@@ -7,7 +7,7 @@ import { useSharedData } from './DataContext';
 
 
 const ProfilePage = ({ user, submissions = [], onLogout }) => {
-  const { faculty: contextFaculty, setFaculty, courses: contextCourses } = useSharedData();
+  const { faculty: contextFaculty, setFaculty, courses: contextCourses, selectedSemester } = useSharedData();
   
   const [myWorkloads, setMyWorkloads] = useState([]);
   const [facultyList, setFacultyList] = useState([]);
@@ -51,7 +51,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
     try {
       const headers = authHeaders();
-      const workloadParams = user.role === 'admin' ? {} : { empId: String(user.id) };
+      const workloadParams = user.role === 'admin' ? { semester: selectedSemester } : { empId: String(user.id), semester: selectedSemester };
       const [wData] = await Promise.all([
         fetchAllPages('/deva/workloads', workloadParams, { headers }),
       ]);
@@ -71,7 +71,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [authHeaders, user]);
+  }, [authHeaders, user, selectedSemester]);
 
   // Refetch current user's faculty data from backend
   const refetchFacultyProfile = useCallback(async () => {

@@ -303,8 +303,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     const refreshSettings = async () => {
       const [formResult, editResult] = await Promise.all([
-        fetchJsonWithRetry(`${API}/deva/settings/form-status`, { headers }),
-        fetchJsonWithRetry(`${API}/deva/settings/edit-status`, { headers }),
+        fetchJsonWithRetry(`${API}/deva/settings/form-status?semester=${selectedSemester}`, { headers }),
+        fetchJsonWithRetry(`${API}/deva/settings/edit-status?semester=${selectedSemester}`, { headers }),
       ]);
       const formData = formResult.data?.data || formResult.data || {};
       const editData = editResult.data?.data || editResult.data || {};

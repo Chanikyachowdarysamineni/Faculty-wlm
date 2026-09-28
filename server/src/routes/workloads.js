@@ -820,7 +820,7 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
  */
 router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const { isVisible } = req.body;
+    const { isVisible, semester = 'ODD' } = req.body;
 
     if (isVisible === undefined || isVisible === null) {
       logger.warn('Missing isVisible in bulk-visibility request', { userId: req.user.id });
@@ -828,10 +828,11 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
     }
 
     const boolIsVisible = Boolean(isVisible);
+    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
 
-    // Update ALL workloads
+    // Update workloads for the given semester
     const result = await Workload.updateMany(
-      {},
+      { semester: semesterFilter },
       { $set: { isVisible: boolIsVisible } }
     );
 
@@ -862,7 +863,7 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
 router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const { isVisible } = req.body;
+    const { isVisible, semester = 'ODD' } = req.body;
 
     // Validate input
     if (isVisible === undefined || isVisible === null) {
@@ -871,10 +872,11 @@ router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req
     }
 
     const boolIsVisible = Boolean(isVisible);
+    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
 
-    // Update all workloads for this faculty
+    // Update workloads for this faculty and semester
     const result = await Workload.updateMany(
-      { empId },
+      { empId, semester: semesterFilter },
       { $set: { isVisible: boolIsVisible } }
     );
 
