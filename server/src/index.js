@@ -56,6 +56,7 @@ const facultyCapacityRoutes = require('./routes/facultyCapacity');
 const designationsRoutes = require('./routes/designations');
 const sectionsRoutes = require('./routes/sections');
 const configRoutes = require('./routes/config');
+const academicYearsRoutes = require('./routes/academicYears');
 
 // ── Import WebSocket handler ────────────────────────────────
 const WebSocketHandler  = require('./websocket');
@@ -197,8 +198,8 @@ app.use(helmet({
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    // Allow all local network development IPs (192.168.x.x) in development
-    if (process.env.NODE_ENV !== 'production' && origin?.match(/^https?:\/\/192\.168\.\d+\.\d+:\d+$/)) {
+    // Allow all local network development IPs in development
+    if (process.env.NODE_ENV !== 'production' && origin?.match(/^https?:\/\/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):\d+$/)) {
       return cb(null, true);
     }
     cb(new Error(`CORS: origin ${origin} not allowed`));
@@ -312,6 +313,7 @@ app.use('/deva/allocations',           allocationsRoutes);
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 // NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
 app.use('/deva/config', configRoutes);
+app.use('/deva/academic-years', academicYearsRoutes);
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything

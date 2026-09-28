@@ -87,6 +87,7 @@ router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, async (req, re
   try {
     const semester = req.query.semester || 'ODD';
     const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const academicYear = req.query.academicYear || req.body.academicYear;
     const doc = await Submission.findOne({ empId: req.params.empId, semester: semesterFilter }).lean();
     
     if (!doc) {

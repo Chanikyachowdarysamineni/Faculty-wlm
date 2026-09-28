@@ -355,6 +355,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
     // Faculty users can only see workloads where isVisible === true
     if (isFacultyOnly) {
       filter.isVisible = true;
@@ -407,6 +408,7 @@ router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
     const docs = await Workload.find(filter).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
@@ -457,6 +459,7 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
 
     // M-11 FIX: Restrict non-admin faculty to only view their own workloads
     const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
@@ -503,6 +506,7 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
 
     const docs = await Workload.find(filter).sort({ createdAt: -1 }).lean();
 
@@ -829,10 +833,11 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
 
     const boolIsVisible = Boolean(isVisible);
     const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const academicYear = req.query.academicYear || req.body.academicYear;
 
     // Update workloads for the given semester
     const result = await Workload.updateMany(
-      { semester: semesterFilter },
+      { semester: semesterFilter, ...(academicYear && { academicYear }) },
       { $set: { isVisible: boolIsVisible } }
     );
 
@@ -873,10 +878,11 @@ router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req
 
     const boolIsVisible = Boolean(isVisible);
     const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const academicYear = req.query.academicYear || req.body.academicYear;
 
     // Update workloads for this faculty and semester
     const result = await Workload.updateMany(
-      { empId, semester: semesterFilter },
+      { empId, semester: semesterFilter, ...(academicYear && { academicYear }) },
       { $set: { isVisible: boolIsVisible } }
     );
 

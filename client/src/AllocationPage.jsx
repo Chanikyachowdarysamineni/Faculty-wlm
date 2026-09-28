@@ -21,8 +21,8 @@ import {
 import { refetchAllocationData, validateAllocation } from './utils/allocationHelpers';
 
 // -- Constants -----------------------------------------------------------------
-const PROGRAMS    = ['B.Tech'];
-const YEARS_BTECH = ['I', 'II', 'III', 'IV'];
+// PROGRAMS removed
+// YEARS_BTECH removed
 
 const TYPE_LABEL = { L: 'Lecture', T: 'Tutorial', P: 'Practical' };
 
@@ -224,7 +224,8 @@ const AllocationPage = ({ isAdmin = true }) => {
   const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
-  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'M.Tech') : ['I', 'II', 'III', 'IV'];
+  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});

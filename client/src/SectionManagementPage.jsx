@@ -18,7 +18,7 @@ import {
 } from './utils/sectionsApi';
 import { useSharedData } from './DataContext';
 
-const YEARS = ['I', 'II', 'III', 'IV'];
+// const YEARS removed
 
 const SectionManagementPage = () => {
   const [activeYear, setActiveYear] = useState('I');
@@ -30,7 +30,9 @@ const SectionManagementPage = () => {
   const [editingSection, setEditingSection] = useState(null);
   const [editingValue, setEditingValue] = useState('');
 
-  const { setSectionsConfig: setSharedSectionsConfig } = useSharedData();
+  const { setSectionsConfig: setSharedSectionsConfig, systemConfig } = useSharedData();
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
 
   // Load sections config on mount
   useEffect(() => {

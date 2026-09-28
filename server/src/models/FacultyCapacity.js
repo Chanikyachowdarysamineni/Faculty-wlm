@@ -9,6 +9,7 @@ const facultyCapacitySchema = new mongoose.Schema(
   {
     empId: { type: String, required: true, trim: true, index: true },
     semester: { type: String, enum: ['ODD', 'EVEN'], required: true },
+    academicYear: { type: String, required: true},
     capacity: { 
       type: Number, 
       default: 18, 
@@ -31,6 +32,6 @@ const facultyCapacitySchema = new mongoose.Schema(
 );
 
 // Enforce one capacity record per faculty per semester
-facultyCapacitySchema.index({ empId: 1, semester: 1 }, { unique: true });
+facultyCapacitySchema.index({ empId: 1, academicYear: 1, semester: 1 }, { unique: true });
 
 module.exports = mongoose.model('FacultyCapacity', facultyCapacitySchema);

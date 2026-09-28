@@ -50,7 +50,7 @@ const toClient = (doc) => ({
   updatedAt:   doc.updatedAt?.toISOString() || null,
 });
 
-const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null, semester = 'ODD') => {
+const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null, semester = 'ODD', academicYear = null) => {
   // H-3: Always exclude soft-deleted faculty unless the caller explicitly opts in
   const baseFilter = { isDeleted: { $ne: true }, ...matchFilter };
   const pipeline = [
@@ -74,7 +74,8 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
               $expr: { $eq: ['$$empId', '$empId'] },
               isDeleted: { $ne: true },
               allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
-              semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester
+              semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester,
+              ...(academicYear ? { academicYear } : {})
             }
           }
         ],
@@ -89,7 +90,8 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
           {
             $match: {
               $expr: { $eq: ['$$empId', '$empId'] },
-              semester: semester
+              semester: semester,
+              ...(academicYear ? { academicYear } : {})
             }
           }
         ],
@@ -190,7 +192,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     const semester = req.query.semester || 'ODD';
     const [total, docs] = await Promise.all([
       Faculty.countDocuments(countFilter),
-      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, semester))
+      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, semester, req.query.academicYear))
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
     sendPaginated(res, docs.map(toClient), { total, page, limit }, 200);
@@ -212,7 +214,7 @@ router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
 router.get('/:empId', requireAuth, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
-    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester);
+    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.query.academicYear);
     const docs = await Faculty.aggregate(pipeline);
     const doc = docs[0];
     if (!doc) {
@@ -529,7 +531,7 @@ router.put(
 
       // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
       const refreshSemester = req.query.semester || 'ODD';
-      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester);
+      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester, req.query.academicYear);
       const freshDocs = await Faculty.aggregate(freshPipeline);
       const freshDoc = freshDocs[0] || doc;
       

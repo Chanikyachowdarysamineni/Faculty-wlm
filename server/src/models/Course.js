@@ -23,6 +23,7 @@ const courseSchema = new mongoose.Schema(
     isDeleted:     { type: Boolean, default: false },
     allowedSections: { type: [String], default: [] },
     semester:      { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
+    academicYear:  { type: String, required: true},
   },
   { timestamps: true, collection: 'courses' }
 );

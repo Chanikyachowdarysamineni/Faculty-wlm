@@ -38,6 +38,10 @@ const DEFAULT_CONFIG = {
   ],
   departments: [
     { value: 'CSE', label: 'CSE', isActive: true }
+  ],
+  programs: [
+    { value: 'B.Tech', label: 'B.Tech', isActive: true },
+    { value: 'M.Tech', label: 'M.Tech', isActive: true }
   ]
 };
 

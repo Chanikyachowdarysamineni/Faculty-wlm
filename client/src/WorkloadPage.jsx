@@ -57,22 +57,7 @@ const AUTO_REFRESH_MS = 60000;
 
 const DEFAULT_DEPARTMENT = 'CSE';
 
-const YEAR_SECTIONS = {
-  'I':      Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  'II':     Array.from({ length: 22 }, (_, i) => String(i + 1)),
-  'III':    Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  'IV':     [...Array.from({ length: 19 }, (_, i) => String(i + 1)), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
-};
-const YEARS = ['I', 'II', 'III', 'IV'];
-const YEAR_OPTIONS = [
-  { value: 'I', label: 'I Year' },
-  { value: 'II', label: 'II Year' },
-  { value: 'III', label: 'III Year' },
-  { value: 'IV', label: 'IV Year' },
-  { value: '__other__', label: 'Others' },
-];
-const COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
-const FACULTY_ROLES = ['Main Faculty', 'Supporting Faculty', 'TA'];
+// Global hardcoded arrays removed
 
 const normalizeCourseTypeKey = (courseType = '') => {
   const normalized = String(courseType || '').trim().toLowerCase();
@@ -101,31 +86,31 @@ const authHeader = () => authJsonHeaders();
 
 // ─────────────────────────────────────────────────
 const WorkloadPage = ({ submissions }) => {
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester, selectedAcademicYear } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
-  const YEAR_OPTIONS = activeYearsRaw.length > 0 
-    ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }] 
-    : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
-  
+  const YEAR_OPTIONS = activeYearsRaw.length > 0
+    ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }]
+    : [{ value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' }];
+
   const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'DE', 'Other'];
   const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value).length > 0 ? (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value) : ['Main Faculty', 'Supporting Faculty', 'TA'];
-  
-  const [workloads,    setWorkloads]    = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [fetchError,   setFetchError]   = useState('');
-  const [saving,       setSaving]       = useState(false);
-  const [form,         setForm]         = useState(emptyForm);
-  const [showForm,     setShowForm]     = useState(false);
-  const [editTarget,   setEditTarget]   = useState(null);
+
+  const [workloads, setWorkloads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [errors,       setErrors]       = useState({});
-  const [toast,        setToast]        = useState('');
-  const [search,       setSearch]       = useState('');
-  const [filterEmp,    setFilterEmp]    = useState('');
-  const [activeYear,   setActiveYear]   = useState('All'); // year-tab filter
-  const [showForms,    setShowForms]    = useState(false);
+  const [errors, setErrors] = useState({});
+  const [toast, setToast] = useState('');
+  const [search, setSearch] = useState('');
+  const [filterEmp, setFilterEmp] = useState('');
+  const [activeYear, setActiveYear] = useState('All'); // year-tab filter
+  const [showForms, setShowForms] = useState(false);
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   // New: allocation data for selected course/year/section
   const [allocation, setAllocation] = useState(null);
@@ -176,7 +161,7 @@ const WorkloadPage = ({ submissions }) => {
     const fetchAllocation = async () => {
       setAllocLoading(true);
       try {
-        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}&semester=${selectedSemester}`, { headers: authHeader() });
+        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}&semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, { headers: authHeader() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setAllocation(data.data[0]);
@@ -190,7 +175,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     };
     fetchAllocation();
-  }, [showForm, form.courseId, form.year, form.section, selectedSemester]);
+  }, [showForm, form.courseId, form.year, form.section, selectedSemester, selectedAcademicYear]);
 
   const loadSectionsConfig = useCallback(async () => {
     try {
@@ -249,7 +234,7 @@ const WorkloadPage = ({ submissions }) => {
     if (withLoader) setLoading(true);
     setFetchError('');
     try {
-      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester }, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers: authHeader() });
       if (data.success) {
         const normalized = (data.data || []).map(w => ({
           ...w,
@@ -275,7 +260,7 @@ const WorkloadPage = ({ submissions }) => {
           allocationRow: w.allocationRow ?? null,
         }));
         setWorkloads(normalized);
-        
+
         // Comprehensive logging for debugging
         console.log('✅ Workloads Fetched Successfully:', {
           totalCount: normalized.length,
@@ -306,24 +291,24 @@ const WorkloadPage = ({ submissions }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [selectedSemester]);
+  }, [selectedSemester, selectedAcademicYear]);
 
-  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedSemester]);
+  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedSemester, selectedAcademicYear]);
 
   useEffect(() => {
     const id = setInterval(() => { fetchWorkloads({ withLoader: false }); }, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [fetchWorkloads, selectedSemester]);
+  }, [fetchWorkloads, selectedSemester, selectedAcademicYear]);
 
   // ── derived from current form ──
-  const facMember      = useMemo(() => facultyList.find(f => f.empId === form.empId), [form.empId, facultyList]);
-  const submission     = useMemo(() => submissions.find(s => s.empId === form.empId), [submissions, form.empId]);
-  const prefCourses    = useMemo(() => {
+  const facMember = useMemo(() => facultyList.find(f => f.empId === form.empId), [form.empId, facultyList]);
+  const submission = useMemo(() => submissions.find(s => s.empId === form.empId), [submissions, form.empId]);
+  const prefCourses = useMemo(() => {
     if (!submission || !submission.prefs?.length) return [];
     return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid))).filter(Boolean);
   }, [submission, courseList]);
   const selectedCourse = useMemo(() => courseList.find(c => String(c.id) === String(form.courseId)), [form.courseId, courseList]);
-  const sections       = sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
+  const sections = sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
 
   const allocationPreviewRows = useMemo(() => {
     if (!allocation) return [];
@@ -347,14 +332,14 @@ const WorkloadPage = ({ submissions }) => {
       : (allocation.lectureSlot ? [allocation.lectureSlot] : []);
 
     const rows = [...normalizeRows('L', lectureSlots, 1)];
-    
+
     if (selectedCourse && Number(selectedCourse.T || 0) > 0) {
       rows.push(...normalizeRows('T', allocation.tutorialSlots || [], 4));
     }
     if (selectedCourse && Number(selectedCourse.P || 0) > 0) {
       rows.push(...normalizeRows('P', allocation.practicalSlots || [], 4));
     }
-    
+
     return rows;
   }, [allocation, selectedCourse]);
 
@@ -362,7 +347,7 @@ const WorkloadPage = ({ submissions }) => {
   const handleEmpIdChange = val => {
     setFacultySearchInput(''); // Clear search after selection
     setShowFacultyDropdown(false); // Close dropdown
-    
+
     if (val === '__other__') {
       setForm(prev => ({
         ...prev,
@@ -379,10 +364,10 @@ const WorkloadPage = ({ submissions }) => {
     const f = facultyList.find(f => f.empId === val);
     setForm(prev => ({
       ...prev,
-      empId:       val,
-      empName:     f ? f.name        : '',
+      empId: val,
+      empName: f ? f.name : '',
       designation: f ? f.designation : '',
-      mobile:      f ? (f.mobile || '') : '',
+      mobile: f ? (f.mobile || '') : '',
       courseId: '', manualL: '', manualT: '', manualP: '',
     }));
     setErrors({});
@@ -405,8 +390,8 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}`, { 
-        headers: authHeader() 
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
+        headers: authHeader()
       });
       const data = await res.json();
       if (data.success) {
@@ -429,24 +414,24 @@ const WorkloadPage = ({ submissions }) => {
       setForm(prev => ({ ...prev, courseId: '__other__', courseType: 'Mandatory', manualL: '', manualT: '', manualP: '' }));
       return;
     }
-    
+
     // CRITICAL: Compare strings - API returns c.id as string
     const c = courseList.find(c => String(c.id) === String(cid));
-    
+
     // CRITICAL: Extract year from selected course and auto-populate
     const courseYear = c?.year || 'I'; // Fallback to 'I' if no year found
-    
+
     // Auto-select first available section for the determined year
     const availableSections = sectionsConfig[courseYear] || YEAR_SECTIONS[courseYear] || ['1'];
     const autoSection = availableSections?.[0] || '1';
-    
+
     setForm(prev => ({
       ...prev,
       courseId: cid,
       courseType: c?.courseType || prev.courseType,
-      manualL:  c ? String(c.L) : '',
-      manualT:  c ? String(c.T) : '',
-      manualP:  c ? String(c.P) : '',
+      manualL: c ? String(c.L) : '',
+      manualT: c ? String(c.T) : '',
+      manualP: c ? String(c.P) : '',
       // AUTO-FETCH: Set year from course data and auto-select first section
       year: courseYear,
       section: autoSection,
@@ -499,25 +484,25 @@ const WorkloadPage = ({ submissions }) => {
   // ── Validation ──
   const validate = () => {
     const e = {};
-    if (!form.empId)                                                       e.empId    = 'Select an employee.';
-    else if (form.empId === '__other__' && !form.empIdOther.trim())         e.empId    = 'Type the employee ID.';
-    if (form.empId === '__other__' && !form.mobileOther.trim())              e.mobile   = 'Type mobile number for other faculty.';
-    if (!form.courseId)                                                    e.courseId = 'Select a course.';
-    else if (form.courseId === '__other__' && !form.courseOther.trim())     e.courseId = 'Type the course name.';
-    if (form.courseId === '__other__' && !form.courseType)                  e.courseType = 'Select course type.';
+    if (!form.empId) e.empId = 'Select an employee.';
+    else if (form.empId === '__other__' && !form.empIdOther.trim()) e.empId = 'Type the employee ID.';
+    if (form.empId === '__other__' && !form.mobileOther.trim()) e.mobile = 'Type mobile number for other faculty.';
+    if (!form.courseId) e.courseId = 'Select a course.';
+    else if (form.courseId === '__other__' && !form.courseOther.trim()) e.courseId = 'Type the course name.';
+    if (form.courseId === '__other__' && !form.courseType) e.courseType = 'Select course type.';
     if (form.courseId === '__other__' && form.courseType === '__other__' && !form.courseTypeOther.trim())
       e.courseType = 'Type course type.';
-    if (form.year === '__other__' && !form.yearOther.trim())                e.year = 'Type Year / Department.';
-    if (!form.year)      e.year     = 'Select year.';
-    if (!form.section)   e.section  = 'Select section.';
-    
+    if (form.year === '__other__' && !form.yearOther.trim()) e.year = 'Type Year / Department.';
+    if (!form.year) e.year = 'Select year.';
+    if (!form.section) e.section = 'Select section.';
+
     return e;
   };
 
   // ── Open Add form ──
   const openAdd = async (selectedFaculty = null) => {
     const emptyFormData = { ...emptyForm };
-    
+
     // If a faculty is selected and they already have capacity set, auto-use their capacity
     if (selectedFaculty) {
       const existingCapacity = getFacultyExistingCapacity(selectedFaculty);
@@ -526,7 +511,7 @@ const WorkloadPage = ({ submissions }) => {
       }
       emptyFormData.empId = selectedFaculty;
     }
-    
+
     setForm(emptyFormData);
     setEditTarget(null);
     setErrors({});
@@ -538,26 +523,26 @@ const WorkloadPage = ({ submissions }) => {
     const isOtherFac = !facultyList.find(f => f.empId === w.empId);
     const isOtherCrs = !courseList.find(c => c.id === w.courseId);
     setForm({
-      empId:            isOtherFac ? '__other__' : w.empId,
-      empName:          w.empName,
-      designation:      w.designation,
-      facultyRole:      w.facultyRole || 'Main Faculty',
-      mobile:           w.mobile || '',
-      empIdOther:       isOtherFac ? w.empId       : '',
-      empNameOther:     isOtherFac ? w.empName     : '',
+      empId: isOtherFac ? '__other__' : w.empId,
+      empName: w.empName,
+      designation: w.designation,
+      facultyRole: w.facultyRole || 'Main Faculty',
+      mobile: w.mobile || '',
+      empIdOther: isOtherFac ? w.empId : '',
+      empNameOther: isOtherFac ? w.empName : '',
       designationOther: isOtherFac ? w.designation : '',
-      mobileOther:      isOtherFac ? (w.mobile || '') : '',
-      courseId:         isOtherCrs ? '__other__' : String(w.courseId),
-      courseType:       isOtherCrs
+      mobileOther: isOtherFac ? (w.mobile || '') : '',
+      courseId: isOtherCrs ? '__other__' : String(w.courseId),
+      courseType: isOtherCrs
         ? (COURSE_TYPES.includes(w.courseType) ? w.courseType : '__other__')
         : (w.courseType || 'Mandatory'),
-      courseOther:      isOtherCrs ? w.subjectName  : '',
-      courseTypeOther:  isOtherCrs && !COURSE_TYPES.includes(w.courseType) ? (w.courseType || '') : '',
-      year:        w.year,
-      section:     w.section,
-      manualL:     String(w.manualL),
-      manualT:     String(w.manualT),
-      manualP:     String(w.manualP),
+      courseOther: isOtherCrs ? w.subjectName : '',
+      courseTypeOther: isOtherCrs && !COURSE_TYPES.includes(w.courseType) ? (w.courseType || '') : '',
+      year: w.year,
+      section: w.section,
+      manualL: String(w.manualL),
+      manualT: String(w.manualT),
+      manualP: String(w.manualP),
 
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
@@ -577,11 +562,11 @@ const WorkloadPage = ({ submissions }) => {
     setSaving(true);
     try {
       // Resolve 'Other' free-text values
-      const resolvedYear    = form.year    === '__other__' ? form.yearOther.trim()    || 'Other' : (form.year || 'I');
+      const resolvedYear = form.year === '__other__' ? form.yearOther.trim() || 'Other' : (form.year || 'I');
       const resolvedSection = form.section === '__other__' ? form.sectionOther.trim() || 'Other' : form.section;
-      const resolvedEmpId   = form.empId   === '__other__' ? form.empIdOther.trim()   || 'OTHER' : form.empId;
-      const resolvedCrsId   = form.courseId === '__other__' ? 0 : +form.courseId;
-      
+      const resolvedEmpId = form.empId === '__other__' ? form.empIdOther.trim() || 'OTHER' : form.empId;
+      const resolvedCrsId = form.courseId === '__other__' ? 0 : +form.courseId;
+
       // Normalize year to standard format (I, II, III, IV)
       const normalizeYearFormat = (y) => {
         const trimmed = String(y || '').trim().toUpperCase();
@@ -591,9 +576,9 @@ const WorkloadPage = ({ submissions }) => {
         if (trimmed === '4') return 'IV';
         return trimmed; // Return as-is (I, II, III, IV, Other, etc.)
       };
-      
+
       const normalizedYear = normalizeYearFormat(resolvedYear);
-      
+
       // Validate that year is not empty before proceeding
       if (!normalizedYear || normalizedYear === '') {
         setErrors((prev) => ({ ...prev, year: 'Year must be populated. Please select a course or enter a year.' }));
@@ -652,7 +637,7 @@ const WorkloadPage = ({ submissions }) => {
         const hoursToAssign = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
         const currentLoad = facultyWorkloadSummary.currentLoad;
         const totalCapacity = facultyWorkloadSummary.capacity;
-        
+
         let adjustedCurrentLoad = currentLoad || 0;
         if (editTarget) {
           const oldHours = (Number(editTarget.manualL) || 0) + (Number(editTarget.manualT) || 0) + (Number(editTarget.manualP) || 0);
@@ -677,7 +662,7 @@ const WorkloadPage = ({ submissions }) => {
       // Check if manual hours exceed the capacity set for this workload
       const capacity = Number(facultyWorkloadSummary?.capacity);
       const assignedHours = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
-      
+
       if (capacity > 0 && assignedHours > capacity && !form.allowOverload) {
         const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacity}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
         setErrors((prev) => ({
@@ -690,22 +675,22 @@ const WorkloadPage = ({ submissions }) => {
       }
 
 
-      
+
       const payload = {
-        semester: selectedSemester,
-        empId:    resolvedEmpId,
+        semester: selectedSemester, academicYear: selectedAcademicYear,
+        empId: resolvedEmpId,
         courseId: resolvedCrsId,
         facultyRole: selectedRole,
-        year:     normalizedYear,  // Use normalized year (I, II, III, IV)
-        section:  String(resolvedSection).trim() || 'default',  // Fallback section
-        manualL:  form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0),
-        manualT:  form.manualT !== '' ? parseInt(form.manualT) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.T || 0),
-        manualP:  form.manualP !== '' ? parseInt(form.manualP) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.P || 0),
+        year: normalizedYear,  // Use normalized year (I, II, III, IV)
+        section: String(resolvedSection).trim() || 'default',  // Fallback section
+        manualL: form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0),
+        manualT: form.manualT !== '' ? parseInt(form.manualT) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.T || 0),
+        manualP: form.manualP !== '' ? parseInt(form.manualP) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.P || 0),
         // capacity is now purely derived from Faculty
-        ...(form.empId    === '__other__' && {
-          empNameOverride:     form.empNameOther.trim()     || 'Other Faculty',
+        ...(form.empId === '__other__' && {
+          empNameOverride: form.empNameOther.trim() || 'Other Faculty',
           designationOverride: form.designationOther.trim() || 'Other',
-          mobileOverride:      form.mobileOther.trim(),
+          mobileOverride: form.mobileOther.trim(),
         }),
         ...(form.courseId === '__other__' && {
           courseNameOverride: form.courseOther.trim() || 'Other Course',
@@ -730,7 +715,7 @@ const WorkloadPage = ({ submissions }) => {
         isUpdate: !!editTarget,
         timestamp: new Date().toISOString(),
       });
-      
+
       // Pre-flight validation before sending
       if (!payload.empId || !payload.year || !payload.section) {
         console.error('❌ Pre-flight validation failed:', { empId: payload.empId, year: payload.year, section: payload.section });
@@ -748,15 +733,15 @@ const WorkloadPage = ({ submissions }) => {
       let res;
       if (editTarget) {
         res = await fetch(`${API}/deva/workloads/${editTarget.id}`, {
-          method:  'PUT',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body:    JSON.stringify(payload),
+          body: JSON.stringify(payload),
         });
       } else {
         res = await fetch(`${API}/deva/workloads`, {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body:    JSON.stringify(payload),
+          body: JSON.stringify(payload),
         });
       }
 
@@ -774,13 +759,13 @@ const WorkloadPage = ({ submissions }) => {
         // Only trigger this fallback for NEW assignments (!editTarget). 
         // If it was a PUT request, it's a genuine error that should be shown without resetting the form.
         if (!editTarget && res.status === 409 && data?.message?.includes('already assigned')) {
-          const existingWorkload = workloads.find(w => 
-            w.empId === form.empId && 
+          const existingWorkload = workloads.find(w =>
+            w.empId === form.empId &&
             w.courseId === Number(form.courseId) &&
             w.year === form.year &&
             w.section === form.section
           );
-          
+
           if (existingWorkload) {
             setEditTarget(existingWorkload);
             setForm({
@@ -837,13 +822,13 @@ const WorkloadPage = ({ submissions }) => {
       showToast('⚠ Enter a valid capacity hours value.');
       return;
     }
-    
+
     try {
       const newCapacity = Number(editCapacityValue);
       const res = await fetch(`${API}/deva/workloads/faculty/${editCapacityTarget}/capacity`, {
         method: 'PATCH',
         headers: { ...authJsonHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: newCapacity }),
+        body: JSON.stringify({ capacity: newCapacity, semester: selectedSemester, academicYear: selectedAcademicYear }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -863,7 +848,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Delete: calls server API ───────────────────────────
   const confirmDelete = async () => {
     try {
-      const res  = await fetch(`${API}/deva/workloads/${deleteTarget.id}?semester=${selectedSemester}`, {
+      const res = await fetch(`${API}/deva/workloads/${deleteTarget.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
         method: 'DELETE', headers: authHeader(),
       });
       const data = await res.json();
@@ -882,18 +867,18 @@ const WorkloadPage = ({ submissions }) => {
     // Global visibility toggle when empId is null
     if (empId === null) {
       setTogglingVisibility(true);
-      
+
       // Optimistic UI update
       const previousWorkloads = [...workloads];
       setWorkloads(workloads.map(w => ({ ...w, isVisible: newVisibility })));
-      
+
       try {
         const res = await fetch(`${API}/deva/workloads/bulk-visibility`, {
           method: 'PATCH',
           headers: { ...authHeader(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester }),
+          body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester, academicYear: selectedAcademicYear }),
         });
-        
+
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.message || 'Failed to update visibility');
@@ -920,18 +905,18 @@ const WorkloadPage = ({ submissions }) => {
     }
 
     setTogglingVisibility(true);
-    
+
     // Optimistic UI update
     const previousWorkloads = [...workloads];
     setWorkloads(workloads.map(w => w.empId === empId ? { ...w, isVisible: newVisibility } : w));
-    
+
     try {
       const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester }),
+        body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester, academicYear: selectedAcademicYear }),
       });
-      
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.message || 'Failed to update workload visibility');
@@ -970,10 +955,12 @@ const WorkloadPage = ({ submissions }) => {
     { header: 'T', key: 'manualT' },
     { header: 'P', key: 'manualP' },
     { header: 'Total Assigned Load', value: (r) => (Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0)) },
-    { header: 'Status', value: (r) => {
-      const assigned = Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0);
-      return assigned > 18 ? 'OVERLOADED' : 'Normal';
-    }},
+    {
+      header: 'Status', value: (r) => {
+        const assigned = Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0);
+        return assigned > 18 ? 'OVERLOADED' : 'Normal';
+      }
+    },
   ];
 
   const exportWorkloads = (format) => {
@@ -1041,12 +1028,12 @@ const WorkloadPage = ({ submissions }) => {
       if (!map[w.empId]) {
         const fm = facultyList.find(f => f.empId === w.empId);
         map[w.empId] = {
-          empId:       w.empId,
-          empName:     w.empName,
-          department:  w.department || fm?.department || DEFAULT_DEPARTMENT,
+          empId: w.empId,
+          empName: w.empName,
+          department: w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
-          mobile:      fm?.mobile || '',
-          rows:        [],
+          mobile: fm?.mobile || '',
+          rows: [],
         };
       }
       map[w.empId].rows.push(w);
@@ -1116,7 +1103,7 @@ const WorkloadPage = ({ submissions }) => {
             <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
               strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input className="wl-search" placeholder="Search by ID, name, course…"
               value={search} onChange={e => setSearch(e.target.value)} />
@@ -1204,11 +1191,11 @@ const WorkloadPage = ({ submissions }) => {
             <div className="wl-fg" style={{ position: 'relative' }}>
               <label>Employee ID *</label>
               {form.empId === '__other__' ? (
-                <input 
+                <input
                   className="wl-input"
                   placeholder="Type employee ID…"
                   value={form.empIdOther}
-                  onChange={e => setForm(p => ({ ...p, empIdOther: e.target.value }))} 
+                  onChange={e => setForm(p => ({ ...p, empIdOther: e.target.value }))}
                 />
               ) : (
                 <>
@@ -1386,16 +1373,16 @@ const WorkloadPage = ({ submissions }) => {
               <div className="wl-pending-title">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                 </svg>
                 Faculty Workload Hours Summary
                 <span className="wl-pending-sub">Based on submitted preferences vs assigned workloads</span>
               </div>
               <div className="wl-pending-grid">
                 {[
-                  { label: 'Lecture Hours (L)',   pref: pendingHours.prefL,   assigned: pendingHours.assignedL, pending: pendingHours.pendingL,   color: '#6366f1', bg: '#eef0fd' },
-                  { label: 'Tutorial Hours (T)',  pref: pendingHours.prefT,   assigned: pendingHours.assignedT, pending: pendingHours.pendingT,   color: '#0ea5e9', bg: '#e0f2fe' },
-                  { label: 'Practical Hours (P)', pref: pendingHours.prefP,   assigned: pendingHours.assignedP, pending: pendingHours.pendingP,   color: '#22c55e', bg: '#dcfce7' },
+                  { label: 'Lecture Hours (L)', pref: pendingHours.prefL, assigned: pendingHours.assignedL, pending: pendingHours.pendingL, color: '#6366f1', bg: '#eef0fd' },
+                  { label: 'Tutorial Hours (T)', pref: pendingHours.prefT, assigned: pendingHours.assignedT, pending: pendingHours.pendingT, color: '#0ea5e9', bg: '#e0f2fe' },
+                  { label: 'Practical Hours (P)', pref: pendingHours.prefP, assigned: pendingHours.assignedP, pending: pendingHours.pendingP, color: '#22c55e', bg: '#dcfce7' },
                 ].map(({ label, pref, assigned, pending, color, bg }) => (
                   <div key={label} className="wl-pending-card" style={{ '--ph-color': color, '--ph-bg': bg }}>
                     <div className="wl-ph-label">{label}</div>
@@ -1441,7 +1428,7 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wl-capacity-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                       fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 5v10M8 9h8"/>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" /><path d="M12 5v10M8 9h8" />
                     </svg>
                     Weekly Teaching Hours Capacity
                   </div>
@@ -1488,7 +1475,7 @@ const WorkloadPage = ({ submissions }) => {
               <div className="wl-capacity-title" style={{ color: '#0369a1' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 11l3 3L22 4"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  <path d="M9 11l3 3L22 4" /><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Selected Course Details
               </div>
@@ -1541,120 +1528,120 @@ const WorkloadPage = ({ submissions }) => {
               )}
             </div>
             <div className="wl-form-row">
-            <div className="wl-fg wl-fg-course">
-              <label>Course to Assign *</label>
-              <select value={form.courseId} onChange={e => handleCourseChange(e.target.value)}>
-                <option value="">— Select a course —</option>
-                {(prefCourses.length > 0 ? prefCourses : filteredCourseList.length > 0 ? filteredCourseList : courseList).map(c => (
-                  <option key={c.id} value={c.id}>
-                    [{c.subjectCode}] {c.subjectName} ({c.shortName})
-                  </option>
-                ))}
-                <option value="__other__">Other…</option>
-              </select>
-              {/* Show preference status */}
-              {preferencesLoading && (
-                <span className="wl-fsec-hint">Loading preferences...</span>
-              )}
-              {!preferencesLoading && facultyPreferences && hasFacultySubmittedPreferences(facultyPreferences) && (
-                <span className="wl-fsec-hint wl-fsec-info" title={`${facultyPreferences.preferredCourseIds.length} preferred courses`}>
-                  ℹ️ Showing {facultyPreferences.preferredCourseIds.length} preferred courses
-                </span>
-              )}
-              {!preferencesLoading && form.empId && !hasFacultySubmittedPreferences(facultyPreferences) && (
-                <span className="wl-fsec-hint wl-fsec-warn">No preferences found — showing all courses</span>
-              )}
-              {form.courseId === '__other__' && (
-                <input className="wl-other-input" placeholder="Type course name…"
-                  value={form.courseOther}
-                  onChange={e => setForm(p => ({ ...p, courseOther: e.target.value }))} />
-              )}
-              {errors.courseId && <span className="wl-err">{errors.courseId}</span>}
-            </div>
-            <div className="wl-fg">
-              <label>Year *</label>
-              {form.courseId === '__other__' ? (
-                // Course is 'Other': allow manual year entry
-                <>
-                  <input
-                    className="wl-other-input"
-                    placeholder="Type Year / Department…"
-                    value={form.yearOther}
-                    onChange={e => setForm(p => ({ ...p, yearOther: e.target.value }))}
-                  />
-                  {errors.year && <span className="wl-err">{errors.year}</span>}
-                </>
-              ) : (
-                // Manual year selection dropdown
-                <>
-                  <select
-                    value={form.year}
-                    onChange={e => setForm(p => ({
-                      ...p,
-                      year:    e.target.value,
-                      section: e.target.value !== '__other__'
-                        ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
-                        : p.section,
-                      courseId: '',
-                      manualL: '',
-                      manualT: '',
-                      manualP: ''
-                    }))}
-                  >
-                    {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  {form.courseId && form.courseId !== '__other__' && selectedCourse && (
-                    <span className="wl-fsec-hint wl-fsec-info" style={{ marginTop: '4px' }}>
-                      ✓ Auto-fetched from {selectedCourse.subjectCode}
-                    </span>
-                  )}
-                </>
-              )}
-              {errors.year && <span className="wl-err">{errors.year}</span>}
-            </div>
-            {form.courseId === '__other__' && (
-              <div className="wl-fg">
-                <label>Course Type *</label>
-                <select value={form.courseType} onChange={e => setForm(p => ({ ...p, courseType: e.target.value }))}>
-                  {COURSE_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
-                  <option value="__other__">Other</option>
+              <div className="wl-fg wl-fg-course">
+                <label>Course to Assign *</label>
+                <select value={form.courseId} onChange={e => handleCourseChange(e.target.value)}>
+                  <option value="">— Select a course —</option>
+                  {(prefCourses.length > 0 ? prefCourses : filteredCourseList.length > 0 ? filteredCourseList : courseList).map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.subjectCode}] {c.subjectName} ({c.shortName})
+                    </option>
+                  ))}
+                  <option value="__other__">Other…</option>
                 </select>
-                {form.courseType === '__other__' && (
+                {/* Show preference status */}
+                {preferencesLoading && (
+                  <span className="wl-fsec-hint">Loading preferences...</span>
+                )}
+                {!preferencesLoading && facultyPreferences && hasFacultySubmittedPreferences(facultyPreferences) && (
+                  <span className="wl-fsec-hint wl-fsec-info" title={`${facultyPreferences.preferredCourseIds.length} preferred courses`}>
+                    ℹ️ Showing {facultyPreferences.preferredCourseIds.length} preferred courses
+                  </span>
+                )}
+                {!preferencesLoading && form.empId && !hasFacultySubmittedPreferences(facultyPreferences) && (
+                  <span className="wl-fsec-hint wl-fsec-warn">No preferences found — showing all courses</span>
+                )}
+                {form.courseId === '__other__' && (
+                  <input className="wl-other-input" placeholder="Type course name…"
+                    value={form.courseOther}
+                    onChange={e => setForm(p => ({ ...p, courseOther: e.target.value }))} />
+                )}
+                {errors.courseId && <span className="wl-err">{errors.courseId}</span>}
+              </div>
+              <div className="wl-fg">
+                <label>Year *</label>
+                {form.courseId === '__other__' ? (
+                  // Course is 'Other': allow manual year entry
+                  <>
+                    <input
+                      className="wl-other-input"
+                      placeholder="Type Year / Department…"
+                      value={form.yearOther}
+                      onChange={e => setForm(p => ({ ...p, yearOther: e.target.value }))}
+                    />
+                    {errors.year && <span className="wl-err">{errors.year}</span>}
+                  </>
+                ) : (
+                  // Manual year selection dropdown
+                  <>
+                    <select
+                      value={form.year}
+                      onChange={e => setForm(p => ({
+                        ...p,
+                        year: e.target.value,
+                        section: e.target.value !== '__other__'
+                          ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
+                          : p.section,
+                        courseId: '',
+                        manualL: '',
+                        manualT: '',
+                        manualP: ''
+                      }))}
+                    >
+                      {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    {form.courseId && form.courseId !== '__other__' && selectedCourse && (
+                      <span className="wl-fsec-hint wl-fsec-info" style={{ marginTop: '4px' }}>
+                        ✓ Auto-fetched from {selectedCourse.subjectCode}
+                      </span>
+                    )}
+                  </>
+                )}
+                {errors.year && <span className="wl-err">{errors.year}</span>}
+              </div>
+              {form.courseId === '__other__' && (
+                <div className="wl-fg">
+                  <label>Course Type *</label>
+                  <select value={form.courseType} onChange={e => setForm(p => ({ ...p, courseType: e.target.value }))}>
+                    {COURSE_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
+                    <option value="__other__">Other</option>
+                  </select>
+                  {form.courseType === '__other__' && (
+                    <input
+                      className="wl-other-input"
+                      placeholder="Type course type…"
+                      value={form.courseTypeOther}
+                      onChange={e => setForm(p => ({ ...p, courseTypeOther: e.target.value }))}
+                    />
+                  )}
+                  {errors.courseType && <span className="wl-err">{errors.courseType}</span>}
+                </div>
+              )}
+              <div className="wl-fg">
+                <label>Section *</label>
+                <select
+                  value={form.section}
+                  onChange={e => setForm(p => ({ ...p, section: e.target.value }))}
+                >
+                  {sections.map(s => <option key={s}>{s}</option>)}
+                  <option value="__other__">Other…</option>
+                </select>
+                <div className="wl-sec-actions-inline">
+                  <button type="button" className="wl-mini-sec-btn" onClick={handleAddSection}>+ Add</button>
+                  <button type="button" className="wl-mini-sec-btn" onClick={handleEditSection} disabled={!form.section || form.section === '__other__'}>✎ Edit</button>
+                  <button type="button" className="wl-mini-sec-btn wl-mini-sec-btn-del" onClick={handleDeleteSection} disabled={!form.section || form.section === '__other__'}>✕ Delete</button>
+                </div>
+                {form.section === '__other__' && (
                   <input
                     className="wl-other-input"
-                    placeholder="Type course type…"
-                    value={form.courseTypeOther}
-                    onChange={e => setForm(p => ({ ...p, courseTypeOther: e.target.value }))}
+                    placeholder="Type section name…"
+                    value={form.sectionOther}
+                    onChange={e => setForm(p => ({ ...p, sectionOther: e.target.value }))}
                   />
                 )}
-                {errors.courseType && <span className="wl-err">{errors.courseType}</span>}
+                {errors.section && <span className="wl-err">{errors.section}</span>}
               </div>
-            )}
-            <div className="wl-fg">
-              <label>Section *</label>
-              <select
-                value={form.section}
-                onChange={e => setForm(p => ({ ...p, section: e.target.value }))}
-              >
-                {sections.map(s => <option key={s}>{s}</option>)}
-                <option value="__other__">Other…</option>
-              </select>
-              <div className="wl-sec-actions-inline">
-                <button type="button" className="wl-mini-sec-btn" onClick={handleAddSection}>+ Add</button>
-                <button type="button" className="wl-mini-sec-btn" onClick={handleEditSection} disabled={!form.section || form.section === '__other__'}>✎ Edit</button>
-                <button type="button" className="wl-mini-sec-btn wl-mini-sec-btn-del" onClick={handleDeleteSection} disabled={!form.section || form.section === '__other__'}>✕ Delete</button>
-              </div>
-              {form.section === '__other__' && (
-                <input
-                  className="wl-other-input"
-                  placeholder="Type section name…"
-                  value={form.sectionOther}
-                  onChange={e => setForm(p => ({ ...p, sectionOther: e.target.value }))}
-                />
-              )}
-              {errors.section && <span className="wl-err">{errors.section}</span>}
             </div>
-          </div>
           </>
 
           {/* ── SECTION 3: Fixed L-T-P-C from curriculum ── */}
@@ -1668,10 +1655,10 @@ const WorkloadPage = ({ submissions }) => {
               </div>
               <div className="wl-ltpc-strip">
                 {[
-                  ['L', selectedCourse.L, 'Lecture hrs',  '#6366f1', '#eef0fd'],
+                  ['L', selectedCourse.L, 'Lecture hrs', '#6366f1', '#eef0fd'],
                   ['T', selectedCourse.T, 'Tutorial hrs', '#0ea5e9', '#e0f2fe'],
-                  ['P', selectedCourse.P, 'Practical hrs','#22c55e', '#dcfce7'],
-                  ['C', selectedCourse.C, 'Credits',      '#f59e0b', '#fef9c3'],
+                  ['P', selectedCourse.P, 'Practical hrs', '#22c55e', '#dcfce7'],
+                  ['C', selectedCourse.C, 'Credits', '#f59e0b', '#fef9c3'],
                 ].map(([k, v, sub, color, bg]) => (
                   <div key={k} className="wl-ltpc-cell" style={{ '--ltpc-color': color, '--ltpc-bg': bg }}>
                     <span className="wl-ltpc-key">{k}</span>
@@ -1759,8 +1746,8 @@ const WorkloadPage = ({ submissions }) => {
             <div>✓ Assigned Hours: <strong>{(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0))}</strong>h</div>
             {facultyWorkloadSummary && (
               <div style={{ marginTop: '4px', color: (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target ? '#dc2626' : '#16a34a' }}>
-                {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target 
-                  ? `⚠ OVERLOAD: Exceeds capacity of ${facultyWorkloadSummary.target}h` 
+                {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target
+                  ? `⚠ OVERLOAD: Exceeds capacity of ${facultyWorkloadSummary.target}h`
                   : `✓ Within capacity of ${facultyWorkloadSummary.target}h`}
               </div>
             )}
@@ -1821,7 +1808,7 @@ const WorkloadPage = ({ submissions }) => {
             })}
           </div>
           <div className="wl-search-wrap" style={{ margin: 0, minWidth: '300px' }}>
-            <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
             <input className="wl-search" placeholder="Search assigned faculty..." value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button className="wl-search-clear" onClick={() => setSearch('')}>✕</button>}
           </div>
@@ -1892,8 +1879,8 @@ const WorkloadPage = ({ submissions }) => {
                   </thead>
                   <tbody>
                     {fac.rows.map((w, i) => {
-                          const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
-                          const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
+                      const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
+                      const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
                       return (
                         <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
                           <td className="wl-td-sl">{i + 1}</td>
@@ -1954,7 +1941,7 @@ const WorkloadPage = ({ submissions }) => {
             <div className="wlf-section-title">📄 Faculty Workload Forms</div>
             <button className="wlf-print-all-btn" onClick={() => {
               const el = document.getElementById('wlf-print-area');
-              const w  = window.open('', '', 'width=900,height=700');
+              const w = window.open('', '', 'width=900,height=700');
               w.document.write(`<html><head><title>Workload Forms</title><style>
                 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
                 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1992,11 +1979,11 @@ const WorkloadPage = ({ submissions }) => {
               const totalT = fac.rows.reduce((s, r) => s + (r.manualT || 0), 0);
               const totalP = fac.rows.reduce((s, r) => s + (r.manualP || 0), 0);
               const totalHrs = totalL + totalT + totalP;
-              
+
               const facListEntry = facultyList.find(f => f.empId === fac.empId);
               const target = Number(facListEntry?.capacity);
-              const pct      = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
-              
+              const pct = target > 0 ? Math.round((totalHrs / target) * 100) : 0;
+
               return (
                 <div className="wlf-form-card" key={fac.empId}>
                   {/* Institution header */}
@@ -2029,18 +2016,18 @@ const WorkloadPage = ({ submissions }) => {
                   <table className="wlf-table">
                     <thead>
                       <tr>
-                        <th style={{width:'3%'}}>#</th>
-                        <th style={{width:'11%'}}>Subject Code</th>
-                        <th style={{width:'25%',textAlign:'left'}}>Subject Name</th>
-                        <th style={{width:'10%'}}>Role</th>
-                        <th style={{width:'7%'}}>Year</th>
-                        <th style={{width:'6%'}}>Sec</th>
-                        <th style={{width:'6%'}}>L</th>
-                        <th style={{width:'6%'}}>T</th>
-                        <th style={{width:'6%'}}>P</th>
-                        <th style={{width:'6%'}}>C</th>
-                        <th style={{width:'8%'}}>Total Hrs</th>
-                        <th style={{width:'9%'}}>Remarks</th>
+                        <th style={{ width: '3%' }}>#</th>
+                        <th style={{ width: '11%' }}>Subject Code</th>
+                        <th style={{ width: '25%', textAlign: 'left' }}>Subject Name</th>
+                        <th style={{ width: '10%' }}>Role</th>
+                        <th style={{ width: '7%' }}>Year</th>
+                        <th style={{ width: '6%' }}>Sec</th>
+                        <th style={{ width: '6%' }}>L</th>
+                        <th style={{ width: '6%' }}>T</th>
+                        <th style={{ width: '6%' }}>P</th>
+                        <th style={{ width: '6%' }}>C</th>
+                        <th style={{ width: '8%' }}>Total Hrs</th>
+                        <th style={{ width: '9%' }}>Remarks</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2056,12 +2043,12 @@ const WorkloadPage = ({ submissions }) => {
                           <td>{r.manualT || 0}</td>
                           <td>{r.manualP || 0}</td>
                           <td>{r.C}</td>
-                          <td><strong>{(r.manualL||0)+(r.manualT||0)+(r.manualP||0)}</strong></td>
+                          <td><strong>{(r.manualL || 0) + (r.manualT || 0) + (r.manualP || 0)}</strong></td>
                           <td></td>
                         </tr>
                       ))}
                       <tr className="wlf-total-row">
-                        <td colSpan={5} style={{textAlign:'right',fontWeight:700}}>TOTAL</td>
+                        <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
                         <td>{totalL}</td>
                         <td>{totalT}</td>
                         <td>{totalP}</td>

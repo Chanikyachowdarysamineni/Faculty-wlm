@@ -2,9 +2,9 @@
 .pp-wrapper {
   flex: 1;
   padding: 28px 0 48px;
-  background: #0f172a;
+  background: transparent;
   min-height: 100%;
-  color: #e2e8f0;
+  color: #000000;
   font-family: 'Poppins', sans-serif;
   width: 100%;
   max-width: none;
@@ -56,9 +56,9 @@
 }
 
 .pp-sync-btn {
-  border: 1px solid #334155;
-  background: #1e293b;
-  color: #e2e8f0;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  color: #000000;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
@@ -91,12 +91,12 @@
   display: flex;
   align-items: center;
   gap: 28px;
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border: 1px solid #1e293b;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
   border-radius: 18px;
   padding: 32px 36px;
   margin-bottom: 28px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.45);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
 
 .pp-avatar {
@@ -123,7 +123,7 @@
 .pp-name {
   font-size: 1.45rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #000000;
   margin: 0;
   line-height: 1.2;
 }
@@ -155,12 +155,12 @@
 .pp-emp-val {
   font-family: 'Courier New', monospace;
   font-size: 0.9rem;
-  color: #facc15;
+  color: #b45309;
   font-weight: 600;
-  background: rgba(250, 204, 21, 0.1);
+  background: #fef3c7;
   padding: 2px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  border: 1px solid #fde68a;
 }
 
 /* Hero stats */
@@ -169,7 +169,7 @@
   flex-direction: column;
   gap: 12px;
   padding-left: 28px;
-  border-left: 1px solid #1e293b;
+  border-left: 1px solid #e2e8f0;
 }
 .pp-hstat {
   display: flex;
@@ -181,7 +181,7 @@
 .pp-hstat-val {
   font-size: 1.7rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #000000;
   line-height: 1;
 }
 .pp-hstat-label {
@@ -201,8 +201,8 @@
 
 /* ── Section ───────────────────────────────────────────── */
 .pp-section {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
   padding: 24px 28px;
 }
@@ -213,10 +213,10 @@
   gap: 8px;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #cbd5e1;
+  color: #000000;
   margin: 0 0 20px 0;
   padding-bottom: 12px;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid #e2e8f0;
 }
 .pp-sec-title svg { opacity: 0.7; flex-shrink: 0; }
 
@@ -247,8 +247,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 14px 18px;
 }
@@ -263,19 +263,19 @@
 
 .pp-dc-val {
   font-size: 0.92rem;
-  color: #e2e8f0;
+  color: #000000;
   font-weight: 500;
   word-break: break-word;
 }
 
-.pp-mono { font-family: 'Courier New', monospace; color: #7dd3fc; }
-.pp-na   { color: #475569; }
+.pp-mono { font-family: 'Courier New', monospace; color: #0284c7; }
+.pp-na   { color: #94a3b8; }
 
 .pp-email-link {
-  color: #7dd3fc;
+  color: #0284c7;
   text-decoration: none;
 }
-.pp-email-link:hover { text-decoration: underline; color: #93c5fd; }
+.pp-email-link:hover { text-decoration: underline; color: #0369a1; }
 
 /* ── Preference Cards ──────────────────────────────────── */
 .pp-sub-meta {
@@ -295,15 +295,15 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 14px 18px;
   transition: background 0.2s, border-color 0.2s;
 }
 .pp-pref-card:hover {
-  background: #172033;
-  border-color: #475569;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .pp-pref-rank {
@@ -329,12 +329,12 @@
 .pp-pref-code {
   font-family: 'Courier New', monospace;
   font-size: 0.8rem;
-  color: #facc15;
+  color: #b45309;
   font-weight: 600;
 }
 .pp-pref-name {
   font-size: 0.9rem;
-  color: #e2e8f0;
+  color: #000000;
   font-weight: 500;
 }
 .pp-pref-prog {
@@ -362,7 +362,7 @@
 .pp-wl-table-wrap {
   overflow-x: auto;
   border-radius: 10px;
-  border: 1px solid #334155;
+  border: 1px solid #e2e8f0;
 }
 
 .pp-wl-table {
@@ -372,7 +372,7 @@
 }
 
 .pp-wl-table thead tr {
-  background: #0f172a;
+  background: #f8fafc;
 }
 .pp-wl-table th {
   padding: 10px 14px;
@@ -383,12 +383,12 @@
   text-transform: uppercase;
   letter-spacing: 0.07em;
   white-space: nowrap;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid #e2e8f0;
 }
 .pp-wl-table td {
   padding: 10px 14px;
-  border-bottom: 1px solid #1e293b;
-  color: #cbd5e1;
+  border-bottom: 1px solid #e2e8f0;
+  color: #000000;
   vertical-align: middle;
 }
 .pp-wl-table tbody tr:last-child td { border-bottom: none; }
@@ -468,8 +468,8 @@
 }
 
 .pp-modal {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
   width: 100%;
   max-width: 480px;
@@ -483,13 +483,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .pp-modal-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #f1f5f9;
+  color: #000000;
   font-weight: 700;
 }
 
@@ -508,8 +508,8 @@
   transition: all 0.2s;
 }
 .pp-modal-close:hover {
-  background: #334155;
-  color: #cbd5e1;
+  background: #e2e8f0;
+  color: #000000;
 }
 
 .pp-modal-body {
@@ -530,7 +530,7 @@
 
 .pp-form-group label {
   font-size: 0.78rem;
-  color: #cbd5e1;
+  color: #000000;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
@@ -538,10 +538,10 @@
 
 .pp-input {
   padding: 10px 12px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  color: #e2e8f0;
+  color: #000000;
   font-size: 0.9rem;
   font-family: inherit;
   transition: all 0.2s;
@@ -550,7 +550,7 @@
   outline: none;
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  background: #172033;
+  background: #ffffff;
 }
 
 .pp-modal-footer {
@@ -559,8 +559,8 @@
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 24px;
-  border-top: 1px solid #334155;
-  background: #111c30;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .pp-btn-cancel,
@@ -575,11 +575,11 @@
 }
 
 .pp-btn-cancel {
-  background: #334155;
-  color: #cbd5e1;
+  background: #e2e8f0;
+  color: #000000;
 }
 .pp-btn-cancel:hover:not(:disabled) {
-  background: #475569;
+  background: #cbd5e1;
 }
 .pp-btn-cancel:disabled {
   opacity: 0.6;

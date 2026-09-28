@@ -6,17 +6,10 @@ import { useToast } from './Toast';
 import { useSharedData } from './DataContext';
 import './CoursesPage.css';
 
-const PROGRAMS     = ['B.Tech', 'M.Tech'];
-const COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
-const YEARS_BTECH  = ['I', 'II', 'III', 'IV'];
-const YEAR_OPTIONS = [
-  { value: 'I', label: 'I Year' },
-  { value: 'II', label: 'II Year' },
-  { value: 'III', label: 'III Year' },
-  { value: 'IV', label: 'IV Year' },
-  { value: 'M.Tech', label: 'M.Tech' },
-  { value: '__other__', label: 'Others' },
-];
+// const PROGRAMS removed
+// const COURSE_TYPES removed
+// const YEARS_BTECH removed
+// YEAR_OPTIONS removed
 
 const emptyCourseForm = {
   program: 'B.Tech', courseType: 'Mandatory', year: 'I',
@@ -29,14 +22,16 @@ const emptyCourseForm = {
 
 // ── CoursesPage ────────────────────────────────────────────────
 const CoursesPage = ({ isAdmin = true }) => {
-  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, selectedSemester } = useSharedData();
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, selectedSemester, selectedAcademicYear } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEAR_OPTIONS = activeYearsRaw.length > 0 
     ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }] 
     : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
   
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'DE', 'Other'];
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
+  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
+  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'M.Tech') : ['I', 'II', 'III', 'IV'];
   
   // ── Data state ──
   const [courseList, setCourseList]   = useState([]);
@@ -72,7 +67,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   const fetchCourses = useCallback(async () => {
     try {
       setLoadingCourses(true);
-      const data = await fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers: authHeaders() });
+      const data = await fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers: authHeaders() });
       if (data?.success && Array.isArray(data.data)) {
         setCourseList(data.data);
         setContextCourses(data.data);
@@ -85,7 +80,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     } finally {
       setLoadingCourses(false);
     }
-  }, [authHeaders, setContextCourses, showToast, selectedSemester]);
+  }, [authHeaders, setContextCourses, showToast, selectedSemester, selectedAcademicYear]);
 
   // ── Derived lists ──
   const filteredCourses = useMemo(() => {
@@ -140,7 +135,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     const resolvedProgram    = f.program     === '__other__' ? f.programOther.trim()    || 'Other' : f.program;
     const resolvedCourseType = f.courseType  === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
     const resolvedYear       = f.year        === '__other__' ? f.yearOther.trim()       || 'Other' : f.year;
-    const payload = { semester: selectedSemester,
+    const payload = { semester: selectedSemester, academicYear: selectedAcademicYear,
       program: resolvedProgram,
       courseType: resolvedCourseType,
       year: resolvedYear,
@@ -185,7 +180,7 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   const confirmDeleteCourse = async () => {
     try {
-      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}?semester=${selectedSemester}`, {
+      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
         method: 'DELETE',
         headers: authHeaders(),
       });

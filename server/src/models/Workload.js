@@ -31,8 +31,10 @@ const workloadSchema = new mongoose.Schema(
     program:       { type: String, default: '' },
     C:             { type: Number, default: 0 },          // credits
 
+    // Academic Year Context
+    academicYear:  { type: String, required: true},
+    
     // ── First-Year Specific Fields ───────────────────────────────────────
-    academicYear:  { type: String, default: '2023-2024' },
     branch:        { type: String, default: '' },
     sections:      { type: [String], default: [] },
     workloadText:  { type: String, default: '' },

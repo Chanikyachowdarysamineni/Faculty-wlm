@@ -12,6 +12,8 @@
 const express  = require('express');
 const { body, validationResult } = require('express-validator');
 const Setting  = require('../models/Setting');
+const AcademicYear = require('../models/AcademicYear');
+const AcademicYearSemester = require('../models/AcademicYearSemester');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const { mongoose } = require('../db');
@@ -63,8 +65,16 @@ const saveSectionsConfig = async (sections) => {
 router.get('/form-status', requireAuth, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
-    const doc = await Setting.findOne({ key: `form_enabled_${semester}` }).lean();
-    sendSuccess(res, { formEnabled: doc ? doc.value === 'true' : true }, 200);
+    let { academicYear } = req.query;
+    if (!academicYear) {
+      const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+      academicYear = currentYear ? currentYear.name : null;
+    }
+    const yearDoc = await AcademicYear.findOne({ name: academicYear }).lean();
+    if (!yearDoc) return sendSuccess(res, { formEnabled: false }, 200);
+
+    const semDoc = await AcademicYearSemester.findOne({ academicYearId: yearDoc._id, semesterType: semester }).lean();
+    sendSuccess(res, { formEnabled: semDoc ? semDoc.formEnabled : false }, 200);
   } catch (err) { next(err); }
 });
 
@@ -79,9 +89,18 @@ router.put(
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
       const { formEnabled, semester = 'ODD' } = req.body;
-      await Setting.findOneAndUpdate(
-        { key: `form_enabled_${semester}` },
-        { value: String(formEnabled) },
+      let { academicYear } = req.body;
+      if (!academicYear) {
+        const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+        academicYear = currentYear ? currentYear.name : null;
+      }
+      
+      const yearDoc = await AcademicYear.findOne({ name: academicYear }).lean();
+      if (!yearDoc) return sendNotFound(res, 'Academic year not found');
+
+      await AcademicYearSemester.findOneAndUpdate(
+        { academicYearId: yearDoc._id, semesterType: semester },
+        { $set: { formEnabled: Boolean(formEnabled) } },
         { upsert: true, new: true }
       );
       sendSuccess(res, { formEnabled: Boolean(formEnabled) }, 200);
@@ -198,8 +217,16 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
 router.get('/edit-status', requireAuth, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
-    const doc = await Setting.findOne({ key: `edit_enabled_${semester}` }).lean();
-    sendSuccess(res, { editEnabled: doc ? doc.value === 'true' : true }, 200);
+    let { academicYear } = req.query;
+    if (!academicYear) {
+      const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+      academicYear = currentYear ? currentYear.name : null;
+    }
+    const yearDoc = await AcademicYear.findOne({ name: academicYear }).lean();
+    if (!yearDoc) return sendSuccess(res, { editEnabled: false }, 200);
+
+    const semDoc = await AcademicYearSemester.findOne({ academicYearId: yearDoc._id, semesterType: semester }).lean();
+    sendSuccess(res, { editEnabled: semDoc ? semDoc.editEnabled : false }, 200);
   } catch (err) { next(err); }
 });
 
@@ -214,9 +241,18 @@ router.put(
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
       const { editEnabled, semester = 'ODD' } = req.body;
-      await Setting.findOneAndUpdate(
-        { key: `edit_enabled_${semester}` },
-        { value: String(editEnabled) },
+      let { academicYear } = req.body;
+      if (!academicYear) {
+        const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+        academicYear = currentYear ? currentYear.name : null;
+      }
+      
+      const yearDoc = await AcademicYear.findOne({ name: academicYear }).lean();
+      if (!yearDoc) return sendNotFound(res, 'Academic year not found');
+
+      await AcademicYearSemester.findOneAndUpdate(
+        { academicYearId: yearDoc._id, semesterType: semester },
+        { $set: { editEnabled: Boolean(editEnabled) } },
         { upsert: true, new: true }
       );
       sendSuccess(res, { editEnabled: Boolean(editEnabled) }, 200);

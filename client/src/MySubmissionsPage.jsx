@@ -11,7 +11,7 @@ const MySubmissionsPage = ({
   onUpdateSubmission,
   onNavigateToForm,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, selectedSemester } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear } = useSharedData();
   
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
@@ -60,7 +60,7 @@ const MySubmissionsPage = ({
       const headers = authHeaders();
       const [fReq, cReq] = await Promise.allSettled([
         fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers }),
       ]);
       const facultyOk = fReq.status === 'fulfilled';
       const coursesOk = cReq.status === 'fulfilled';
@@ -73,7 +73,7 @@ const MySubmissionsPage = ({
     } finally {
       if (!silent) setMasterLoading(false);
     }
-  }, [selectedSemester]);
+  }, [selectedSemester, selectedAcademicYear]);
 
   const getCourse = cid => courseList.find(c => String(c.id) === String(cid));
 
@@ -97,7 +97,7 @@ const MySubmissionsPage = ({
     try {
       const res  = await fetch(`${API}/deva/submissions/by-faculty/${currentUser.id}`, {
         method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify({ prefs: filled.map(Number) }),
+        body: JSON.stringify({ prefs: filled.map(Number), semester: selectedSemester, academicYear: selectedAcademicYear }),
       });
       const data = await res.json();
       if (!res.ok || !data?.success) { 

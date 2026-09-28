@@ -10,7 +10,8 @@ const FacultyFormPage = ({
   submissions, onSubmit, onUpdateSubmission, onDeleteSubmission,
   isAdmin, currentUser,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
   
   // Auto-fill empId for logged-in faculty
   const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
@@ -87,8 +88,8 @@ const FacultyFormPage = ({
     try {
       const headers = authHeaders();
       const [fReq, cReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
-        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers }),
       ]);
       const facultyOk = fReq.status === 'fulfilled';
       const coursesOk = cReq.status === 'fulfilled';
@@ -101,7 +102,7 @@ const FacultyFormPage = ({
     } finally {
       if (!silent) setMasterLoading(false);
     }
-  }, [selectedSemester]);
+  }, [selectedSemester, selectedAcademicYear]);
 
   const foundFaculty = useMemo(
     () => facultyList.find(f => f.empId === empIdInput.trim()),
@@ -156,7 +157,7 @@ const FacultyFormPage = ({
     if (editMode) {
       // PUT /api/submissions/by-faculty/:empId
       try {
-        const res  = await fetch(`${API}/deva/submissions/by-faculty/${foundFaculty.empId}?semester=${selectedSemester}`, {
+        const res  = await fetch(`${API}/deva/submissions/by-faculty/${foundFaculty.empId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
           method: 'PUT', headers: authHeaders(),
           body: JSON.stringify({ prefs: prefs.filter(Boolean).map(Number) }),
         });
@@ -202,7 +203,7 @@ const FacultyFormPage = ({
           empName:     effectiveFaculty.name,
           designation: effectiveFaculty.designation,
           mobile:      effectiveFaculty.mobile,
-          semester:    selectedSemester,
+          semester: selectedSemester, academicYear: selectedAcademicYear,
         }),
       });
       const data = await res.json();
@@ -273,7 +274,7 @@ const FacultyFormPage = ({
     setExportLoading(true);
     setExportError('');
     try {
-      const res = await fetch(`${API}/deva/submissions/export?format=${format}`, {
+      const res = await fetch(`${API}/deva/submissions/export?format=${format}&semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
         method: 'GET',
         headers: authHeaders(),
       });
@@ -336,7 +337,7 @@ const FacultyFormPage = ({
                   setEditEnabled(next);
                   await fetch(`${API}/deva/settings/edit-status`, {
                     method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ editEnabled: next, semester: selectedSemester }),
+                    body: JSON.stringify({ editEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
                   }).catch(() => {});
                 }}
                 title={editEnabled ? 'Prevent faculty from editing submitted preferences' : 'Allow faculty to edit submitted preferences'}
@@ -350,7 +351,7 @@ const FacultyFormPage = ({
                   setFormEnabled(next);
                   await fetch(`${API}/deva/settings/form-status`, {
                     method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ formEnabled: next, semester: selectedSemester }),
+                    body: JSON.stringify({ formEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
                   }).catch(() => {});
                 }}
               >
@@ -550,7 +551,7 @@ const FacultyFormPage = ({
 
             <div className="ff-prefs-list">
               {prefs.map((p, i) => {
-                const YEARS_ORDER = ['I', 'II', 'III', 'IV'];
+                const YEARS_ORDER = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
                 return (
                 <div className="ff-pref-row" key={i}>
                   <div className="ff-pref-tag">Pref&nbsp;{i + 1}</div>
@@ -800,7 +801,7 @@ const FacultyFormPage = ({
                                   e.stopPropagation();
                                   if (!window.confirm('Delete this submission?')) return;
                                   try {
-                                    const res = await fetch(`${API}/deva/submissions/${s.id}?semester=${selectedSemester}`, {
+                                    const res = await fetch(`${API}/deva/submissions/${s.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
                                       method: 'DELETE', headers: authHeaders(),
                                     });
                                     const data = await res.json();

@@ -8,6 +8,7 @@ import FacultyFormPage from './FacultyFormPage';
 import MySubmissionsPage from './MySubmissionsPage';
 import MyWorkloadPage from './MyWorkloadPage';
 import ProfilePage from './ProfilePage';
+import AcademicYearManagementPage from './AcademicYearManagementPage';
 
 import OverloadedFacultyModal from './OverloadedFacultyModal';
 import API from './config';
@@ -19,6 +20,18 @@ import wsClient from './utils/WebSocketClient';
 import './Dashboard.css';
 
 const NAV_ITEMS = [
+  {
+    key: 'academic-years',
+    label: 'Academic Years',
+    colorClass: 'nav-color-indigo',
+    adminOnly: true,
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+    ),
+  },
   {
     key: 'dashboard',
     label: 'Dashboard',
@@ -176,6 +189,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const handleDelSubmission = id => setSubmissions(prev => prev.filter(s => s.id !== id));
   const handleUpdateSubmission = sub => setSubmissions(prev => prev.map(s => s.id === sub.id ? sub : s));
 
+  
+
+
   const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.canAccessAdmin === true);
 
   const token = () => {
@@ -197,8 +213,31 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
   const { 
     setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig,
-    selectedSemester, setSelectedSemester
+    selectedSemester, setSelectedSemester, academicYears, setAcademicYears, selectedAcademicYear, setSelectedAcademicYear
+
   } = useSharedData();
+
+  useEffect(() => {
+    const fetchAY = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${token()}` };
+        const res = await fetch(`${API}/deva/academic-years`, { headers });
+        const json = await res.json();
+        if (json.success) {
+          setAcademicYears(json.data);
+          const currentYear = json.data.find(y => y.isCurrent);
+          // Auto select current year if not set or invalid
+          if (currentYear && (!localStorage.getItem('selectedAcademicYear') || !json.data.find(y => y.name === selectedAcademicYear))) {
+            setSelectedAcademicYear(currentYear.name);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch academic years', err);
+      }
+    };
+    fetchAY();
+  }, [setAcademicYears, setSelectedAcademicYear, selectedAcademicYear]);
+
   const [dashboardData, setDashboardData] = useState({
     loading: false,
     error: '',
@@ -254,7 +293,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     if (isAdmin) {
       try {
-        const data = await fetchAllPages('/deva/submissions', { semester: selectedSemester }, { headers });
+        const data = await fetchAllPages('/deva/submissions', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers });
         if (!data.success) {
           setSubmissionsSyncError(data.message || 'Failed to refresh submissions.');
           return;
@@ -269,7 +308,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }
 
     try {
-      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}?semester=${selectedSemester}`, {
+      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
         headers,
         silentMode: true // Suppress logs for expected 404 (no submission yet)
       });
@@ -294,7 +333,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     } catch {
       setSubmissionsSyncError('Failed to refresh submissions.');
     }
-  }, [user, isAdmin, selectedSemester]);
+  }, [user, isAdmin, selectedSemester, selectedAcademicYear]);
 
   // Fetch submissions + toggle settings from the server
   useEffect(() => {
@@ -303,8 +342,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     const refreshSettings = async () => {
       const [formResult, editResult] = await Promise.all([
-        fetchJsonWithRetry(`${API}/deva/settings/form-status?semester=${selectedSemester}`, { headers }),
-        fetchJsonWithRetry(`${API}/deva/settings/edit-status?semester=${selectedSemester}`, { headers }),
+        fetchJsonWithRetry(`${API}/deva/settings/form-status?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, { headers }),
+        fetchJsonWithRetry(`${API}/deva/settings/edit-status?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, { headers }),
       ]);
       const formData = formResult.data?.data || formResult.data || {};
       const editData = editResult.data?.data || editResult.data || {};
@@ -319,7 +358,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     const refreshAssignedCourses = async () => {
       if (isAdmin) return;
-      const result = await fetchAllPages('/deva/workloads', { empId: user.id, semester: selectedSemester }, { headers });
+      const result = await fetchAllPages('/deva/workloads', { empId: user.id, semester: selectedSemester, academicYear: selectedAcademicYear }, { headers });
       if (result.success) {
         const uniqueSubjects = new Set();
         (result.data || []).forEach(w => uniqueSubjects.add(w.subjectCode));
@@ -364,9 +403,9 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     setDashboardData(prev => ({ ...prev, loading: true, error: '' }));
     try {
       const [fReq, aReq, cReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
-        fetchAllPages('/deva/allocations', { semester: selectedSemester }, { headers }),
-        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/allocations', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
       ]);
 
       const nextData = {};
@@ -433,7 +472,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       }));
       setDashboardSyncError('Could not refresh dashboard data. Showing latest available data.');
     }
-  }, [isAdmin, authHeaders, selectedSemester, setFaculty, setAllocations, setCourses]);
+  }, [isAdmin, authHeaders, selectedSemester, selectedAcademicYear, setFaculty, setAllocations, setCourses]);
 
   useEffect(() => {
     if (!isAdmin || activeNav !== 'dashboard') return;
@@ -449,7 +488,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
       setAnalytics(prev => ({ ...prev, loading: true }));
       try {
         const headers = authHeaders();
-        const res = await fetch(`${API}/deva/stats/dashboard-analytics?semester=${selectedSemester}`, { headers });
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, { headers });
         if (!res.ok) throw new Error('Analytics fetch failed');
         const json = await res.json();
         if (isMounted && json.success) {
@@ -466,7 +505,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     };
     fetchAnalytics();
     return () => { isMounted = false; };
-  }, [isAdmin, authHeaders, dashboardLastSyncedAt, selectedSemester]);
+  }, [isAdmin, authHeaders, dashboardLastSyncedAt, selectedSemester, selectedAcademicYear]);
 
   const refreshMasterData = useCallback(async () => {
     if (!user?.id) return;
@@ -481,8 +520,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
     try {
       const [fReq, cReq, configReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers }),
-        fetchAllPages('/deva/courses', { semester: selectedSemester }, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
         fetchJsonWithRetry(`${API}/deva/config`, { headers })
       ]);
 
@@ -1036,6 +1075,19 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         </div>
 
         <div className="dash-topbar-right">
+          
+          <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
+            <select 
+              value={selectedAcademicYear} 
+              onChange={(e) => setSelectedAcademicYear(e.target.value)}
+              style={{ background: 'transparent', color: '#fff', border: 'none', outline: 'none', cursor: 'pointer', padding: '6px 10px', fontSize: '14px', fontWeight: '500' }}
+            >
+              {academicYears.length > 0 ? academicYears.map(y => (
+                <option key={y._id} value={y.name} style={{ color: '#000' }}>{y.name}</option>
+              )) : <option value="" style={{ color: '#000' }}>Loading...</option>}
+            </select>
+          </div>
+
           <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
             <button 
               className={`dash-switch-btn ${selectedSemester === 'ODD' ? 'active' : ''}`}
@@ -1148,6 +1200,8 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                         ) :
                           activeNav === 'profile' ? (
                             <ProfilePage user={user} submissions={submissions} onLogout={onLogout} />
+                          ) : activeNav === 'academic-years' && isAdmin ? (
+                            <AcademicYearManagementPage />
                           ) :
 
                             /* ── Dashboard overview ── */

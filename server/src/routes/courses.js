@@ -100,6 +100,9 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) {
+      filter.academicYear = req.query.academicYear;
+    }
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [

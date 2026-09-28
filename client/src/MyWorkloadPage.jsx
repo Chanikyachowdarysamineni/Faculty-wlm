@@ -32,7 +32,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     if (withLoader) setLoading(true);
     setApiError('');
     try {
-      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester } : { semester: selectedSemester };
+      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear } : { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear };
       const data = await fetchAllPages('/deva/workloads', params, { headers: authHeader() });
       if (!data.success) {
         const msg = data.message || 'Failed to load workloads.';
@@ -51,7 +51,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [currentUser?.id, selectedSemester]);
+  }, [currentUser?.id, selectedSemester, selectedAcademicYear]);
 
   useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads]);
 

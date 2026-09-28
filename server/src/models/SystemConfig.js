@@ -17,6 +17,7 @@ const systemConfigSchema = new mongoose.Schema({
   facultyRoles: [configItemSchema],
   designations: [configItemSchema],
   departments: [configItemSchema],
+  programs: [configItemSchema],
 }, {
   timestamps: true,
   collection: 'system_config' // Explicit collection name

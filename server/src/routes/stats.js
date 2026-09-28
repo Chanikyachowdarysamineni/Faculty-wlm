@@ -246,9 +246,10 @@ router.get('/', requireAuth, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
     const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
-    const baseCourseFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
-    const baseSubmissionFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
-    const baseWorkloadFilter = { isDeleted: { $ne: true }, semester: semesterFilter };
+    const academicYear = req.query.academicYear || req.body.academicYear;
+    const baseCourseFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
+    const baseSubmissionFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
+    const baseWorkloadFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
 
     const [
       totalFaculty,
@@ -330,6 +331,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
   try {
     const { year, section } = req.query;
     const semester = req.query.semester || 'ODD';
+    const academicYear = req.query.academicYear;
 
     const matchStage = {
       isDeleted: { $ne: true },
@@ -338,12 +340,13 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
     };
     if (year && year !== 'All') matchStage.year = String(year);
     if (section && section !== 'All') matchStage.section = String(section);
+    if (academicYear) matchStage.academicYear = academicYear;
 
     const FacultyCapacity = require('../models/FacultyCapacity');
 
     const [facultyList, capacityList, workloadAgg] = await Promise.all([
       Faculty.find({ isDeleted: { $ne: true } }).lean(),
-      FacultyCapacity.find({ semester }).lean(),
+      FacultyCapacity.find({ semester, ...(academicYear && { academicYear }) }).lean(),
       Workload.aggregate([
         { $match: matchStage },
         {

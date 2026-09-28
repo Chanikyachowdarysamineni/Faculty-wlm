@@ -123,6 +123,9 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
     }
+    if (req.query.academicYear) {
+      filter.academicYear = req.query.academicYear;
+    }
     
     // CRITICAL: Always use find() — NEVER findOne()
     // This ensures ALL matching records are returned, not just the first one
@@ -185,6 +188,7 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (
     const filter = {};
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
     }
     const docs = await CourseAllocation.find(filter).lean();
 
@@ -250,6 +254,7 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, 
     const filter = {};
     if (req.query.semester) {
       filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
+    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
     }
     const docs = await CourseAllocation.find(filter).sort({ courseId: 1, year: 1, section: 1 }).lean();
 

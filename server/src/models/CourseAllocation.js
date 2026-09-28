@@ -28,6 +28,7 @@ const courseAllocationSchema = new mongoose.Schema(
     course:         { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     sectionRef:     { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
     semester:       { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
+    academicYear:   { type: String, required: true},
     
     // Kept for backward compatibility during migration
     courseId:       { type: Number, required: true },
@@ -59,9 +60,9 @@ const courseAllocationSchema = new mongoose.Schema(
   { timestamps: true, collection: 'allocations' }
 );
 
-courseAllocationSchema.index({ courseId: 1, year: 1, section: 1, semester: 1 }, { unique: true });
-courseAllocationSchema.index({ year: 1, section: 1, semester: 1 });
-courseAllocationSchema.index({ courseId: 1, year: 1, semester: 1 });
+courseAllocationSchema.index({ courseId: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true });
+courseAllocationSchema.index({ year: 1, section: 1, academicYear: 1, semester: 1 });
+courseAllocationSchema.index({ courseId: 1, year: 1, academicYear: 1, semester: 1 });
 courseAllocationSchema.index({ 'lectureSlot.empId': 1 });
 courseAllocationSchema.index({ 'lectureSlots.empId': 1 });
 courseAllocationSchema.index({ 'tutorialSlots.empId': 1 });

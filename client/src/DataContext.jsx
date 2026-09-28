@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
 const DataContext = createContext();
 
@@ -11,15 +11,26 @@ export const DataProvider = ({ children }) => {
   const [designations, setDesignations] = useState([]);
   const [systemConfig, setSystemConfig] = useState(null);
   
+  // Academic Context
+  const [academicYears, setAcademicYears] = useState([]);
+  const [selectedAcademicYear, setSelectedAcademicYearState] = useState(() => {
+    return localStorage.getItem('selectedAcademicYear') || '';
+  });
+
+  const setSelectedAcademicYear = useCallback((year) => {
+    localStorage.setItem('selectedAcademicYear', year);
+    setSelectedAcademicYearState(year);
+  }, []);
+  
   // Semester Context
   const [selectedSemester, setSelectedSemesterState] = useState(() => {
     return localStorage.getItem('selectedSemester') || 'ODD';
   });
 
-  const setSelectedSemester = (semester) => {
+  const setSelectedSemester = useCallback((semester) => {
     localStorage.setItem('selectedSemester', semester);
     setSelectedSemesterState(semester);
-  };
+  }, []);
 
   const value = {
     faculty,
@@ -34,6 +45,10 @@ export const DataProvider = ({ children }) => {
     setDesignations,
     systemConfig,
     setSystemConfig,
+    academicYears,
+    setAcademicYears,
+    selectedAcademicYear,
+    setSelectedAcademicYear,
     selectedSemester,
     setSelectedSemester,
   };
