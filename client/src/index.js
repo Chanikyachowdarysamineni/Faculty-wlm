@@ -1,4 +1,42 @@
 import React from 'react';
+
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+  let [resource, config] = args;
+  
+  if (typeof resource === 'string' && (resource.includes('/api/') || resource.includes('/deva/'))) {
+    const yearId = localStorage.getItem('selectedAcademicYearId');
+    const sem = localStorage.getItem('selectedSemester') || 'ODD';
+    
+    if (yearId && sem) {
+      try {
+        // If resource is relative, base it on window.location.origin for parsing
+        const isRelative = !resource.startsWith('http');
+        const urlObj = isRelative 
+          ? new URL(resource, window.location.origin) 
+          : new URL(resource);
+          
+        if (!urlObj.searchParams.has('academicYearId')) {
+          urlObj.searchParams.append('academicYearId', yearId);
+        }
+        if (!urlObj.searchParams.has('semester')) {
+          urlObj.searchParams.append('semester', sem);
+        }
+        
+        resource = isRelative 
+          ? urlObj.pathname + urlObj.search + urlObj.hash
+          : urlObj.toString();
+      } catch (e) {
+        if (!resource.includes('academicYearId=')) {
+          const sep = resource.includes('?') ? '&' : '?';
+          resource += `${sep}academicYearId=${yearId}&semester=${sem}`;
+        }
+      }
+    }
+  }
+  return originalFetch(resource, config);
+};
+
 import ReactDOM from 'react-dom/client';
 import App from './App';
 

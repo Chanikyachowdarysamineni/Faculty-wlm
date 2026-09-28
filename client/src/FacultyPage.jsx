@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
@@ -9,7 +10,9 @@ import './FacultyPage.css';
 const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };
 
 const FacultyPage = ({ isAdmin = false }) => {
-  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations, selectedSemester } = useSharedData();
+  const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
+
+  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations} = useSharedData();
   
   const [designations, setLocalDesignations] = useState([]);
   // Local state
@@ -45,14 +48,13 @@ const FacultyPage = ({ isAdmin = false }) => {
 
   // Helper: Build auth headers
   const authHeaders = useCallback(() => ({
-    ...authJsonHeaders(),
-  }), []);
+    ...authJsonHeaders()}), []);
 
   // Helper: Refetch fresh faculty data from server
   const refetchFaculty = useCallback(async () => {
     try {
       setSyncing(true);
-      const response = await fetchAllPages('/deva/faculty', { semester: selectedSemester }, { headers: authHeaders() });
+      const response = await fetchAllPages('/deva/faculty', {}, { headers: authHeaders() });
       if (response?.success && Array.isArray(response.data)) {
         const deduplicated = deduplicateList(response.data);
         setList(deduplicated);
@@ -129,8 +131,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       const response = await fetch(`${API}/deva/faculty/bulk-update`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ updates }),
-      });
+        body: JSON.stringify({ updates })});
       if (!response.ok) throw new Error('Bulk update failed');
       showToast('Order saved successfully.');
     } catch {
@@ -385,8 +386,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       email: form.email || '',
       department: form.department || 'CSE',
       capacity: Number(form.capacity) || 18,
-      semester: selectedSemester,
-    };
+      semester: undefined };
     try {
       setSyncing(true);
 
@@ -395,8 +395,7 @@ const FacultyPage = ({ isAdmin = false }) => {
         {
           method: editTarget ? 'PUT' : 'POST',
           headers: authHeaders(),
-          body: JSON.stringify(payload),
-        }
+          body: JSON.stringify(payload)}
       );
       const data = await res.json();
 
@@ -433,8 +432,7 @@ const FacultyPage = ({ isAdmin = false }) => {
 
       const res = await fetch(`${API}/deva/faculty/${encodeURIComponent(deleteConfirm.empId)}`, {
         method: 'DELETE',
-        headers: authHeaders(),
-      });
+        headers: authHeaders()});
       const data = await res.json();
 
       if (!res.ok || !data?.success) {

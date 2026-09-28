@@ -19,6 +19,7 @@ const Setting          = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: add export rate limiter
 const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
@@ -105,7 +106,7 @@ const toClient = (doc) => ({
 // Uses find() (NOT findOne()) to ensure complete data.
 // Supports filtering by courseId, year, and/or section.
 // If no filters provided, returns ALL allocations (paginated).
-router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -120,12 +121,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.section) filter.section = String(req.query.section).trim();
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) {
-      filter.academicYear = req.query.academicYear;
-    }
+    Object.assign(filter, req.getPeriodFilter());
     
     // CRITICAL: Always use find() — NEVER findOne()
     // This ensures ALL matching records are returned, not just the first one
@@ -178,7 +174,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
 
 // GET /api/allocations/workload-sheets  — per-faculty aggregated view
 // M-12 FIX: Apply export rate limiter to bulk data endpoints
-router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (req, res, next) => {
+router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, requireAcademicPeriod, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -186,10 +182,7 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (
     res.set('Expires', '0');
     
     const filter = {};
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    }
+    Object.assign(filter, req.getPeriodFilter());
     const docs = await CourseAllocation.find(filter).lean();
 
     // Build a map: empId → { faculty info, rows[] }
@@ -244,7 +237,7 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, async (
 
 // GET /api/allocations/export/csv
 // M-12 FIX: Apply export rate limiter
-router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, res, next) => {
+router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, requireAcademicPeriod, async (req, res, next) => {
   try {
     // Disable caching for dynamic data
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -252,10 +245,7 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, 
     res.set('Expires', '0');
     
     const filter = {};
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    }
+    Object.assign(filter, req.getPeriodFilter());
     const docs = await CourseAllocation.find(filter).sort({ courseId: 1, year: 1, section: 1 }).lean();
 
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -291,7 +281,7 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, async (req, 
 // ENHANCED: Implements auto-fill and mirror logic for allocation rules
 // R1 Auto-Fill: When L.R1 is set, automatically populate T.R1 and P.R1
 // R2-R4 Mirror: When T.R2/R3/R4 is set, mirror to P.R2/R3/R4 and vice versa
-router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   const session = await CourseAllocation.startSession();
   session.startTransaction();
   try {
@@ -300,8 +290,15 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
       lectureSlot, lectureSlots, tutorialSlots, practicalSlots, semester
     } = req.body;
 
-    // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech)
     const year = normalizeYear(rawYear);
+
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || semester || 'ODD';
+    const yearName = req.academicPeriod?.academicYear?.name;
+    const semId = req.getSemesterId();
+
+    if (!yearName) {
+      return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+    }
 
     const allSlots = [
       ...(Array.isArray(lectureSlots) ? lectureSlots : []),
@@ -462,7 +459,13 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     const doc = await CourseAllocation.findOneAndUpdate(
-      { courseId: Number(courseId), year, section, semester: targetSemester },
+      { 
+        courseId: Number(courseId), 
+        year, 
+        section, 
+        semester: semType,
+        academicYear: yearName
+      },
       {
         $set: {
           subjectCode:    course.subjectCode,
@@ -473,7 +476,9 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
           fixedT:         course.T,
           fixedP:         course.P,
           C:              course.C,
-          semester:       course.semester || 'ODD',
+          academicYearSemesterId: semId,
+          semester:       semType,
+          academicYear:   yearName,
           lectureSlots:   enrichedLSlots,
           lectureSlot:    enrichedLecture,
           tutorialSlots:  enrichedTutorials,
@@ -495,7 +500,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     ].filter(Boolean));
 
     for (const empId of affectedEmpIds) {
-      await recalculateCapacity(empId, { session, updatedBy: req.user?.id });
+      await recalculateCapacity(empId, { session, updatedBy: req.user?.id, academicYear: doc.academicYear });
     }
 
     await session.commitTransaction();
@@ -531,7 +536,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     ].filter(Boolean));
 
     for (const empId of affectedEmpIds) {
-      await recalculateCapacity(empId, { updatedBy: req.user?.id, semester: doc.semester });
+      await recalculateCapacity(empId, { updatedBy: req.user?.id, semester: doc.semester, academicYear: doc.academicYear });
     }
 
     sendSuccess(res, { message: 'Allocation removed.' }, 200);

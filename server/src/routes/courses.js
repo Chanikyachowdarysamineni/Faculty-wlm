@@ -19,6 +19,7 @@ const CourseAllocation = require('../models/CourseAllocation');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateCourseCreate, validatePagination } = require('../middleware/validators');
@@ -86,7 +87,7 @@ const toClient = (doc) => {
 };
 
 // GET /api/courses
-router.get('/', requireAuth, validatePagination, async (req, res, next) => {
+router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const filter = {};
@@ -97,12 +98,11 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.courseType) filter.courseType = req.query.courseType;
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     if (req.query.year) filter.year = normalizeYear(req.query.year);
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) {
-      filter.academicYear = req.query.academicYear;
-    }
+    // Course model uses string fields (semester, academicYear), not academicYearSemesterId
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester || 'ODD';
+    const yearName = req.academicPeriod?.academicYear?.name || req.query.academicYear || req.body?.academicYear;
+    if (semType) filter.semester = semType;
+    if (yearName) filter.academicYear = yearName;
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
@@ -129,9 +129,14 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 });
 
 // GET /api/courses/deleted  (admin)
-router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/deleted', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const docs = await Course.find({ isDeleted: true }).lean();
+    const semType2 = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester || 'ODD';
+    const yearName2 = req.academicPeriod?.academicYear?.name || req.query.academicYear || req.body?.academicYear;
+    const delFilter = { isDeleted: true };
+    if (semType2) delFilter.semester = semType2;
+    if (yearName2) delFilter.academicYear = yearName2;
+    const docs = await Course.find(delFilter).lean();
     sendSuccess(res, docs.map(toClient), 200);
   } catch (err) { next(err); }
 });

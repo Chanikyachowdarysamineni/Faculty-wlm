@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { exportCoursesList, exportCoursesListExcel } from './utils/frontendExportUtils';
@@ -22,7 +23,9 @@ const emptyCourseForm = {
 
 // ── CoursesPage ────────────────────────────────────────────────
 const CoursesPage = ({ isAdmin = true }) => {
-  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, selectedSemester, selectedAcademicYear } = useSharedData();
+  const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
+
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig} = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEAR_OPTIONS = activeYearsRaw.length > 0 
@@ -60,14 +63,13 @@ const CoursesPage = ({ isAdmin = true }) => {
   const { showToast } = useToast();
 
   const authHeaders = () => ({
-    ...authJsonHeaders(),
-  });
+    ...authJsonHeaders()});
 
   // ── Fetch courses from API ──
   const fetchCourses = useCallback(async () => {
     try {
       setLoadingCourses(true);
-      const data = await fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers: authHeaders() });
+      const data = await fetchAllPages('/deva/courses', {}, { headers: authHeaders() });
       if (data?.success && Array.isArray(data.data)) {
         setCourseList(data.data);
         setContextCourses(data.data);
@@ -80,7 +82,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     } finally {
       setLoadingCourses(false);
     }
-  }, [authHeaders, setContextCourses, showToast, selectedSemester, selectedAcademicYear]);
+  }, [authHeaders, setContextCourses, showToast, selectedAcademicYear]);
 
   // ── Derived lists ──
   const filteredCourses = useMemo(() => {
@@ -135,7 +137,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     const resolvedProgram    = f.program     === '__other__' ? f.programOther.trim()    || 'Other' : f.program;
     const resolvedCourseType = f.courseType  === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
     const resolvedYear       = f.year        === '__other__' ? f.yearOther.trim()       || 'Other' : f.year;
-    const payload = { semester: selectedSemester, academicYear: selectedAcademicYear,
+    const payload = {
       program: resolvedProgram,
       courseType: resolvedCourseType,
       year: resolvedYear,
@@ -148,16 +150,14 @@ const CoursesPage = ({ isAdmin = true }) => {
       C: +f.C,
       allowedSections: f.allowedSectionsText 
         ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean) 
-        : [],
-    };
+        : []};
     try {
       const res = await fetch(
         editCourse ? `${API}/deva/courses/${editCourse.id}` : `${API}/deva/courses`,
         {
           method: editCourse ? 'PUT' : 'POST',
           headers: authHeaders(),
-          body: JSON.stringify(payload),
-        }
+          body: JSON.stringify(payload)}
       );
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -180,10 +180,9 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   const confirmDeleteCourse = async () => {
     try {
-      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
+      const res = await fetch(`${API}/deva/courses/${deleteCourse.id}`, {
         method: 'DELETE',
-        headers: authHeaders(),
-      });
+        headers: authHeaders()});
       const data = await res.json();
       if (!res.ok || !data.success) {
         showToast(data.message || 'Could not delete course.');

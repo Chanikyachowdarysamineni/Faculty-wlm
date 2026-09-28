@@ -4,6 +4,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Section = require('../models/Section');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendCreated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 
@@ -27,7 +28,7 @@ const sectionValidation = [
 ];
 
 // GET /api/sections - List sections
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { page = 1, limit = 1000 } = req.query; // Higher limit for master data
     const skip = (page - 1) * limit;

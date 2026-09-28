@@ -8,6 +8,8 @@
  */
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
+import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import API from './config';
 import './AllocationPage.css';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
@@ -16,8 +18,7 @@ import { useSharedData } from './DataContext';
 import wsClient from './utils/WebSocketClient';
 import {
   DEFAULT_SECTIONS,
-  fetchSectionsConfig,
-} from './utils/sectionsApi';
+  fetchSectionsConfig} from './utils/sectionsApi';
 import { refetchAllocationData, validateAllocation } from './utils/allocationHelpers';
 
 // -- Constants -----------------------------------------------------------------
@@ -46,8 +47,7 @@ const typeRowCount = (course, type) => {
 };
 
 const authHeader = () => ({
-  ...authJsonHeaders(),
-});
+  ...authJsonHeaders()});
 
 // -- CellPicker ----------------------------------------------------------------
 // ENHANCED: UI Constraints for Allocation Rules
@@ -124,8 +124,7 @@ const CellPicker = ({
       const info = facultyStatusMap[f.empId] || {
         capacity: capacity,
         assignedHours: 0,
-        remaining: capacity,
-      };
+        remaining: capacity};
       const hasCapacity = (info.remaining || 0) > 0;
       const isCurrent = f.empId === empId;
       return hasCapacity || isCurrent;
@@ -140,8 +139,7 @@ const CellPicker = ({
     const info = facultyStatusMap[emp.empId] || {
       capacity: capacity,
       assignedHours: 0,
-      remaining: capacity,
-    };
+      remaining: capacity};
     if ((info.assignedHours || 0) > (info.capacity || 0)) return { label: 'Overloaded', tone: 'over' };
     if ((info.remaining || 0) <= 0) return { label: 'Fully Loaded', tone: 'full' };
     return { label: 'Available', tone: 'available' };
@@ -221,7 +219,9 @@ const CellPicker = ({
 
 // -- AllocationPage -------------------------------------------------------------
 const AllocationPage = ({ isAdmin = true }) => {
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester } = useSharedData();
+  const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
+
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
   const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'M.Tech') : ['I', 'II', 'III', 'IV'];
@@ -269,7 +269,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchWorkloads = useCallback(async () => {
     setWorkloadsLoading(true);
     try {
-      const result = await fetchAllPages('/deva/workloads', { year: yearKey, semester: selectedSemester }, { headers: authHeader() });
+      const result = await fetchAllPages('/deva/workloads', { year: yearKey }, { headers: authHeader() });
       if (!result.success) {
         setWorkloads([]);
         console.error('Failed to fetch workloads:', result.message);
@@ -306,7 +306,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       setMainFacultyMap({});
       return { success: false, message: 'Failed to load main faculty map.' };
     }
-  }, [yearKey]);
+  }, [yearKey, selectedSemester]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -356,8 +356,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       summary[f.empId] = {
         capacity: capacity,
         assignedHours: 0,
-        remaining: capacity,
-      };
+        remaining: capacity};
     });
 
     yearCourses.forEach((course) => {
@@ -401,7 +400,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchAllocations = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
     try {
-      const data = await fetchAllPages('/deva/allocations', { year: yearKey, semester: selectedSemester }, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/allocations', { year: yearKey }, { headers: authHeader() });
       if (!data.success) {
         return { success: false, message: data.message || 'Could not load allocations.' };
       }
@@ -668,9 +667,7 @@ const AllocationPage = ({ isAdmin = true }) => {
           lectureSlots,
           lectureSlot: lectureSlots[0] || { empId: '', empName: '', designation: '', hours: 0 },
           tutorialSlots,
-          practicalSlots,
-        }),
-      });
+          practicalSlots})});
       const data = await res.json();
       if (!res.ok || !data?.success) {
         return { success: false, message: data?.message || 'Could not persist allocation.' };
@@ -819,9 +816,7 @@ const AllocationPage = ({ isAdmin = true }) => {
             lectureSlots,
             lectureSlot:    lectureSlots[0] || { empId: '', empName: '', designation: '', hours: 0 },
             tutorialSlots,
-            practicalSlots,
-          }),
-        });
+            practicalSlots})});
         const data = await res.json();
         if (!res.ok || !data?.success) {
           errors.push(data?.message || 'Unknown error');
@@ -871,8 +866,7 @@ const AllocationPage = ({ isAdmin = true }) => {
               fixedHours: course[type] || 0,
               empId,
               facultyName: fac?.name || empId,
-              designation: fac?.designation || '',
-            });
+              designation: fac?.designation || ''});
           }
         });
       });
@@ -885,10 +879,8 @@ const AllocationPage = ({ isAdmin = true }) => {
       byType: {
         lecture: rows.filter(r => r.type === 'L').length,
         tutorial: rows.filter(r => r.type === 'T').length,
-        practical: rows.filter(r => r.type === 'P').length,
-      },
-      sampleRows: rows.slice(0, 5),
-    });
+        practical: rows.filter(r => r.type === 'P').length},
+      sampleRows: rows.slice(0, 5)});
     
     return rows;
   }, [yearCourses, sections, allocMap, yearKey, facultyList]);
@@ -919,8 +911,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       title: `Allocation Export (${activeProgram} ${yearKey})`,
       columns: allocationExportColumns,
       rows: allocationExportRows,
-      sheetName: 'Allocations',
-    };
+      sheetName: 'Allocations'};
     if (format === 'csv') return exportAsCSV(payload);
     if (format === 'excel') return exportAsExcel(payload);
     exportAsPDF(payload);

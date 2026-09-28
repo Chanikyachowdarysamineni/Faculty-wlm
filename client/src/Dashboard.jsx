@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
+import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import FacultyPage          from './FacultyPage';
 import CoursesPage from './CoursesPage';
 import SectionManagementPage from './SectionManagementPage';
@@ -213,30 +215,10 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
 
   const { 
     setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig,
-    selectedSemester, setSelectedSemester, academicYears, setAcademicYears, selectedAcademicYear, setSelectedAcademicYear
-
+    setAcademicYears
   } = useSharedData();
 
-  useEffect(() => {
-    const fetchAY = async () => {
-      try {
-        const headers = { Authorization: `Bearer ${token()}` };
-        const res = await fetch(`${API}/deva/academic-years`, { headers });
-        const json = await res.json();
-        if (json.success) {
-          setAcademicYears(json.data);
-          const currentYear = json.data.find(y => y.isCurrent);
-          // Auto select current year if not set or invalid
-          if (currentYear && (!localStorage.getItem('selectedAcademicYear') || !json.data.find(y => y.name === selectedAcademicYear))) {
-            setSelectedAcademicYear(currentYear.name);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch academic years', err);
-      }
-    };
-    fetchAY();
-  }, [setAcademicYears, setSelectedAcademicYear, selectedAcademicYear]);
+  const { selectedSemester, selectedAcademicYear, selectedAcademicYearId, academicYears, changeAcademicPeriod } = useAcademicPeriod();
 
   const [dashboardData, setDashboardData] = useState({
     loading: false,
@@ -958,6 +940,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
         <div className="rp-blob rp-blob-3" />
 
         <div className="rp-container">
+      <GlobalPeriodSelector />
           {/* Brand header */}
           <div className="rp-brand">
             <img src={`${publicUrl}/logo.webp`} alt="Logo" className="rp-brand-logo" />
@@ -1078,31 +1061,30 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           
           <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
             <select 
-              value={selectedAcademicYear} 
-              onChange={(e) => setSelectedAcademicYear(e.target.value)}
+              value={selectedAcademicYearId} 
+              onChange={(e) => changeAcademicPeriod(e.target.value, selectedSemester)}
               style={{ background: 'transparent', color: '#fff', border: 'none', outline: 'none', cursor: 'pointer', padding: '6px 10px', fontSize: '14px', fontWeight: '500' }}
             >
               {academicYears.length > 0 ? academicYears.map(y => (
-                <option key={y._id} value={y.name} style={{ color: '#000' }}>{y.name}</option>
+                <option key={y.id || y._id} value={y.id || y._id} style={{ color: '#000' }}>{y.name}</option>
               )) : <option value="" style={{ color: '#000' }}>Loading...</option>}
             </select>
           </div>
 
           <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
-            <button 
-              className={`dash-switch-btn ${selectedSemester === 'ODD' ? 'active' : ''}`}
-              style={{ background: selectedSemester === 'ODD' ? '#fff' : 'transparent', color: selectedSemester === 'ODD' ? '#0f172a' : '#fff', border: 'none', margin: 0 }}
-              onClick={() => setSelectedSemester('ODD')}
-            >
-              Odd Sem
-            </button>
-            <button 
-              className={`dash-switch-btn ${selectedSemester === 'EVEN' ? 'active' : ''}`}
-              style={{ background: selectedSemester === 'EVEN' ? '#fff' : 'transparent', color: selectedSemester === 'EVEN' ? '#0f172a' : '#fff', border: 'none', margin: 0 }}
-              onClick={() => setSelectedSemester('EVEN')}
-            >
-              Even Sem
-            </button>
+            {(academicYears.find(y => String(y.id || y._id) === String(selectedAcademicYearId))?.semesters || ['ODD','EVEN']).map(sem => {
+              const semType = typeof sem === 'string' ? sem : sem.semesterType;
+              return (
+                <button
+                  key={semType}
+                  className={`dash-switch-btn ${selectedSemester === semType ? 'active' : ''}`}
+                  style={{ background: selectedSemester === semType ? '#fff' : 'transparent', color: selectedSemester === semType ? '#0f172a' : '#fff', border: 'none', margin: 0 }}
+                  onClick={() => changeAcademicPeriod(selectedAcademicYearId, semType)}
+                >
+                  {semType === 'ODD' ? 'Odd Sem' : 'Even Sem'}
+                </button>
+              );
+            })}
           </div>
 
           {user.canAccessAdmin && (

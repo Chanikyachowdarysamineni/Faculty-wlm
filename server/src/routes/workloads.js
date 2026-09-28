@@ -24,6 +24,7 @@ const Setting   = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, validatePagination } = require('../middleware/validators');
@@ -334,7 +335,7 @@ const clearTAFromAllocation = async ({ courseId, year, section, allocationRow },
 
 // GET /api/workloads
 // List workloads with filtering. Properly returns ALL records matching the filter (uses find(), NOT findOne())
-router.get('/', requireAuth, validatePagination, async (req, res, next) => {
+router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -352,10 +353,7 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.section) filter.section = String(req.query.section).trim();
     if (req.query.courseId) filter.courseId = Number(req.query.courseId);
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+    Object.assign(filter, req.getPeriodFilter());
     // Faculty users can only see workloads where isVisible === true
     if (isFacultyOnly) {
       filter.isVisible = true;
@@ -398,17 +396,14 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
 });
 
 // GET /api/workloads/export/csv  (admin)
-router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/export/csv', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     // L-8/M-4: Exclude soft-deleted and cancelled/unallocated workloads from CSV export
     const filter = {
       isDeleted: { $ne: true },
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
     };
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+    Object.assign(filter, req.getPeriodFilter());
     const docs = await Workload.find(filter).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
@@ -433,7 +428,7 @@ router.get('/export/csv', requireAuth, requireAdmin, async (req, res, next) => {
 
 // GET /api/workloads/section-workloads?year=X&section=Y
 // Fetch all workloads for a specific section
-router.get('/section-workloads', requireAuth, async (req, res, next) => {
+router.get('/section-workloads', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -456,10 +451,7 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
       isDeleted: { $ne: true },
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
     };
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+    Object.assign(filter, req.getPeriodFilter());
 
     // M-11 FIX: Restrict non-admin faculty to only view their own workloads
     const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
@@ -482,7 +474,7 @@ router.get('/section-workloads', requireAuth, async (req, res, next) => {
 
 // GET /api/workloads/main-faculty?year=III
 // Returns mapping: { '<courseId>__<section>': { empId, empName, designation, courseId, section, year, manualL, manualT, manualP, fixedL, fixedT, fixedP, C, subjectCode, subjectName } }
-router.get('/main-faculty', requireAuth, async (req, res, next) => {
+router.get('/main-faculty', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     // Disable caching to prevent 304 Not Modified responses
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -503,10 +495,7 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
       empId: { $ne: '' },
       isDeleted: { $ne: true }
     };
-    if (req.query.semester) {
-      filter.semester = req.query.semester === 'ODD' ? { $in: ['ODD', null] } : req.query.semester;
-    }
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+    Object.assign(filter, req.getPeriodFilter());
 
     const docs = await Workload.find(filter).sort({ createdAt: -1 }).lean();
 
@@ -564,7 +553,7 @@ router.get('/main-faculty', requireAuth, async (req, res, next) => {
 // GET /api/workloads/faculty-hours/:empId (admin/faculty)
 // Get faculty workload summary with remaining hours capacity
 // MUST BE BEFORE /:id route to match correctly
-router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
+router.get('/faculty-hours/:empId', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
@@ -596,7 +585,7 @@ router.get('/faculty-hours/:empId', requireAuth, async (req, res, next) => {
 
 // GET /api/workloads/workload-report (admin only)
 // Get workload report for all faculty, optionally filtered by year
-router.get('/workload-report', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/workload-report', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
@@ -735,7 +724,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
     await session.commitTransaction();
 
     // S-6 FIX: Recalculate capacity after period change
-    await recalculateCapacity(workload.empId, { updatedBy: req.user.empId });
+    await recalculateCapacity(workload.empId, { updatedBy: req.user.empId, academicYear: workload.academicYear });
 
     sendSuccess(res, {
       ...toClient(result),
@@ -761,7 +750,7 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
  * Update capacity hours for all workloads of a specific faculty
  * MUST BE BEFORE /:id route to match correctly
  */
-router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, res, next) => {
+router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { empId } = req.params;
     const { capacity } = req.body;
@@ -778,12 +767,17 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
       return sendError(res, 'capacity must be a positive number.', 400);
     }
 
-    const semester = req.query.semester || 'ODD';
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || 'ODD';
+    const yearName = req.academicPeriod?.academicYear?.name;
+
+    if (!yearName) {
+      return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+    }
 
     const FacultyCapacity = require('../models/FacultyCapacity');
     // Update the FacultyCapacity collection for the selected semester
     const capRecord = await FacultyCapacity.findOneAndUpdate(
-      { empId, semester },
+      { empId, semester: semType, academicYear: yearName },
       { $set: { capacity: newCapacity } },
       { new: true, upsert: true }
     );
@@ -798,7 +792,7 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, async (req, 
 
     // Recalculate capacity to update remaining/percentage
     const { recalculateCapacity } = require('../utils/capacityUtils');
-    await recalculateCapacity(empId, { semester, updatedBy: req.user.id });
+    await recalculateCapacity(empId, { semester: semType, updatedBy: req.user.id, academicYear: yearName });
 
     logger.info('Faculty capacity updated', {
       empId,
@@ -832,7 +826,7 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
     }
 
     const boolIsVisible = Boolean(isVisible);
-    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const semesterFilter = semester;
     const academicYear = req.query.academicYear || req.body.academicYear;
 
     // Update workloads for the given semester
@@ -877,7 +871,7 @@ router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req
     }
 
     const boolIsVisible = Boolean(isVisible);
-    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+    const semesterFilter = semester;
     const academicYear = req.query.academicYear || req.body.academicYear;
 
     // Update workloads for this faculty and semester
@@ -980,10 +974,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 });
 
 // POST /api/workloads  (admin)
-router.post(
-  '/',
-  requireAuth, requireAdmin,
-  validateWorkloadCreate,
+router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkloadCreate,
   async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -1052,6 +1043,14 @@ router.post(
       }
 
       // Backend validation for required fields (no nulls or missing)
+      const yearName = req.academicPeriod?.academicYear?.name;
+      const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester || (course ? course.semester : 'ODD');
+      const semId = req.getSemesterId();
+      
+      if (!yearName) {
+        return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+      }
+
       const requiredFields = [
         effectiveMember.empId, effectiveMember.name, effectiveMember.designation,
         effectiveCourse.courseType, effectiveCourse.subjectCode, effectiveCourse.subjectName, effectiveCourse.shortName, effectiveCourse.program,
@@ -1183,7 +1182,9 @@ router.post(
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
-        semester: course ? course.semester : 'ODD',
+        academicYear: yearName,
+        academicYearSemesterId: semId,
+        semester: semType,
       }], { session });
       const doc = createdDocs[0];
 
@@ -1215,7 +1216,7 @@ router.post(
       
       await session.commitTransaction();
       // H-6: recalculateCapacity runs AFTER commit so it starts a fresh operation
-      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
+      await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester, academicYear: doc.academicYear });
       wsHandler.broadcast({ type: 'workload_updated' });
       sendCreated(res, toClient(doc));
     } catch (err) {
@@ -1553,9 +1554,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
 
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit so it starts fresh (outside transaction)
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester, academicYear: doc.academicYear });
     if (current.empId !== doc.empId) {
-      await recalculateCapacity(current.empId, { updatedBy: req.user.empId, semester: doc.semester });
+      await recalculateCapacity(current.empId, { updatedBy: req.user.empId, semester: doc.semester, academicYear: doc.academicYear });
     }
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, toClient(doc), 200);
@@ -1637,7 +1638,7 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
 
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit (outside transaction scope)
-    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester });
+    await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester, academicYear: doc.academicYear });
     wsHandler.broadcast({ type: 'workload_updated' });
     sendSuccess(res, { message: 'Workload entry deleted.' }, 200);
   } catch (err) {

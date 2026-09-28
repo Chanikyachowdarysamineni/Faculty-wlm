@@ -39,10 +39,14 @@ const recalculateCapacity = async (empId, options = {}) => {
   for (const currentSemester of semestersToProcess) {
 
 
+    // Ensure we have academicYear
+    const currentAcademicYear = options.academicYear || '2026-2027';
+
     // C-4: Aggregate total allocated hours — exclude cancelled/unallocated/deleted workloads
     const workloads = await Workload.find({
       empId,
       semester: currentSemester,
+      academicYear: currentAcademicYear,
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
       isDeleted: { $ne: true },
     }).session(session).lean();
@@ -59,11 +63,12 @@ const recalculateCapacity = async (empId, options = {}) => {
     allocated = lectureHours + tutorialHours + practicalHours;
 
     // Get or create FacultyCapacity record
-    let capRecord = await FacultyCapacity.findOne({ empId, semester: currentSemester }).session(session);
+    let capRecord = await FacultyCapacity.findOne({ empId, semester: currentSemester, academicYear: currentAcademicYear }).session(session);
     if (!capRecord) {
       capRecord = new FacultyCapacity({
         empId,
         semester: currentSemester,
+        academicYear: currentAcademicYear,
         capacity: (faculty.capacity !== undefined && faculty.capacity !== null) ? Number(faculty.capacity) : 18,
       });
     }

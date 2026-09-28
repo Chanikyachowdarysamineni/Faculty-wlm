@@ -14,6 +14,10 @@ const submissionSchema = new mongoose.Schema(
     prefs:       [{ type: Number }],   // ordered array of courseIds (up to 5)
     semester:    { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
     academicYear:{ type: String, required: true},
+
+    // Phase 1 Expansion Fields
+    academicYearSemesterId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYearSemester', default: null },
+    academicYearFacultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYearFaculty', default: null },
   },
   { timestamps: true, collection: 'submissions' }
 );

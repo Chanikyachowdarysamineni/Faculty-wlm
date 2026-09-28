@@ -15,6 +15,11 @@ const workloadSchema = new mongoose.Schema(
     sectionRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
     semester:   { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
 
+    // Phase 1 Expansion Fields (Nullable for migration)
+    academicYearSemesterId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYearSemester', default: null },
+    academicYearFacultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYearFaculty', default: null },
+    courseOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'CourseOffering', default: null },
+
     // ── Denormalized fields (kept in sync by route handlers) ─────────────
     empId:       { type: String, default: '', trim: true },
     empName:     { type: String, default: '' },

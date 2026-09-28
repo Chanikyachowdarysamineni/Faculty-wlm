@@ -29,6 +29,10 @@ const courseAllocationSchema = new mongoose.Schema(
     sectionRef:     { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
     semester:       { type: String, enum: ['ODD', 'EVEN'], default: 'ODD' },
     academicYear:   { type: String, required: true},
+
+    // Phase 1 Expansion Fields
+    academicYearSemesterId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYearSemester', default: null },
+    courseOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'CourseOffering', default: null },
     
     // Kept for backward compatibility during migration
     courseId:       { type: Number, required: true },

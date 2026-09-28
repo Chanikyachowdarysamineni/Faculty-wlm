@@ -15,6 +15,7 @@ const CourseAllocation = require('../models/CourseAllocation');
 const Setting     = require('../models/Setting');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { getFacultyWorkloadSummary, getFacultyWorkloadReport } = require('../utils/workloadHours');
 
 const router = express.Router();
@@ -242,14 +243,11 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
   }
 });
 
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
-    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
-    const academicYear = req.query.academicYear || req.body.academicYear;
-    const baseCourseFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
-    const baseSubmissionFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
-    const baseWorkloadFilter = { isDeleted: { $ne: true }, semester: semesterFilter, ...(academicYear && { academicYear }) };
+    const baseCourseFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
+    const baseSubmissionFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
+    const baseWorkloadFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
 
     const [
       totalFaculty,
@@ -327,26 +325,27 @@ router.get('/', requireAuth, async (req, res, next) => {
  * Computes workload analytics across all faculty matching year and section filters
  * Admin only
  */
-router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { year, section } = req.query;
-    const semester = req.query.semester || 'ODD';
-    const academicYear = req.query.academicYear;
 
+    // Build match stage — scope by semester if resolved, else return all for the year
+    const semesterId = req.getSemesterId();
     const matchStage = {
       isDeleted: { $ne: true },
       allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
-      semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester,
+      ...req.getPeriodFilter()
     };
+
     if (year && year !== 'All') matchStage.year = String(year);
     if (section && section !== 'All') matchStage.section = String(section);
-    if (academicYear) matchStage.academicYear = academicYear;
 
     const FacultyCapacity = require('../models/FacultyCapacity');
+    const capacityFilter = semesterId ? req.getPeriodFilter() : {};
 
     const [facultyList, capacityList, workloadAgg] = await Promise.all([
       Faculty.find({ isDeleted: { $ne: true } }).lean(),
-      FacultyCapacity.find({ semester, ...(academicYear && { academicYear }) }).lean(),
+      FacultyCapacity.find(capacityFilter).lean(),
       Workload.aggregate([
         { $match: matchStage },
         {
@@ -436,7 +435,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, async (req, res, n
  * Retrieve list of all overloaded faculty with detailed breakdown and assignments
  * Admin only
  */
-router.get('/overloaded-faculty', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/overloaded-faculty', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
     const report = await getFacultyWorkloadReport(null, semester);
@@ -483,7 +482,7 @@ router.get('/overloaded-faculty', requireAuth, requireAdmin, async (req, res, ne
  * Retrieve detailed workload summary for a specific faculty member
  * Admin only
  */
-router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, async (req, res, next) => {
+router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { empId } = req.params;
     const semester = req.query.semester || 'ODD';

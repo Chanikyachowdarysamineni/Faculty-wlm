@@ -6,6 +6,7 @@ import ToastProvider from './Toast';
 import LoadingProvider from './LoadingIndicator';
 import { DataProvider } from './DataContext';
 import { AuthProvider } from './AuthContext';
+import { AcademicPeriodProvider } from './AcademicPeriodContext';
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import { publicRoutes, protectedRoutes } from './routes';
@@ -287,19 +288,21 @@ function App() {
             remainingSeconds={remainingSeconds}
             resetSessionTimeout={resetSessionTimeout}
           >
-            <ToastProvider>
-              <LoadingProvider>
-                <AppContent 
-                  currentUser={currentUser}
-                  onLogout={handleLogout}
-                  onLogin={handleLogin}
-                  remainingSeconds={remainingSeconds}
-                  resetSessionTimeout={resetSessionTimeout}
-                  showTimeoutWarning={showTimeoutWarning}
-                  setShowTimeoutWarning={setShowTimeoutWarning}
-                />
-              </LoadingProvider>
-            </ToastProvider>
+            <AcademicPeriodProvider currentUser={currentUser}>
+              <ToastProvider>
+                <LoadingProvider>
+                  <AppContent 
+                    currentUser={currentUser}
+                    onLogout={handleLogout}
+                    onLogin={handleLogin}
+                    remainingSeconds={remainingSeconds}
+                    resetSessionTimeout={resetSessionTimeout}
+                    showTimeoutWarning={showTimeoutWarning}
+                    setShowTimeoutWarning={setShowTimeoutWarning}
+                  />
+                </LoadingProvider>
+              </ToastProvider>
+            </AcademicPeriodProvider>
           </AuthProvider>
         </DataProvider>
       </ErrorBoundary>

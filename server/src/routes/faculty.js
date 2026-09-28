@@ -22,6 +22,7 @@ const User = require('../models/User');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = require('../middleware/validators');
@@ -74,7 +75,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
               $expr: { $eq: ['$$empId', '$empId'] },
               isDeleted: { $ne: true },
               allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
-              semester: semester === 'ODD' ? { $in: ['ODD', null] } : semester,
+              semester: semester,
               ...(academicYear ? { academicYear } : {})
             }
           }
@@ -174,7 +175,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
 };
 
 // GET /api/faculty
-router.get('/', requireAuth, validatePagination, async (req, res, next) => {
+router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const filter = {};
@@ -189,10 +190,10 @@ router.get('/', requireAuth, validatePagination, async (req, res, next) => {
     }
     // H-3: Exclude soft-deleted faculty from count (pipeline already excludes them)
     const countFilter = { isDeleted: { $ne: true }, ...filter };
-    const semester = req.query.semester || 'ODD';
     const [total, docs] = await Promise.all([
       Faculty.countDocuments(countFilter),
-      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, semester, req.query.academicYear))
+      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester, req.academicPeriod?.academicYear?.name || req.query.academicYear))
+    
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
     sendPaginated(res, docs.map(toClient), { total, page, limit }, 200);
@@ -211,10 +212,10 @@ router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
 });
 
 // GET /api/faculty/:empId
-router.get('/:empId', requireAuth, async (req, res, next) => {
+router.get('/:empId', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     const semester = req.query.semester || 'ODD';
-    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.query.academicYear);
+    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.academicPeriod?.academicYear?.name || req.query.academicYear);
     const docs = await Faculty.aggregate(pipeline);
     const doc = docs[0];
     if (!doc) {

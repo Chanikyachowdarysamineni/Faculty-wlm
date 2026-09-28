@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
+import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import './WorkloadPage.css';
 import API from './config';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
@@ -9,13 +11,11 @@ import {
   fetchSectionsConfig,
   addSectionConfig,
   renameSectionConfig,
-  deleteSectionConfig,
-} from './utils/sectionsApi';
+  deleteSectionConfig} from './utils/sectionsApi';
 import {
   fetchFacultyPreferences,
   filterCoursesByPreference,
-  hasFacultySubmittedPreferences,
-} from './utils/facultyPreferencesApi';
+  hasFacultySubmittedPreferences} from './utils/facultyPreferencesApi';
 
 const AUTO_REFRESH_MS = 60000;
 
@@ -78,15 +78,16 @@ const emptyForm = {
   // 'Other' free-text companions
   yearOther: '', sectionOther: '', courseTypeOther: '',
   empIdOther: '', empNameOther: '', designationOther: '', mobileOther: '', courseOther: '',
-  allowOverload: false,
-};
+  allowOverload: false};
 
 // helper: auth header from localStorage token
 const authHeader = () => authJsonHeaders();
 
 // ─────────────────────────────────────────────────
 const WorkloadPage = ({ submissions }) => {
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig, selectedSemester, selectedAcademicYear } = useSharedData();
+  const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
+
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
@@ -161,7 +162,7 @@ const WorkloadPage = ({ submissions }) => {
     const fetchAllocation = async () => {
       setAllocLoading(true);
       try {
-        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}&semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, { headers: authHeader() });
+        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}`, { headers: authHeader() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setAllocation(data.data[0]);
@@ -175,7 +176,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     };
     fetchAllocation();
-  }, [showForm, form.courseId, form.year, form.section, selectedSemester, selectedAcademicYear]);
+  }, [showForm, form.courseId, form.year, form.section, selectedAcademicYear]);
 
   const loadSectionsConfig = useCallback(async () => {
     try {
@@ -234,7 +235,7 @@ const WorkloadPage = ({ submissions }) => {
     if (withLoader) setLoading(true);
     setFetchError('');
     try {
-      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/workloads', {}, { headers: authHeader() });
       if (data.success) {
         const normalized = (data.data || []).map(w => ({
           ...w,
@@ -257,8 +258,7 @@ const WorkloadPage = ({ submissions }) => {
           manualT: Number(w.manualT || 0),
           manualP: Number(w.manualP || 0),
           capacity: Number(w.capacity),
-          allocationRow: w.allocationRow ?? null,
-        }));
+          allocationRow: w.allocationRow ?? null}));
         setWorkloads(normalized);
 
         // Comprehensive logging for debugging
@@ -267,16 +267,13 @@ const WorkloadPage = ({ submissions }) => {
           breakdown: {
             mainFaculty: normalized.filter(w => w.facultyRole === 'Main Faculty').length,
             supportingFaculty: normalized.filter(w => w.facultyRole === 'Supporting Faculty').length,
-            ta: normalized.filter(w => w.facultyRole === 'TA').length,
-          },
+            ta: normalized.filter(w => w.facultyRole === 'TA').length},
           sectionDistribution: Array.from(
             new Set(normalized.map(w => w.section))
           ).map(sec => ({
             section: sec,
-            count: normalized.filter(w => w.section === sec).length,
-          })),
-          sampleData: normalized.slice(0, 5),
-        });
+            count: normalized.filter(w => w.section === sec).length})),
+          sampleData: normalized.slice(0, 5)});
       } else {
         setWorkloads([]);
         setFetchError(data.message || 'Could not load workload details.');
@@ -291,14 +288,14 @@ const WorkloadPage = ({ submissions }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [selectedSemester, selectedAcademicYear]);
+  }, [selectedAcademicYear, selectedSemester]);
 
-  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedSemester, selectedAcademicYear]);
+  useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedAcademicYear, selectedSemester]);
 
   useEffect(() => {
     const id = setInterval(() => { fetchWorkloads({ withLoader: false }); }, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [fetchWorkloads, selectedSemester, selectedAcademicYear]);
+  }, [fetchWorkloads, selectedAcademicYear, selectedSemester]);
 
   // ── derived from current form ──
   const facMember = useMemo(() => facultyList.find(f => f.empId === form.empId), [form.empId, facultyList]);
@@ -322,8 +319,7 @@ const WorkloadPage = ({ submissions }) => {
           rowLabel: `R${idx + 1}`,
           empId: slot.empId || '',
           empName: slot.empName || '',
-          designation: slot.designation || '',
-        };
+          designation: slot.designation || ''};
       });
     };
 
@@ -355,8 +351,7 @@ const WorkloadPage = ({ submissions }) => {
         empName: '',
         designation: '',
         mobile: '',
-        courseId: '', manualL: '', manualT: '', manualP: '',
-      }));
+        courseId: '', manualL: '', manualT: '', manualP: ''}));
       setErrors({});
       setFacultyWorkloadSummary(null);
       return;
@@ -368,8 +363,7 @@ const WorkloadPage = ({ submissions }) => {
       empName: f ? f.name : '',
       designation: f ? f.designation : '',
       mobile: f ? (f.mobile || '') : '',
-      courseId: '', manualL: '', manualT: '', manualP: '',
-    }));
+      courseId: '', manualL: '', manualT: '', manualP: ''}));
     setErrors({});
 
     // Fetch faculty workload hours summary
@@ -390,7 +384,7 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}`, {
         headers: authHeader()
       });
       const data = await res.json();
@@ -434,8 +428,7 @@ const WorkloadPage = ({ submissions }) => {
       manualP: c ? String(c.P) : '',
       // AUTO-FETCH: Set year from course data and auto-select first section
       year: courseYear,
-      section: autoSection,
-    }));
+      section: autoSection}));
   };
 
   const handleAddSection = async () => {
@@ -546,8 +539,7 @@ const WorkloadPage = ({ submissions }) => {
 
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
-      allowOverload: false,
-    });
+      allowOverload: false});
     setEditTarget(w);
     setErrors({});
     setShowForm(true);
@@ -604,8 +596,7 @@ const WorkloadPage = ({ submissions }) => {
         if (conflict) {
           setErrors((prev) => ({
             ...prev,
-            section: 'Only one Department Elective can be assigned to this section for I/II/III years.',
-          }));
+            section: 'Only one Department Elective can be assigned to this section for I/II/III years.'}));
           showToast('⚠ Only one Department Elective can be assigned to this section for I/II/III years.');
           setSaving(false);
           return;
@@ -623,8 +614,7 @@ const WorkloadPage = ({ submissions }) => {
         if (duplicateTa) {
           setErrors((prev) => ({
             ...prev,
-            facultyRole: 'Only one TA can be assigned for the same subject and section.',
-          }));
+            facultyRole: 'Only one TA can be assigned for the same subject and section.'}));
           showToast('⚠ TA is already assigned for this subject and section. Only one TA is allowed per section.');
           setSaving(false);
           return;
@@ -650,8 +640,7 @@ const WorkloadPage = ({ submissions }) => {
           const errorMsg = `Cannot assign ${hoursToAssign}h. Faculty would exceed capacity by ${exceededBy}h (would be ${newTotal}h/${totalCapacity}h)`;
           setErrors((prev) => ({
             ...prev,
-            manualL: errorMsg,
-          }));
+            manualL: errorMsg}));
           showToast(`⚠ ${errorMsg}`);
           setSaving(false);
           return;
@@ -667,8 +656,7 @@ const WorkloadPage = ({ submissions }) => {
         const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacity}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
         setErrors((prev) => ({
           ...prev,
-          capacity: errorMsg,
-        }));
+          capacity: errorMsg}));
         showToast(`⚠ ${errorMsg}`);
         setSaving(false);
         return;
@@ -677,7 +665,7 @@ const WorkloadPage = ({ submissions }) => {
 
 
       const payload = {
-        semester: selectedSemester, academicYear: selectedAcademicYear,
+
         empId: resolvedEmpId,
         courseId: resolvedCrsId,
         facultyRole: selectedRole,
@@ -690,19 +678,15 @@ const WorkloadPage = ({ submissions }) => {
         ...(form.empId === '__other__' && {
           empNameOverride: form.empNameOther.trim() || 'Other Faculty',
           designationOverride: form.designationOther.trim() || 'Other',
-          mobileOverride: form.mobileOther.trim(),
-        }),
+          mobileOverride: form.mobileOther.trim()}),
         ...(form.courseId === '__other__' && {
           courseNameOverride: form.courseOther.trim() || 'Other Course',
           courseTypeOverride: form.courseType === '__other__'
             ? (form.courseTypeOther.trim() || 'Other')
-            : form.courseType,
-        }),
+            : form.courseType}),
         ...(selectedRole === 'TA' && {
-          allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1,
-        }),
-        allowOverload: form.allowOverload,
-      };
+          allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1}),
+        allowOverload: form.allowOverload};
 
       // Debug logging for payload diagnosis
       console.log('📤 Workload Payload:', {
@@ -713,8 +697,7 @@ const WorkloadPage = ({ submissions }) => {
         facultyRole: payload.facultyRole,
         hours: { L: payload.manualL, T: payload.manualT, P: payload.manualP },
         isUpdate: !!editTarget,
-        timestamp: new Date().toISOString(),
-      });
+        timestamp: new Date().toISOString()});
 
       // Pre-flight validation before sending
       if (!payload.empId || !payload.year || !payload.section) {
@@ -723,8 +706,7 @@ const WorkloadPage = ({ submissions }) => {
           ...prev,
           empId: !payload.empId ? 'Employee ID required' : '',
           year: !payload.year ? 'Year required' : '',
-          section: !payload.section ? 'Section required' : '',
-        }));
+          section: !payload.section ? 'Section required' : ''}));
         showToast('⚠ Missing required fields: ' + (!payload.empId ? 'Employee, ' : '') + (!payload.year ? 'Year, ' : '') + (!payload.section ? 'Section' : ''));
         setSaving(false);
         return;
@@ -735,14 +717,12 @@ const WorkloadPage = ({ submissions }) => {
         res = await fetch(`${API}/deva/workloads/${editTarget.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify(payload),
-        });
+          body: JSON.stringify(payload)});
       } else {
         res = await fetch(`${API}/deva/workloads`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify(payload),
-        });
+          body: JSON.stringify(payload)});
       }
 
       const data = await res.json();
@@ -752,8 +732,7 @@ const WorkloadPage = ({ submissions }) => {
           statusText: res.statusText,
           errors: data?.errors,
           message: data?.message,
-          data: data,
-        });
+          data: data});
 
         // Handle 409 Conflict: Faculty already assigned - offer to edit
         // Only trigger this fallback for NEW assignments (!editTarget). 
@@ -780,9 +759,7 @@ const WorkloadPage = ({ submissions }) => {
               manualT: String(existingWorkload.manualT || ''),
               manualP: String(existingWorkload.manualP || ''),
               facultyRole: existingWorkload.facultyRole,
-              allocationRow: existingWorkload.allocationRow || '',
-
-            });
+              allocationRow: existingWorkload.allocationRow || ''});
             showToast('✓ This workload exists. Opening for editing...');
             setSaving(false);
             return;
@@ -801,9 +778,7 @@ const WorkloadPage = ({ submissions }) => {
         // Reset only course/LTP — keep faculty & capacity for rapid multi-assignment
         setForm(prev => ({
           ...prev,
-          courseId: '', manualL: '', manualT: '', manualP: '',
-
-        }));
+          courseId: '', manualL: '', manualT: '', manualP: ''}));
         setErrors({});
       } else {
         setShowForm(false);
@@ -828,7 +803,7 @@ const WorkloadPage = ({ submissions }) => {
       const res = await fetch(`${API}/deva/workloads/faculty/${editCapacityTarget}/capacity`, {
         method: 'PATCH',
         headers: { ...authJsonHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity: newCapacity, semester: selectedSemester, academicYear: selectedAcademicYear }),
+        body: JSON.stringify({ capacity: newCapacity })
       });
       const data = await res.json();
       if (!data.success) {
@@ -848,9 +823,8 @@ const WorkloadPage = ({ submissions }) => {
   // ── Delete: calls server API ───────────────────────────
   const confirmDelete = async () => {
     try {
-      const res = await fetch(`${API}/deva/workloads/${deleteTarget.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
-        method: 'DELETE', headers: authHeader(),
-      });
+      const res = await fetch(`${API}/deva/workloads/${deleteTarget.id}`, {
+        method: 'DELETE', headers: authHeader()});
       const data = await res.json();
       if (!data.success) { showToast(`⚠ ${data.message}`); return; }
       await fetchWorkloads();
@@ -876,7 +850,7 @@ const WorkloadPage = ({ submissions }) => {
         const res = await fetch(`${API}/deva/workloads/bulk-visibility`, {
           method: 'PATCH',
           headers: { ...authHeader(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester, academicYear: selectedAcademicYear }),
+          body: JSON.stringify({ isVisible: newVisibility })
         });
 
         if (!res.ok) {
@@ -914,7 +888,7 @@ const WorkloadPage = ({ submissions }) => {
       const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}`, {
         method: 'PATCH',
         headers: { ...authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisible: newVisibility, semester: selectedSemester, academicYear: selectedAcademicYear }),
+        body: JSON.stringify({ isVisible: newVisibility })
       });
 
       if (!res.ok) {
@@ -973,8 +947,7 @@ const WorkloadPage = ({ submissions }) => {
       title: `Workload Export (${activeYear})`,
       columns: exportColumns,
       rows: filtered,
-      sheetName: 'Workloads',
-    };
+      sheetName: 'Workloads'};
     if (format === 'csv') return exportAsCSV(payload);
     if (format === 'excel') return exportAsExcel(payload);
     exportAsPDF(payload);
@@ -1011,8 +984,7 @@ const WorkloadPage = ({ submissions }) => {
       prefL, prefT, prefP,
       pendingL: Math.max(0, prefL - assignedL),
       pendingT: Math.max(0, prefT - assignedT),
-      pendingP: Math.max(0, prefP - assignedP),
-    };
+      pendingP: Math.max(0, prefP - assignedP)};
   }, [form.empId, workloads, prefCourses]);
 
   // ── Unique employees in workloads (for quick filter) ──
@@ -1033,8 +1005,7 @@ const WorkloadPage = ({ submissions }) => {
           department: w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
           mobile: fm?.mobile || '',
-          rows: [],
-        };
+          rows: []};
       }
       map[w.empId].rows.push(w);
     });
@@ -1047,8 +1018,7 @@ const WorkloadPage = ({ submissions }) => {
       if (!map[w.empId]) {
         map[w.empId] = {
           designation: w.designation || '',
-          assigned: 0,
-        };
+          assigned: 0};
       }
       map[w.empId].assigned += Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0);
     });
@@ -1063,8 +1033,7 @@ const WorkloadPage = ({ submissions }) => {
         target,
         assigned,
         remaining,
-        status: assigned > target ? 'Overload' : 'Normal',
-      };
+        status: assigned > target ? 'Overload' : 'Normal'};
     });
 
     return map;
@@ -1081,8 +1050,7 @@ const WorkloadPage = ({ submissions }) => {
           department: w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
           mobile: w.mobile || fm?.mobile || '',
-          rows: [],
-        };
+          rows: []};
       }
       map[w.empId].rows.push(w);
     });
@@ -1230,8 +1198,7 @@ const WorkloadPage = ({ submissions }) => {
                       maxHeight: '250px',
                       overflowY: 'auto',
                       zIndex: 1000,
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                    }}>
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}}>
                       {filteredFaculty.length > 0 ? (
                         <>
                           {facultySearchInput && (
@@ -1251,8 +1218,7 @@ const WorkloadPage = ({ submissions }) => {
                                 cursor: 'pointer',
                                 borderBottom: '1px solid #f0f0f0',
                                 background: form.empId === f.empId ? '#e3f2fd' : '#fff',
-                                transition: 'background 0.15s',
-                              }}
+                                transition: 'background 0.15s'}}
                               onMouseEnter={e => e.target.style.background = '#f5f5f5'}
                               onMouseLeave={e => e.target.style.background = form.empId === f.empId ? '#e3f2fd' : '#fff'}
                             >
@@ -1276,8 +1242,7 @@ const WorkloadPage = ({ submissions }) => {
                               borderTop: '1px solid #fcd34d',
                               fontSize: '12px',
                               fontWeight: 600,
-                              color: '#92400e',
-                            }}
+                              color: '#92400e'}}
                             onMouseEnter={e => e.target.style.background = '#fde68a'}
                             onMouseLeave={e => e.target.style.background = '#fef3c7'}
                           >
@@ -2115,8 +2080,7 @@ const WorkloadPage = ({ submissions }) => {
                   borderRadius: '4px',
                   border: '1px solid #ccc',
                   fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
+                  boxSizing: 'border-box'}}
               />
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', padding: '0 16px 16px 16px' }}>

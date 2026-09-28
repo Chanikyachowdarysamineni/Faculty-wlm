@@ -17,7 +17,10 @@ router.get('/', requireAuth, async (req, res, next) => {
     
     const result = years.map(year => ({
       ...year,
-      semesters: semesters.filter(s => s.academicYearId.toString() === year._id.toString())
+      id: year._id,
+      semesters: semesters
+        .filter(s => s.academicYearId.toString() === year._id.toString())
+        .map(s => ({ ...s, id: s._id }))
     }));
     
     sendSuccess(res, result, 200);

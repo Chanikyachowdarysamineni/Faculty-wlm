@@ -26,7 +26,7 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
       isDeleted: { $ne: true },
     };
     if (semester) {
-      query.semester = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+      query.semester = semester;
     }
     const dbQuery = Workload.find(query).lean();
     if (session) dbQuery.session(session);
@@ -194,7 +194,7 @@ const getFacultyWorkloadReport = async (year = null, semester = null) => {
       workloadMatch.year = String(year);
     }
     if (semester) {
-      workloadMatch.semester = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
+      workloadMatch.semester = semester;
     }
 
     let capacityMap = new Map();

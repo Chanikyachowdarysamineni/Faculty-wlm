@@ -7,6 +7,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useAcademicPeriod } from './AcademicPeriodContext';
+import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import PageHeader from './components/PageHeader';
@@ -18,7 +20,7 @@ import './Dashboard.css';
 const AdminDashboard = () => {
   const { currentUser, onLogout } = useAuth();
   const navigate = useNavigate();
-  const { selectedSemester } = useSharedData();
+  const { selectedSemester } = useAcademicPeriod();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -167,8 +169,7 @@ const AdminOverview = ({ user, selectedSemester }) => {
           setStats({
             overloaded: json.data.overloaded || [],
             pending:    json.data.pending    || [],
-            perfect:    json.data.perfect    || [],
-          });
+            perfect:    json.data.perfect    || []});
         }
       } catch (err) {
         console.error('Error fetching dashboard analytics:', err);

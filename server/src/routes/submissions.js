@@ -19,6 +19,7 @@ const Faculty     = require('../models/Faculty');
 const Setting     = require('../models/Setting');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound, sendForbidden } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateSubmissionCreate, validatePagination } = require('../middleware/validators');
@@ -51,16 +52,12 @@ const validatePrefsAgainstCourses = async (prefs = []) => {
 };
 
 // GET /api/submissions  (admin)
-router.get('/', requireAuth, requireAdmin, validatePagination, async (req, res, next) => {
+router.get('/', requireAuth, requireAdmin, requireAcademicPeriod, validatePagination, async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
-    const requestedSemester = req.query.semester || 'ODD';
-    const filter = {};
-    if (requestedSemester === 'ODD') {
-      filter.semester = { $in: ['ODD', null] };
-    } else {
-      filter.semester = requestedSemester;
-    }
+    const filter = {
+      ...req.getPeriodFilter()
+    };
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [{ empId: { $regex: q, $options: 'i' } }, { empName: { $regex: q, $options: 'i' } }];
@@ -83,12 +80,12 @@ router.get('/', requireAuth, requireAdmin, validatePagination, async (req, res, 
 });
 
 // GET /api/submissions/by-faculty/:empId  (self or admin)
-router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, async (req, res, next) => {
+router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
-    const semesterFilter = semester === 'ODD' ? { $in: ['ODD', null] } : semester;
-    const academicYear = req.query.academicYear || req.body.academicYear;
-    const doc = await Submission.findOne({ empId: req.params.empId, semester: semesterFilter }).lean();
+    const doc = await Submission.findOne({ 
+      empId: req.params.empId, 
+      ...req.getPeriodFilter() 
+    }).lean();
     
     if (!doc) {
       // If no submission exists, return an empty submission template
@@ -257,7 +254,7 @@ router.post(
 );
 
 // GET /api/submissions/export  (admin) — export all submissions as CSV or Excel
-router.get('/export', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/export', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const format = String(req.query.format || 'csv').toLowerCase();
     if (!['csv', 'excel'].includes(format)) {
@@ -265,14 +262,13 @@ router.get('/export', requireAuth, requireAdmin, async (req, res, next) => {
       return sendError(res, 'Invalid format. Supported: csv, excel', 400);
     }
 
-    const semester = req.query.semester || 'ODD';
     // Fetch submissions and courses in parallel
     const [docs, courseList] = await Promise.all([
-      Submission.find({ semester })
+      Submission.find({ ...req.getPeriodFilter() })
         .select('empId empName designation mobile prefs createdAt updatedAt')
         .sort({ createdAt: -1 })
         .lean(),
-      Course.find({ semester })
+      Course.find({ ...req.getPeriodFilter() })
         .select('courseId shortName')
         .lean(),
     ]);
