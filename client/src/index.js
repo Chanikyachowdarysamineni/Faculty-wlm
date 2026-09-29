@@ -6,7 +6,7 @@ window.fetch = async (...args) => {
   
   if (typeof resource === 'string' && (resource.includes('/api/') || resource.includes('/deva/'))) {
     const yearId = localStorage.getItem('selectedAcademicYearId');
-    const sem = localStorage.getItem('selectedSemester') || 'ODD';
+    const sem = localStorage.getItem('selectedSemester');
     
     if (yearId && sem) {
       try {

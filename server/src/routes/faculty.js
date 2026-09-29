@@ -14,7 +14,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { mongoose } = require('../db');
-const Faculty  = require('../models/Faculty');
+const Faculty = require('../models/Faculty');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const Submission = require('../models/Submission');
@@ -31,29 +31,56 @@ const { recalculateCapacity } = require('../utils/capacityUtils');
 const router = express.Router();
 
 const toClient = (doc) => ({
-  id:          doc._id?.toString() || '',
-  slNo:        doc.slNo || 0,
-  empId:       String(doc.empId || '').trim(),
-  name:        String(doc.name || '').trim(),
-  email:       String(doc.email || '').trim(),
-  mobile:      String(doc.mobile || '').trim() || 'N/A',
+  id: doc._id?.toString() || '',
+  slNo: doc.slNo || 0,
+  empId: String(doc.empId || '').trim(),
+  name: String(doc.name || '').trim(),
+  email: String(doc.email || '').trim(),
+  mobile: String(doc.mobile || '').trim() || 'N/A',
   designation: String(doc.designation || '').trim() || 'N/A',
-  department:  String(doc.department || '').trim() || 'CSE',
-  capacity:    doc.capacity ?? 18,
+  department: String(doc.department || '').trim() || 'CSE',
+  capacity: doc.capacity ?? 18,
   lectureHours: doc.lectureHours || 0,
   tutorialHours: doc.tutorialHours || 0,
   practicalHours: doc.practicalHours || 0,
-  allocated:   doc.allocated || 0,
-  remaining:   doc.remaining ?? 18,
+  allocated: doc.allocated || 0,
+  remaining: doc.remaining ?? 18,
   workloadPercentage: doc.workloadPercentage || 0,
   status: doc.status || 'Available',
-  createdAt:   doc.createdAt?.toISOString() || null,
-  updatedAt:   doc.updatedAt?.toISOString() || null,
+  createdAt: doc.createdAt?.toISOString() || null,
+  updatedAt: doc.updatedAt?.toISOString() || null,
 });
 
-const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null, semester = 'ODD', academicYear = null) => {
-  // H-3: Always exclude soft-deleted faculty unless the caller explicitly opts in
+const buildFacultyFilter = (matchFilter = {}, periodStart = null, periodEnd = null) => {
   const baseFilter = { isDeleted: { $ne: true }, ...matchFilter };
+
+  if (periodEnd) {
+    baseFilter.$or = [
+      { joiningDate: { $lte: new Date(periodEnd) } },
+      { joiningDate: null },
+      { joiningDate: { $exists: false } }
+    ];
+  }
+
+  if (periodStart) {
+    const startCond = [
+      { relievingDate: { $gte: new Date(periodStart) } },
+      { relievingDate: null },
+      { relievingDate: { $exists: false } }
+    ];
+    if (baseFilter.$or) {
+      baseFilter.$and = [{ $or: baseFilter.$or }, { $or: startCond }];
+      delete baseFilter.$or;
+    } else {
+      baseFilter.$or = startCond;
+    }
+  }
+  return baseFilter;
+};
+
+const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, limit = null, semester = null, academicYear = null, periodStart = null, periodEnd = null) => {
+  const baseFilter = buildFacultyFilter(matchFilter, periodStart, periodEnd);
+
   const pipeline = [
     { $match: baseFilter }
   ];
@@ -75,7 +102,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
               $expr: { $eq: ['$$empId', '$empId'] },
               isDeleted: { $ne: true },
               allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
-              semester: semester,
+              ...(semester ? { semester } : {}),
               ...(academicYear ? { academicYear } : {})
             }
           }
@@ -91,7 +118,7 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
           {
             $match: {
               $expr: { $eq: ['$$empId', '$empId'] },
-              semester: semester,
+              ...(semester ? { semester } : {}),
               ...(academicYear ? { academicYear } : {})
             }
           }
@@ -188,18 +215,21 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
         { department: { $regex: q, $options: 'i' } },
       ];
     }
+    const periodStart = req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.academicYear?.endDate;
+
     // H-3: Exclude soft-deleted faculty from count (pipeline already excludes them)
-    const countFilter = { isDeleted: { $ne: true }, ...filter };
+    const countFilter = buildFacultyFilter(filter, periodStart, periodEnd);
     const [total, docs] = await Promise.all([
       Faculty.countDocuments(countFilter),
-      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester, req.academicPeriod?.academicYear?.name || req.query.academicYear))
-    
+      Faculty.aggregate(buildFacultyPipeline(filter, { slNo: 1 }, skip, limit, req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester, req.academicPeriod?.academicYear?.name || req.query.academicYear, periodStart, periodEnd))
+
     ]);
     logger.info('Faculty listed', { userId: req.user.id, filter, total, page, limit });
     sendPaginated(res, docs.map(toClient), { total, page, limit }, 200);
-  } catch (err) { 
+  } catch (err) {
     logger.error('Error listing faculty', { error: err.message, userId: req.user.id });
-    next(err); 
+    next(err);
   }
 });
 
@@ -214,8 +244,10 @@ router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
 // GET /api/faculty/:empId
 router.get('/:empId', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
-    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.academicPeriod?.academicYear?.name || req.query.academicYear);
+    const semester = req.query.semester;
+    const periodStart = req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.academicYear?.endDate;
+    const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.academicPeriod?.academicYear?.name || req.query.academicYear, periodStart, periodEnd);
     const docs = await Faculty.aggregate(pipeline);
     const doc = docs[0];
     if (!doc) {
@@ -224,9 +256,9 @@ router.get('/:empId', requireAuth, requireAcademicPeriod, async (req, res, next)
     }
     logger.info('Faculty retrieved', { empId: req.params.empId, userId: req.user.id });
     sendSuccess(res, toClient(doc), 200);
-  } catch (err) { 
+  } catch (err) {
     logger.error('Error retrieving faculty', { error: err.message, empId: req.params.empId, userId: req.user.id });
-    next(err); 
+    next(err);
   }
 });
 
@@ -266,7 +298,7 @@ router.post(
       }
 
       const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).session(session).lean();
-      const slNo   = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
+      const slNo = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
 
       const createdDocs = await Faculty.create([{
         slNo,
@@ -296,7 +328,7 @@ router.post(
       // ── Create User account for faculty with mobile as default password ──
       const defaultPassword = mobile.trim() ? mobile.trim() : empId.trim();
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
-      
+
       await User.create([{
         empId: empId.trim(),
         name: name.trim(),
@@ -315,18 +347,18 @@ router.post(
       session.endSession();
 
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
-      
+
       // Initialize semester capacity records
       await recalculateCapacity(doc.empId, { updatedBy: req.user.id });
-      
+
       // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
       // For now, the creation is successful.
       sendCreated(res, toClient(doc));
-    } catch (err) { 
+    } catch (err) {
       await session.abortTransaction();
       session.endSession();
       logger.error('Error creating faculty', { error: err.message, userId: req.user.id });
-      next(err); 
+      next(err);
     }
   }
 );
@@ -340,11 +372,11 @@ router.put(
       if (!Array.isArray(updates) || updates.length === 0) {
         return sendError(res, 'Updates array is required', 400);
       }
-      
+
       const bulkOps = updates.map(update => {
         const updateFields = {};
         if (update.slNo !== undefined) updateFields.slNo = Number(update.slNo);
-        
+
         return {
           updateOne: {
             filter: { empId: String(update.empId).trim() },
@@ -352,7 +384,7 @@ router.put(
           }
         };
       });
-      
+
       await Faculty.bulkWrite(bulkOps);
       sendSuccess(res, { count: bulkOps.length }, 200, { message: 'Bulk update successful' });
     } catch (err) {
@@ -391,14 +423,14 @@ router.put(
       } = req.body;
       const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
       const isSelf = String(req.user.id) === String(empId);
-      
+
       const allowedUpdates = {};
       if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
       // S-8 FIX: designation is admin-only — a non-admin cannot forge their own title
       // and have it propagate to all workload records via Workload.updateMany
       if (mobile !== undefined) allowedUpdates.mobile = String(mobile).trim();
       if (email !== undefined && String(email).trim()) allowedUpdates.email = String(email).trim();
-      
+
       if (isAdmin) {
         if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
         if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
@@ -489,10 +521,11 @@ router.put(
             }
           };
           if (alloc.lectureSlots) alloc.lectureSlots.forEach(updSlot);
+
           if (alloc.lectureSlot) updSlot(alloc.lectureSlot);
           if (alloc.tutorialSlots) alloc.tutorialSlots.forEach(updSlot);
           if (alloc.practicalSlots) alloc.practicalSlots.forEach(updSlot);
-          
+
           alloc.markModified('lectureSlots');
           alloc.markModified('lectureSlot');
           alloc.markModified('tutorialSlots');
@@ -526,23 +559,23 @@ router.put(
 
       await session.commitTransaction();
       session.endSession();
-      
+
       // Update semester capacities
       await recalculateCapacity(allowedUpdates.empId || empId, { updatedBy: req.user.id, semester: semester || null });
 
       // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
-      const refreshSemester = req.query.semester || 'ODD';
-      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester, req.query.academicYear);
+      const refreshSemester = req.query.semester;
+      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester, req.query.academicYear, req.academicPeriod?.academicYearSemester?.startDate, req.academicPeriod?.academicYearSemester?.endDate);
       const freshDocs = await Faculty.aggregate(freshPipeline);
       const freshDoc = freshDocs[0] || doc;
-      
+
       logger.info('Faculty updated successfully', { empId, fields: Object.keys(allowedUpdates), userId: req.user.id, isSelfEdit: isSelf });
       sendSuccess(res, toClient(freshDoc), 200);
-    } catch (err) { 
+    } catch (err) {
       await session.abortTransaction();
       session.endSession();
       logger.error('Error updating faculty', { error: err.message, stack: err.stack, empId: req.params.empId, userId: req.user.id });
-      next(err); 
+      next(err);
     }
   }
 );
@@ -580,7 +613,7 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
 
     const userRes = await User.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
     counters.users = userRes.modifiedCount || 0;
-      
+
     const allocations = await CourseAllocation.find({
       $or: [
         { 'lectureSlot.empId': empId },
@@ -589,7 +622,7 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
         { practicalSlots: { $elemMatch: { empId } } },
       ],
     }).session(session);
-    
+
     for (const alloc of allocations) {
       if (alloc.lectureSlot && alloc.lectureSlot.empId === empId) {
         alloc.lectureSlot = { empId: '', empName: '', designation: '', hours: 0 };
@@ -604,17 +637,17 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
     }
     counters.allocations = allocations.length;
 
-    
+
     await session.commitTransaction();
     session.endSession();
-    
+
     logger.info('Faculty soft deleted with cascade cleanup', { empId, name: doc.name, userId: req.user.id, cleanupStats: counters });
     sendSuccess(res, { message: 'Faculty member deleted successfully.', cleaned: counters }, 200);
-  } catch (err) { 
+  } catch (err) {
     await session.abortTransaction();
     session.endSession();
     logger.error('Error deleting faculty', { error: err.message, empId: req.params.empId, userId: req.user.id });
-    next(err); 
+    next(err);
   }
 });
 
@@ -640,10 +673,10 @@ router.post('/:empId/restore', requireAuth, requireAdmin, async (req, res, next)
     await Submission.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
     await User.updateMany({ empId, isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } }, { session });
 
-    
+
     await session.commitTransaction();
     session.endSession();
-    
+
     logger.info('Faculty restored', { empId, userId: req.user.id });
     sendSuccess(res, toClient(doc), 200, { message: 'Faculty member restored successfully.' });
   } catch (err) {
@@ -689,7 +722,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
 
       const defaultPassword = String(mobile).trim() ? String(mobile).trim() : String(empId).trim();
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
-      
+
       await User.create([{
         empId: String(empId).trim(),
         name: String(name).trim(),
@@ -706,7 +739,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
-    
+
     sendSuccess(res, { created: createdCount }, 201, { message: `Successfully imported ${createdCount} faculty members.` });
   } catch (err) {
     await session.abortTransaction();

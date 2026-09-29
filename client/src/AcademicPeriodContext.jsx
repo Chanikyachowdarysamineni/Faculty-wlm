@@ -9,7 +9,7 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
   const [academicYears, setAcademicYears] = useState([]);
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState('');
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('ODD');
+  const [selectedSemester, setSelectedSemester] = useState('');
   const [academicYearSemesterId, setAcademicYearSemesterId] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +62,11 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
           if (found) currentYear = found;
         }
 
-        const savedSem = localStorage.getItem('selectedSemester') || 'ODD';
+        let savedSem = localStorage.getItem('selectedSemester');
+        const activeSem = (currentYear.semesters || []).find(s => s.isCurrent || s.status === 'ACTIVE') || (currentYear.semesters || [])[0];
+        if (!savedSem || !(currentYear.semesters || []).some(s => s.semesterType === savedSem)) {
+          savedSem = activeSem ? activeSem.semesterType : '';
+        }
         const yearId = String(currentYear.id || currentYear._id);
 
         setSelectedAcademicYearId(yearId);

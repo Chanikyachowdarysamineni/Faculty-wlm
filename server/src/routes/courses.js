@@ -80,7 +80,7 @@ const toClient = (doc) => {
     P: Number(doc.P || 0),
     C: Number(doc.C || 0),
     department: String(doc.department || 'CSE'),
-    semester: String(doc.semester || 'ODD'),
+    semester: String(doc.semester ),
     isDeleted: Boolean(doc.isDeleted),
     createdAt: doc.createdAt?.toISOString() || null,
   };
@@ -99,7 +99,7 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
     // CRITICAL: Normalize year to canonical format (I/II/III/IV or M.Tech) for consistent filtering
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     // Course model uses string fields (semester, academicYear), not academicYearSemesterId
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester || 'ODD';
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester ;
     const yearName = req.academicPeriod?.academicYear?.name || req.query.academicYear || req.body?.academicYear;
     if (semType) filter.semester = semType;
     if (yearName) filter.academicYear = yearName;
@@ -131,7 +131,7 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
 // GET /api/courses/deleted  (admin)
 router.get('/deleted', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semType2 = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester || 'ODD';
+    const semType2 = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || req.body?.semester ;
     const yearName2 = req.academicPeriod?.academicYear?.name || req.query.academicYear || req.body?.academicYear;
     const delFilter = { isDeleted: true };
     if (semType2) delFilter.semester = semType2;

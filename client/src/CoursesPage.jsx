@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAcademicPeriod } from './AcademicPeriodContext';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
-import { exportCoursesList, exportCoursesListExcel } from './utils/frontendExportUtils';
+import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import { useToast } from './Toast';
 import { useSharedData } from './DataContext';
 import './CoursesPage.css';
@@ -236,20 +236,9 @@ const CoursesPage = ({ isAdmin = true }) => {
           </div>
           {isAdmin && (
           <div className="cp-export-buttons">
-            <button 
-              className="cp-btn cp-export-csv"
-              onClick={() => {
-                try {
-                  exportCoursesList(courseList);
-                } catch (err) {
-                  showToast('Failed to export CSV');
-                }
-              }}
-              title="Download full course list as CSV"
-            >
-              📥 Download
-            </button>
-          </div>
+              <button className="cp-btn cp-export-csv" onClick={() => handleExport('csv')} title="Export filtered courses as CSV" style={{marginRight: '5px'}}>CSV</button>
+              <button className="cp-btn cp-export-excel" onClick={() => handleExport('excel')} title="Export filtered courses as Excel">Excel</button>
+            </div>
           )}
         </div>
       </div>

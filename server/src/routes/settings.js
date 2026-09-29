@@ -64,7 +64,7 @@ const saveSectionsConfig = async (sections) => {
 // GET /api/settings/form-status
 router.get('/form-status', requireAuth, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
+    const semester = req.query.semester ;
     let { academicYear } = req.query;
     if (!academicYear) {
       const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
@@ -216,7 +216,7 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req,
 // GET /api/settings/edit-status
 router.get('/edit-status', requireAuth, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
+    const semester = req.query.semester ;
     let { academicYear } = req.query;
     if (!academicYear) {
       const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();

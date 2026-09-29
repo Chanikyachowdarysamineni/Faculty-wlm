@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import * as XLSX from 'xlsx';
 import DesignationManagementModal from './components/DesignationManagementModal';
 
+import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import './FacultyPage.css';
 
 const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };

@@ -9,7 +9,7 @@ const AcademicYear = require('../models/AcademicYear');
 const resolveAcademicContext = async (req, res, next) => {
   try {
     let academicYear = req.query.academicYear || req.body.academicYear;
-    let semester = req.query.semester || req.body.semester || 'ODD';
+    let semester = req.query.semester || req.body.semester ;
 
     if (!academicYear) {
       const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();

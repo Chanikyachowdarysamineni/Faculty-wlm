@@ -302,7 +302,7 @@ const WorkloadPage = ({ submissions }) => {
   const submission = useMemo(() => submissions.find(s => s.empId === form.empId), [submissions, form.empId]);
   const prefCourses = useMemo(() => {
     if (!submission || !submission.prefs?.length) return [];
-    return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid))).filter(Boolean);
+    return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid) || String(c.courseId) === String(cid))).filter(Boolean);
   }, [submission, courseList]);
   const selectedCourse = useMemo(() => courseList.find(c => String(c.id) === String(form.courseId)), [form.courseId, courseList]);
   const sections = sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
@@ -943,8 +943,8 @@ const WorkloadPage = ({ submissions }) => {
       return;
     }
     const payload = {
-      fileName: `workloads_${activeYear === 'All' ? 'all' : activeYear}`,
-      title: `Workload Export (${activeYear})`,
+      fileName: `Workload_${selectedAcademicYear}_${selectedSemester}`,
+      title: `Workload Export (${selectedAcademicYear} - ${selectedSemester})`,
       columns: exportColumns,
       rows: filtered,
       sheetName: 'Workloads'};
@@ -1824,6 +1824,7 @@ const WorkloadPage = ({ submissions }) => {
                 <table className="wl-table">
                   <thead>
                     <tr>
+                      <th>Name of the Faculty</th>
                       <th>#</th>
                       <th>Subject Code</th>
                       <th>Subject Name</th>
@@ -1843,11 +1844,27 @@ const WorkloadPage = ({ submissions }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {fac.rows.map((w, i) => {
+                    {(() => {
+                      let totalFixedL = 0, totalFixedT = 0, totalFixedP = 0, totalC = 0;
+                      let totalManualL = 0, totalManualT = 0, totalManualP = 0, grandTotal = 0;
+                      fac.rows.forEach(w => {
+                        totalFixedL += Number(w.fixedL || 0);
+                        totalFixedT += Number(w.fixedT || 0);
+                        totalFixedP += Number(w.fixedP || 0);
+                        totalC += Number(w.C || 0);
+                        totalManualL += Number(w.manualL || 0);
+                        totalManualT += Number(w.manualT || 0);
+                        totalManualP += Number(w.manualP || 0);
+                        grandTotal += (Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0));
+                      });
+                      return (
+                        <>
+                          {fac.rows.map((w, i) => {
                       const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
                       const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
                       return (
                         <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
+                          <td style={{ fontWeight: 500 }}>{fac.empName}</td>
                           <td className="wl-td-sl">{i + 1}</td>
                           <td className="wl-td-code">{w.subjectCode}</td>
                           <td className="wl-td-sname">{w.subjectName}</td>
@@ -1873,7 +1890,22 @@ const WorkloadPage = ({ submissions }) => {
                           </td>
                         </tr>
                       );
-                    })}
+                          })}
+                          <tr className="wl-tr-total" style={{ fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>
+                            <td colSpan="7" style={{ textAlign: 'right', paddingRight: '12px' }}>Total:</td>
+                            <td className="wl-td-num">{totalFixedL}</td>
+                            <td className="wl-td-num">{totalFixedT}</td>
+                            <td className="wl-td-num">{totalFixedP}</td>
+                            <td></td>
+                            <td className="wl-td-num">{totalManualL}</td>
+                            <td className="wl-td-num">{totalManualT}</td>
+                            <td className="wl-td-num">{totalManualP}</td>
+                            <td className="wl-td-num">{grandTotal}</td>
+                            <td colSpan="2"></td>
+                          </tr>
+                        </>
+                      );
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1981,6 +2013,7 @@ const WorkloadPage = ({ submissions }) => {
                   <table className="wlf-table">
                     <thead>
                       <tr>
+                        <th style={{ width: '15%' }}>Name of the Faculty</th>
                         <th style={{ width: '3%' }}>#</th>
                         <th style={{ width: '11%' }}>Subject Code</th>
                         <th style={{ width: '25%', textAlign: 'left' }}>Subject Name</th>
@@ -1998,6 +2031,7 @@ const WorkloadPage = ({ submissions }) => {
                     <tbody>
                       {fac.rows.map((r, idx) => (
                         <tr key={r.id}>
+                          <td style={{ fontWeight: 500 }}>{fac.empName}</td>
                           <td>{idx + 1}</td>
                           <td>{r.subjectCode}</td>
                           <td className="wlf-td-left">{r.subjectName}</td>
@@ -2013,7 +2047,7 @@ const WorkloadPage = ({ submissions }) => {
                         </tr>
                       ))}
                       <tr className="wlf-total-row">
-                        <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
+                        <td colSpan={7} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
                         <td>{totalL}</td>
                         <td>{totalT}</td>
                         <td>{totalP}</td>

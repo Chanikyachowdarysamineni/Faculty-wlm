@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import './FacultyFormPage.css';
 
 const FacultyFormPage = ({
@@ -129,7 +130,19 @@ const FacultyFormPage = ({
   };
 
   // ── Start editing an existing submission ───────────
-  const startEditing = (sub) => {
+  
+  const startNewSubmission = (empId) => {
+    setEmpIdInput(empId);
+    setPrefs(['', '', '', '', '']);
+    setEditMode(false);
+    setEditTargetId(null);
+    setErrors({});
+    setSubmitted(false);
+    setActiveTab('form');
+  };
+
+    const startEditing = (sub) => {
+    setEmpIdInput(sub.empId);
     const filled = [...sub.prefs.map(String)];
     while (filled.length < 5) filled.push('');
     setPrefs(filled);
@@ -137,10 +150,10 @@ const FacultyFormPage = ({
     setEditTargetId(sub.id);
     setErrors({});
     setSubmitted(false);
-
+    setActiveTab('form');
   };
 
-  const cancelEdit = () => {
+const cancelEdit = () => {
     setEditMode(false);
     setEditTargetId(null);
     setPrefs(['', '', '', '', '']);
@@ -679,7 +692,7 @@ const FacultyFormPage = ({
               <button
                 className="ff-export-btn ff-export-csv"
                 onClick={() => handleExport('csv')}
-                disabled={exportLoading || submissions.length === 0}
+                disabled={filteredSubs.length === 0}
                 title="Export submissions as CSV"
               >
                 {exportLoading ? '⏳' : '📊'} CSV
@@ -687,7 +700,7 @@ const FacultyFormPage = ({
               <button
                 className="ff-export-btn ff-export-excel"
                 onClick={() => handleExport('excel')}
-                disabled={exportLoading || submissions.length === 0}
+                disabled={filteredSubs.length === 0}
                 title="Export submissions as Excel"
               >
                 {exportLoading ? '⏳' : '📈'} Excel
@@ -780,9 +793,20 @@ const FacultyFormPage = ({
                                 <span className="ff-chip-empty">—</span>
                               </td>
                             ))}
-                            <td className="ff-td-time" style={{ color: '#f97316', fontWeight: '600' }}>Not Submitted</td>
-                            <td></td>
-                          </>
+                            
+                              <td className="ff-td-time" style={{ color: '#f97316', fontWeight: '600' }}>Not Submitted</td>
+                              <td className="ff-td-actions">
+                                <button
+                                  className="ff-action-edit"
+                                  style={{ color: '#0284c7', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: '500' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startNewSubmission(s.empId);
+                                  }}
+                                >➕ Create</button>
+                              </td>
+                            </>
+
                         ) : (
                           // Submitted faculty: show preferences
                           <>

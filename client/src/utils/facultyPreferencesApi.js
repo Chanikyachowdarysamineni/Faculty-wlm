@@ -266,9 +266,10 @@ export const filterCoursesByPreference = (allCourses, preferredCourseIds, hasPre
     return allCourses;
   }
 
-  return allCourses.filter((course) =>
-    preferredCourseIds.includes(Number(course.id) || Number(course.courseId))
-  );
+  return allCourses.filter((course) => {
+    const prefStrs = preferredCourseIds.map(String);
+    return prefStrs.includes(String(course.courseId)) || prefStrs.includes(String(course.id));
+  });
 };
 
 /**

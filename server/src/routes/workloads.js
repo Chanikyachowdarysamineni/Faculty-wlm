@@ -593,7 +593,7 @@ router.get('/workload-report', requireAuth, requireAdmin, requireAcademicPeriod,
 
     const { year, semester } = req.query;
     const yearFilter = year ? normalizeYear(year) : null;
-    const semesterFilter = semester || 'ODD';
+    const semesterFilter = semester ;
 
     const report = await getFacultyWorkloadReport(yearFilter, semesterFilter);
     const summary = {
@@ -767,7 +767,7 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, requireAcade
       return sendError(res, 'capacity must be a positive number.', 400);
     }
 
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || 'ODD';
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester ;
     const yearName = req.academicPeriod?.academicYear?.name;
 
     if (!yearName) {
@@ -1003,6 +1003,17 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         logger.warn('Employee not found for workload creation', { empId, userId: req.user.id });
         return sendNotFound(res, 'Employee not found.');
       }
+      
+      if (member && req.academicPeriod?.academicYear) {
+        const yearStart = req.academicPeriod.academicYear.startDate;
+        const yearEnd = req.academicPeriod.academicYear.endDate;
+        if (yearEnd && member.joiningDate && new Date(member.joiningDate) > new Date(yearEnd)) {
+          return sendError(res, 'Faculty joined after this academic year ends.', 400);
+        }
+        if (yearStart && member.relievingDate && new Date(member.relievingDate) < new Date(yearStart)) {
+          return sendError(res, 'Faculty was relieved before this academic year starts.', 400);
+        }
+      }
       const effectiveMember = member || {
         empId: empId.trim(),
         name:  empNameOverride || empId.trim(),
@@ -1044,7 +1055,13 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
 
       // Backend validation for required fields (no nulls or missing)
       const yearName = req.academicPeriod?.academicYear?.name;
-      const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester || (course ? course.semester : 'ODD');
+      const semType = req.academicPeriod?.academicYearSemester?.semesterType;
+      if (!semType) {
+        return res.status(400).json({ success: false, message: 'Semester context missing.' });
+      }
+      if (course && course.semester && course.semester !== semType) {
+        return sendError(res, `Course belongs to ${course.semester} semester, but active context is ${semType} semester.`, 400);
+      }
       const semId = req.getSemesterId();
       
       if (!yearName) {
@@ -1380,20 +1397,28 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     }
 
     if (normalizedFacultyRole === 'TA') {
-      const duplicateTa = await Workload.findOne({
-        _id: { $ne: targetId },
-        courseId: effectiveCourse.courseId,
-        year: nextYear,
-        section: nextSection,
-        facultyRole: 'TA',
-        allocationStatus: 'ALLOCATED',
-        empId: { $ne: '' }
-      }).session(session).lean();
-      if (duplicateTa) {
-        logger.warn('TA duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
-        return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
+        const nextAllocationRow = (() => {
+          const parsed = Number(updates.allocationRow !== undefined ? updates.allocationRow : existing.allocationRow);
+          return Number.isInteger(parsed) ? parsed : null;
+        })();
+        
+        if (nextAllocationRow !== null) {
+          const duplicateTa = await Workload.findOne({
+            _id: { $ne: targetId },
+            courseId: effectiveCourse.courseId,
+            year: nextYear,
+            section: nextSection,
+            facultyRole: 'TA',
+            allocationRow: nextAllocationRow,
+            allocationStatus: 'ALLOCATED',
+            empId: { $ne: '' }
+          }).session(session).lean();
+          if (duplicateTa) {
+            logger.warn('TA duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
+            return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
+          }
+        }
       }
-    }
 
     const duplicateRole = await Workload.findOne({
       _id: { $ne: targetId },
@@ -1441,7 +1466,7 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       manualT: Number(updates.manualT ?? current.manualT ?? effectiveCourse.T ?? 0),
       manualP: Number(updates.manualP ?? current.manualP ?? effectiveCourse.P ?? 0),
       allocationRow: nextAllocationRow,
-      semester: course ? course.semester : (current.semester || 'ODD'),
+      semester: course ? course.semester : (current.semester ),
     };
 
     // CRITICAL: Validate workload hours capacity

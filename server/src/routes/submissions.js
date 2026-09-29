@@ -159,7 +159,7 @@ router.put(
         return sendError(res, prefCheck.message, 400);
       }
 
-      const semester = req.query.semester || 'ODD';
+      const semester = req.query.semester ;
       const doc = await Submission.findOneAndUpdate(
         { empId: req.params.empId, semester },
         { prefs },
@@ -227,7 +227,7 @@ router.post(
       const designation = member?.designation ?? (req.body.designation || '');
       const mobile      = member?.mobile      ?? (req.body.mobile      || '');
 
-      const semester = req.body.semester || 'ODD';
+      const semester = req.body.semester ;
       const existing = await Submission.findOne({ empId: empId.trim(), semester });
       if (existing) {
         logger.warn('Duplicate submission attempt', { empId, semester, userId: req.user.id });

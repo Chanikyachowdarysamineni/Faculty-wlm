@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { exportAsCSV, exportAsExcel } from '../utils/exportUtils';
 import API from '../config';
 import { authJsonHeaders } from '../utils/apiFetchAll';
 import './DesignationManagementModal.css';
@@ -13,6 +14,31 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
   useEffect(() => {
     fetchDesignations();
   }, []);
+
+  
+  const handleExport = (format) => {
+    if (!designations || designations.length === 0) {
+      alert('No designations to export.');
+      return;
+    }
+
+    const columns = [
+      { header: 'Order', key: 'order' },
+      { header: 'Designation Name', key: 'name' },
+      { header: 'Created At', value: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : '' }
+    ];
+
+    const payload = {
+      fileName: 'Designations',
+      title: 'Designations Export',
+      columns,
+      rows: designations,
+      sheetName: 'Designations'
+    };
+
+    if (format === 'csv') return exportAsCSV(payload);
+    if (format === 'excel') return exportAsExcel(payload);
+  };
 
   const fetchDesignations = async () => {
     try {

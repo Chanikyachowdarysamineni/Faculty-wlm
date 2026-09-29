@@ -31,6 +31,8 @@ const facultySchema = new mongoose.Schema(
     workloadPercentage: { type: Number, default: 0 },
     status: { type: String, default: 'Available' },
     isDeleted: { type: Boolean, default: false },
+    joiningDate: { type: Date, default: null },
+    relievingDate: { type: Date, default: null },
   },
   { timestamps: true, collection: 'faculty' }
 );

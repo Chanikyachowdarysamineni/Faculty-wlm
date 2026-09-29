@@ -245,6 +245,30 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
+    const semStart = req.academicPeriod?.academicYear?.startDate;
+    const semEnd = req.academicPeriod?.academicYear?.endDate;
+    const facultyMatch = { isDeleted: { $ne: true } };
+    if (semEnd) {
+      facultyMatch.$or = [
+        { joiningDate: { $lte: new Date(semEnd) } },
+        { joiningDate: null },
+        { joiningDate: { $exists: false } }
+      ];
+    }
+    if (semStart) {
+      const startCond = [
+        { relievingDate: { $gte: new Date(semStart) } },
+        { relievingDate: null },
+        { relievingDate: { $exists: false } }
+      ];
+      if (facultyMatch.$or) {
+        facultyMatch.$and = [ { $or: facultyMatch.$or }, { $or: startCond } ];
+        delete facultyMatch.$or;
+      } else {
+        facultyMatch.$or = startCond;
+      }
+    }
+
     const baseCourseFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
     const baseSubmissionFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
     const baseWorkloadFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
@@ -260,12 +284,12 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
       coursesByType,
       workloadByFaculty,
     ] = await Promise.all([
-      Faculty.countDocuments({ isDeleted: { $ne: true } }),
+      Faculty.countDocuments(facultyMatch),
       Course.countDocuments(baseCourseFilter),
       Submission.countDocuments(baseSubmissionFilter),
       Workload.countDocuments(baseWorkloadFilter),
       Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: null, total: { $sum: '$C' } } }]),
-      Faculty.aggregate([{ $match: { isDeleted: { $ne: true } } }, { $group: { _id: '$designation', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+      Faculty.aggregate([{ $match: facultyMatch }, { $group: { _id: '$designation', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
       Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: '$program', count: { $sum: 1 } } }]),
       Course.aggregate([{ $match: baseCourseFilter }, { $group: { _id: '$courseType', count: { $sum: 1 } } }]),
       Workload.aggregate([
@@ -343,8 +367,32 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
     const FacultyCapacity = require('../models/FacultyCapacity');
     const capacityFilter = semesterId ? req.getPeriodFilter() : {};
 
+    const semStart = req.academicPeriod?.academicYear?.startDate;
+    const semEnd = req.academicPeriod?.academicYear?.endDate;
+    const facultyMatch = { isDeleted: { $ne: true } };
+    if (semEnd) {
+      facultyMatch.$or = [
+        { joiningDate: { $lte: new Date(semEnd) } },
+        { joiningDate: null },
+        { joiningDate: { $exists: false } }
+      ];
+    }
+    if (semStart) {
+      const startCond = [
+        { relievingDate: { $gte: new Date(semStart) } },
+        { relievingDate: null },
+        { relievingDate: { $exists: false } }
+      ];
+      if (facultyMatch.$or) {
+        facultyMatch.$and = [ { $or: facultyMatch.$or }, { $or: startCond } ];
+        delete facultyMatch.$or;
+      } else {
+        facultyMatch.$or = startCond;
+      }
+    }
+
     const [facultyList, capacityList, workloadAgg] = await Promise.all([
-      Faculty.find({ isDeleted: { $ne: true } }).lean(),
+      Faculty.find(facultyMatch).lean(),
       FacultyCapacity.find(capacityFilter).lean(),
       Workload.aggregate([
         { $match: matchStage },
@@ -437,8 +485,10 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
  */
 router.get('/overloaded-faculty', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semester = req.query.semester || 'ODD';
-    const report = await getFacultyWorkloadReport(null, semester);
+    const semester = req.query.semester;
+    const semStart = req.academicPeriod?.academicYear?.startDate;
+    const semEnd = req.academicPeriod?.academicYear?.endDate;
+    const report = await getFacultyWorkloadReport(null, semester, semStart, semEnd);
     const overloadedFaculty = report.filter(f => f.isOverAllocated);
 
     res.json({
@@ -485,7 +535,7 @@ router.get('/overloaded-faculty', requireAuth, requireAdmin, requireAcademicPeri
 router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const semester = req.query.semester || 'ODD';
+    const semester = req.query.semester ;
     const summary = await getFacultyWorkloadSummary(empId, null, null, semester);
 
     res.json({

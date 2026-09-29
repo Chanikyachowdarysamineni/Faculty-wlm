@@ -180,10 +180,31 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
  * @param {String} year - Optional filter by year
  * @returns {Array} Array of faculty with their workload status
  */
-const getFacultyWorkloadReport = async (year = null, semester = null) => {
+const getFacultyWorkloadReport = async (year = null, semester = null, periodStart = null, periodEnd = null) => {
   try {
     // H-8: Exclude soft-deleted faculty from reports
-    const allFaculty = await Faculty.find({ isDeleted: { $ne: true } }).lean();
+    const facultyMatch = { isDeleted: { $ne: true } };
+    if (periodEnd) {
+      facultyMatch.$or = [
+        { joiningDate: { $lte: new Date(periodEnd) } },
+        { joiningDate: null },
+        { joiningDate: { $exists: false } }
+      ];
+    }
+    if (periodStart) {
+      const startCond = [
+        { relievingDate: { $gte: new Date(periodStart) } },
+        { relievingDate: null },
+        { relievingDate: { $exists: false } }
+      ];
+      if (facultyMatch.$or) {
+        facultyMatch.$and = [ { $or: facultyMatch.$or }, { $or: startCond } ];
+        delete facultyMatch.$or;
+      } else {
+        facultyMatch.$or = startCond;
+      }
+    }
+    const allFaculty = await Faculty.find(facultyMatch).lean();
     
     // P-2 FIX: Offload data grouping and load calculation to MongoDB aggregation
     const workloadMatch = {

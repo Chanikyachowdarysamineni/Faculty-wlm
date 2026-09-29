@@ -66,7 +66,7 @@ const requireAcademicPeriod = async (req, res, next) => {
     // Helper: generate query filter matching both new structure and legacy data
     req.getPeriodFilter = () => {
       const yearNameStr = academicYear.name;
-      const semStr = academicYearSemester ? academicYearSemester.semesterType : (semType || 'ODD');
+      const semStr = academicYearSemester ? academicYearSemester.semesterType : (semType );
       const sid = req.getSemesterId();
       if (sid) {
         return {

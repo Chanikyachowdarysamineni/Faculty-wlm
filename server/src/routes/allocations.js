@@ -292,7 +292,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
 
     const year = normalizeYear(rawYear);
 
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType || semester || 'ODD';
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || semester ;
     const yearName = req.academicPeriod?.academicYear?.name;
     const semId = req.getSemesterId();
 
@@ -324,7 +324,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     if (!course)
       return sendNotFound(res, 'Course not found.');
 
-    const targetSemester = semester || course.semester || 'ODD';
+    const targetSemester = semester || course.semester ;
     if (course.semester !== targetSemester) {
       return sendError(res, `Course belongs to ${course.semester} semester, but allocation was requested for ${targetSemester} semester.`, 400);
     }
