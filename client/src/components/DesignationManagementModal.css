@@ -1,0 +1,116 @@
+.dmm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.dmm-modal {
+  background: white;
+  width: 500px;
+  max-width: 90vw;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+.dmm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.dmm-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+}
+.dmm-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #64748b;
+}
+.dmm-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.dmm-form input {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+.dmm-form input[type="text"] {
+  flex: 2;
+}
+.dmm-form input[type="number"] {
+  flex: 1;
+}
+.dmm-btn-save {
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dmm-btn-cancel {
+  padding: 8px 16px;
+  background: #94a3b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dmm-list-wrap {
+  overflow-y: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+.dmm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dmm-table th, .dmm-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+.dmm-table th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+  position: sticky;
+  top: 0;
+}
+.dmm-action-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 5px;
+  font-size: 12px;
+}
+.dmm-action-btn.edit {
+  background: #eab308;
+  color: white;
+}
+.dmm-action-btn.delete {
+  background: #ef4444;
+  color: white;
+}
+
+
+/* Dark text for visibility */
+.dmm-table, .dmm-standalone, .dmm-modal {
+  color: #1e293b;
+}

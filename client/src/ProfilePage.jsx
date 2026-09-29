@@ -51,7 +51,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
     try {
       const headers = authHeaders();
-      const workloadParams = user.role === 'admin' ? { semester: selectedSemester } : { empId: String(user.id), semester: selectedSemester };
+      const workloadParams = user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true ? { semester: selectedSemester } : { empId: String(user.id), semester: selectedSemester };
       const [wData] = await Promise.all([
         fetchAllPages('/deva/workloads', workloadParams, { headers }),
       ]);
@@ -62,7 +62,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       }
 
       const allWorkloads = wData.data || [];
-      setMyWorkloads(user.role === 'admin'
+      setMyWorkloads(user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true
         ? allWorkloads
         : allWorkloads.filter((workload) => String(workload.empId) === String(user.id)));
       setLastSyncedAt(new Date());

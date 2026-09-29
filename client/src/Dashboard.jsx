@@ -11,6 +11,8 @@ import MySubmissionsPage from './MySubmissionsPage';
 import MyWorkloadPage from './MyWorkloadPage';
 import ProfilePage from './ProfilePage';
 import AcademicYearManagementPage from './AcademicYearManagementPage';
+import AdminManagement from './components/AdminManagement';
+import DesignationManagementModal from './components/DesignationManagementModal';
 
 import OverloadedFacultyModal from './OverloadedFacultyModal';
 import API from './config';
@@ -134,6 +136,32 @@ const NAV_ITEMS = [
     ),
   },
   {
+    key: 'designations',
+    label: 'Designations',
+    colorClass: 'nav-color-indigo',
+    adminOnly: true,
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+        <line x1="7" y1="7" x2="7.01" y2="7"></line>
+      </svg>
+    ),
+  },
+  {
+    key: 'admin-management',
+    label: 'Admin Mgmt',
+    colorClass: 'nav-color-red',
+    adminOnly: true,
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    ),
+  },
+  {
     key: 'myworkload',
     label: 'My Workload',
     colorClass: 'nav-color-orange',
@@ -194,7 +222,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   
 
 
-  const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.canAccessAdmin === true);
+  const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true);
 
   const token = () => {
     const t = localStorage.getItem('wlm_token');
@@ -1182,7 +1210,14 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                         ) :
                           activeNav === 'profile' ? (
                             <ProfilePage user={user} submissions={submissions} onLogout={onLogout} />
-                          ) : activeNav === 'academic-years' && isAdmin ? (
+                          ) : activeNav === 'admin-management' && isAdmin ? (
+                              <AdminManagement user={user} />
+                            ) : activeNav === 'designations' && isAdmin ? (
+                              <div style={{ background: '#fff', color: '#1e293b', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', maxWidth: '800px', margin: '0 auto' }}>
+                                <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Manage Designations</h2>
+                                <DesignationManagementModal onClose={() => {}} isStandalone={true} />
+                              </div>
+                            ) : activeNav === 'academic-years' && isAdmin ? (
                             <AcademicYearManagementPage />
                           ) :
 

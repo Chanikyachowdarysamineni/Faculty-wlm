@@ -35,7 +35,7 @@ const LoginPageWrapper = () => {
   
   // Redirect based on role if already logged in
   if (currentUser) {
-    if (currentUser.role === 'admin') {
+    if (currentUser.role === 'admin' || currentUser.role === 'Admin') {
       return <Navigate to="/admin-dashboard" replace />;
     }
     return <Navigate to="/" replace />;
@@ -68,7 +68,7 @@ const AdminDashboardWrapper = () => {
   const { currentUser, onLogout } = useAuth();
   
   // Security: Verify role on frontend (server validates on routes)
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'Admin')) {
     return <Navigate to="/" replace />;
   }
   

@@ -12,6 +12,8 @@ import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import PageHeader from './components/PageHeader';
+import AdminManagement from './components/AdminManagement';
+import DesignationManagementModal from './components/DesignationManagementModal';
 import { authJsonHeaders } from './utils/apiFetchAll';
 import API from './config';
 import { useSharedData } from './DataContext';
@@ -58,7 +60,7 @@ const AdminDashboard = () => {
     return null;
   }
 
-  if (currentUser.role !== 'admin') {
+  if (currentUser.role !== 'admin' && currentUser.role !== 'Admin') {
     navigate('/', { replace: true });
     return null;
   }
@@ -129,12 +131,31 @@ const AdminDashboard = () => {
               >
                 ⚙️ Settings
               </button>
+              <button
+                className={`nav-link ${activeTab === 'admin-management' ? 'active' : ''}`}
+                onClick={() => handleNavClick('admin-management')}
+              >
+                🔐 Admin Management
+              </button>
+              <button
+                className={`nav-link ${activeTab === 'designations' ? 'active' : ''}`}
+                onClick={() => handleNavClick('designations')}
+              >
+                🏷️ Manage Designations
+              </button>
             </div>
           </nav>
         </aside>
 
         <main className="main-content">
           {activeTab === 'overview' && <AdminOverview user={currentUser} selectedSemester={selectedSemester} />}
+          {activeTab === 'admin-management' && <AdminManagement user={currentUser} />}
+          {activeTab === 'designations' && (
+             <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+               <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Manage Designations</h2>
+               <DesignationManagementModal onClose={() => handleNavClick('overview')} isStandalone={true} />
+             </div>
+          )}
         </main>
       </div>
     </div>

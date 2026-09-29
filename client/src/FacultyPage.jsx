@@ -3,13 +3,17 @@ import { useAcademicPeriod } from './AcademicPeriodContext';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import { useAuth } from './AuthContext';
 import * as XLSX from 'xlsx';
+import DesignationManagementModal from './components/DesignationManagementModal';
 
 import './FacultyPage.css';
 
 const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };
 
-const FacultyPage = ({ isAdmin = false }) => {
+const FacultyPage = () => {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Admin';
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
   const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations} = useSharedData();
@@ -21,6 +25,7 @@ const FacultyPage = ({ isAdmin = false }) => {
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // null = add, obj = edit
   const [form, setForm]           = useState(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -94,7 +99,7 @@ const FacultyPage = ({ isAdmin = false }) => {
       }
     };
     
-    if (contextDesignations) {
+    if (contextDesignations && contextDesignations.length > 0) {
       setLocalDesignations(contextDesignations);
     } else {
       fetchDesignations();
@@ -729,7 +734,18 @@ const FacultyPage = ({ isAdmin = false }) => {
                     placeholder="e.g. Dr. John Smith" required />
                 </div>
                 <div className="fp-form-group fp-form-full">
-                  <label>Designation *</label>
+                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Designation *</span>
+                    {isAdmin && (
+                      <button 
+                        type="button" 
+                        onClick={() => setShowDesignationModal(true)} 
+                        style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}
+                      >
+                        Manage Designations
+                      </button>
+                    )}
+                  </label>
                   <select value={form.designation} onChange={e => setForm({...form, designation: e.target.value})}
                     required>
                     <option value="">Select Designation</option>
@@ -784,6 +800,22 @@ const FacultyPage = ({ isAdmin = false }) => {
       )}
 
       {/* ── Toast ── */}
+      {showDesignationModal && (
+        <DesignationManagementModal 
+          onClose={() => setShowDesignationModal(false)}
+          onUpdated={() => {
+            fetch(`${API}/deva/designations`, { headers: authHeaders() })
+              .then(r => r.json())
+              .then(data => {
+                if (data.success && Array.isArray(data.data)) {
+                  setLocalDesignations(data.data);
+                  setDesignations(data.data);
+                }
+              })
+              .catch(e => console.error(e));
+          }}
+        />
+      )}
       {toast && <div className="fp-toast">{toast}</div>}
     </div>
   );

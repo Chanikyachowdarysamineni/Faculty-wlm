@@ -21,9 +21,11 @@ export const ProtectedRoute = ({ children, roles = [] }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Roles specified and user doesn't have required role: redirect to dashboard
-  if (roles.length > 0 && !roles.includes(currentUser?.role)) {
-    return <Navigate to="/" replace />;
+  if (roles.length > 0) {
+    const hasRole = roles.some(r => r.toLowerCase() === (currentUser?.role || '').toLowerCase());
+    if (!hasRole) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   return children;

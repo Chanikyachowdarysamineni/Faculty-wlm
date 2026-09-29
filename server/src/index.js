@@ -57,6 +57,7 @@ const designationsRoutes = require('./routes/designations');
 const sectionsRoutes = require('./routes/sections');
 const configRoutes = require('./routes/config');
 const academicYearsRoutes = require('./routes/academicYears');
+const adminManagementRoutes = require('./routes/adminManagement');
 
 // ── Import WebSocket handler ────────────────────────────────
 const WebSocketHandler  = require('./websocket');
@@ -314,6 +315,7 @@ app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 // NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
 app.use('/deva/config', configRoutes);
 app.use('/deva/academic-years', academicYearsRoutes);
+app.use('/deva/admin-management', adminManagementRoutes);
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything
