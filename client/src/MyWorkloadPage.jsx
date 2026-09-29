@@ -14,7 +14,7 @@ const YEAR_COLOR = { I: '#6b74e8', II: '#22c55e', III: '#f59e0b', IV: '#ec4899' 
 const AUTO_REFRESH_MS = 60000;
 
 const MyWorkloadPage = ({ currentUser }) => {
-  const { selectedSemester } = useSharedData();
+  const { selectedSemester, selectedAcademicYear } = useSharedData();
   const [workloads, setWorkloads] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [toast,     setToast]     = useState('');
@@ -32,7 +32,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     if (withLoader) setLoading(true);
     setApiError('');
     try {
-      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear } : { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear };
+      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester, academicYear: selectedAcademicYear } : { semester: selectedSemester, academicYear: selectedAcademicYear };
       const data = await fetchAllPages('/deva/workloads', params, { headers: authHeader() });
       if (!data.success) {
         const msg = data.message || 'Failed to load workloads.';
