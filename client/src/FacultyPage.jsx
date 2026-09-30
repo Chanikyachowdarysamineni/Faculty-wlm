@@ -10,31 +10,31 @@ import DesignationManagementModal from './components/DesignationManagementModal'
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import './FacultyPage.css';
 
-const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18 };
+const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18, joiningDate: '', relievingDate: '' };
 
 const FacultyPage = () => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Admin';
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations} = useSharedData();
-  
+  const { faculty: contextFaculty, setFaculty, designations: contextDesignations, setDesignations } = useSharedData();
+
   const [designations, setLocalDesignations] = useState([]);
   // Local state
-  
-  const [list, setList]           = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState('');
+
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // null = add, obj = edit
-  const [form, setForm]           = useState(EMPTY_FORM);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [toast, setToast]         = useState('');
-  const [isDragMode,  setIsDragMode]  = useState(false);
+  const [toast, setToast] = useState('');
+  const [isDragMode, setIsDragMode] = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragSrcIdx = useRef(null);
-  const [syncing, setSyncing]     = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [restoreMode, setRestoreMode] = useState(false);
   const [deletedList, setDeletedList] = useState([]);
   const fileInputRef = useRef(null);
@@ -54,7 +54,8 @@ const FacultyPage = () => {
 
   // Helper: Build auth headers
   const authHeaders = useCallback(() => ({
-    ...authJsonHeaders()}), []);
+    ...authJsonHeaders()
+  }), []);
 
   // Helper: Refetch fresh faculty data from server
   const refetchFaculty = useCallback(async () => {
@@ -92,14 +93,14 @@ const FacultyPage = () => {
         const res = await fetch(`${API}/deva/designations`, { headers: authHeaders() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
-           setLocalDesignations(data.data);
-           setDesignations(data.data);
+          setLocalDesignations(data.data);
+          setDesignations(data.data);
         }
       } catch (err) {
         console.error('Failed to fetch designations', err);
       }
     };
-    
+
     if (contextDesignations && contextDesignations.length > 0) {
       setLocalDesignations(contextDesignations);
     } else {
@@ -137,7 +138,8 @@ const FacultyPage = () => {
       const response = await fetch(`${API}/deva/faculty/bulk-update`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ updates })});
+        body: JSON.stringify({ updates })
+      });
       if (!response.ok) throw new Error('Bulk update failed');
       showToast('Order saved successfully.');
     } catch {
@@ -161,12 +163,12 @@ const FacultyPage = () => {
       }
       return 99;
     };
-    
+
     const sorted = [...list].sort((a, b) => getRank(a.designation) - getRank(b.designation));
     const reordered = sorted.map((f, i) => ({ ...f, slNo: i + 1 }));
     setList(reordered);
     setFaculty(reordered);
-    
+
     setSyncing(true);
     try {
       const updates = reordered.map(f => ({ empId: f.empId, slNo: f.slNo }));
@@ -206,7 +208,7 @@ const FacultyPage = () => {
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return mergedList;
-    
+
     // Check for advanced filter syntax (e.g., "dept:cse", "l:4", "status:overloaded")
     const filters = q.split(' ').reduce((acc, term) => {
       const parts = term.split(':');
@@ -244,7 +246,7 @@ const FacultyPage = () => {
           }
         } else {
           // 'any' text match
-          const textMatch = 
+          const textMatch =
             f.name?.toLowerCase().includes(val) ||
             f.empId?.toLowerCase().includes(val) ||
             f.department?.toLowerCase().includes(val) ||
@@ -268,7 +270,7 @@ const FacultyPage = () => {
     setTimeout(() => setToast(''), 2500);
   };
 
-  
+
   const fetchDeleted = async () => {
     try {
       setSyncing(true);
@@ -326,7 +328,7 @@ const FacultyPage = () => {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws);
-        
+
         const payload = data.map(row => ({
           empId: String(row.empId || row['Employee ID'] || row.id || '').trim(),
           name: String(row.name || row['Name of the Faculty'] || row['Name'] || '').trim(),
@@ -392,7 +394,8 @@ const FacultyPage = () => {
       email: form.email || '',
       department: form.department || 'CSE',
       capacity: Number(form.capacity) || 18,
-      semester: undefined };
+      semester: undefined, joiningDate: form.joiningDate || null, relievingDate: form.relievingDate || null
+    };
     try {
       setSyncing(true);
 
@@ -401,7 +404,8 @@ const FacultyPage = () => {
         {
           method: editTarget ? 'PUT' : 'POST',
           headers: authHeaders(),
-          body: JSON.stringify(payload)}
+          body: JSON.stringify(payload)
+        }
       );
       const data = await res.json();
 
@@ -438,7 +442,8 @@ const FacultyPage = () => {
 
       const res = await fetch(`${API}/deva/faculty/${encodeURIComponent(deleteConfirm.empId)}`, {
         method: 'DELETE',
-        headers: authHeaders()});
+        headers: authHeaders()
+      });
       const data = await res.json();
 
       if (!res.ok || !data?.success) {
@@ -470,8 +475,8 @@ const FacultyPage = () => {
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
     a.href = url; a.download = 'faculty_list.csv'; a.click();
     URL.revokeObjectURL(url);
     showToast('Exported as faculty_list.csv');
@@ -505,7 +510,7 @@ const FacultyPage = () => {
             <svg className="fp-search-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               className="fp-search"
@@ -530,7 +535,7 @@ const FacultyPage = () => {
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
                 Done Reordering
               </>
@@ -538,10 +543,10 @@ const FacultyPage = () => {
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
-                  <line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
-                  <line x1="3" y1="18" x2="3.01" y2="18"/>
+                  <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
                 </svg>
                 Reorder
               </>
@@ -552,7 +557,7 @@ const FacultyPage = () => {
             <button className="fp-btn fp-btn-reorder" onClick={autoSortByDesignation} title="Auto-sort list by designation priority" style={{ marginLeft: '10px' }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+                <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
               </svg>
               Auto-Sort
             </button>
@@ -563,8 +568,8 @@ const FacultyPage = () => {
             <button className="fp-btn fp-btn-export" onClick={exportCSV}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               Download
             </button>
@@ -585,7 +590,7 @@ const FacultyPage = () => {
           <button className="fp-btn fp-btn-add" onClick={openAdd}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             Add Faculty
           </button>
@@ -597,8 +602,8 @@ const FacultyPage = () => {
         <div className="fp-drag-banner">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/>
-            <line x1="2" y1="12" x2="22" y2="12"/>
+            <polyline points="5 9 2 12 5 15" /><polyline points="19 9 22 12 19 15" />
+            <line x1="2" y1="12" x2="22" y2="12" />
           </svg>
           Drag mode active — grab the <strong>⠿</strong> handle on any row and drop it to reorder. Click <strong>Done Reordering</strong> when finished.
         </div>
@@ -688,18 +693,18 @@ const FacultyPage = () => {
                           <button className="fp-action-btn fp-edit" onClick={() => openEdit(f)} title="Edit">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
                             Edit
                           </button>
                           <button className="fp-action-btn fp-delete" onClick={() => setDeleteConfirm(f)} title="Delete">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"/>
-                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                              <path d="M10 11v6"/><path d="M14 11v6"/>
-                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6" /><path d="M14 11v6" />
+                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                             </svg>
                             Delete
                           </button>
@@ -726,28 +731,28 @@ const FacultyPage = () => {
               <div className="fp-form-grid">
                 <div className="fp-form-group">
                   <label>Employee ID *</label>
-                  <input minLength={3} maxLength={20} pattern="[a-zA-Z0-9_\\-]+" value={form.empId} onChange={e => setForm({...form, empId: e.target.value})}
+                  <input minLength={3} maxLength={20} pattern="[a-zA-Z0-9_\\-]+" value={form.empId} onChange={e => setForm({ ...form, empId: e.target.value })}
                     placeholder="e.g. 1234" required disabled={!isAdmin && !!editTarget} />
                 </div>
                 <div className="fp-form-group fp-form-full">
                   <label>Name of Faculty *</label>
-                  <input minLength={3} maxLength={100} value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+                  <input minLength={3} maxLength={100} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                     placeholder="e.g. Dr. John Smith" required />
                 </div>
                 <div className="fp-form-group fp-form-full">
                   <label style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Designation *</span>
                     {isAdmin && (
-                      <button 
-                        type="button" 
-                        onClick={() => setShowDesignationModal(true)} 
+                      <button
+                        type="button"
+                        onClick={() => setShowDesignationModal(true)}
                         style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}
                       >
                         Manage Designations
                       </button>
                     )}
                   </label>
-                  <select value={form.designation} onChange={e => setForm({...form, designation: e.target.value})}
+                  <select value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })}
                     required>
                     <option value="">Select Designation</option>
                     {designations.map(d => (
@@ -757,18 +762,26 @@ const FacultyPage = () => {
                 </div>
                 <div className="fp-form-group">
                   <label>Mobile No</label>
-                  <input value={form.mobile} onChange={e => setForm({...form, mobile: e.target.value})}
+                  <input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })}
                     placeholder="e.g. 9876543210" />
                 </div>
                 <div className="fp-form-group">
                   <label>Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
+                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                     placeholder="e.g. john@example.com" />
                 </div>
                 <div className="fp-form-group">
                   <label>Capacity *</label>
-                  <input type="number" min="1" max="60" value={form.capacity || ''} onChange={e => setForm({...form, capacity: e.target.value})}
+                  <input type="number" min="1" max="60" value={form.capacity || ''} onChange={e => setForm({ ...form, capacity: e.target.value })}
                     placeholder="e.g. 18" required />
+                </div>
+                <div className="fp-form-group">
+                  <label>Joining Date</label>
+                  <input type="date" value={form.joiningDate ? form.joiningDate.substring(0, 10) : ''} onChange={e => setForm({ ...form, joiningDate: e.target.value })} />
+                </div>
+                <div className="fp-form-group">
+                  <label>Relieving Date</label>
+                  <input type="date" value={form.relievingDate ? form.relievingDate.substring(0, 10) : ''} onChange={e => setForm({ ...form, relievingDate: e.target.value })} />
                 </div>
 
               </div>
@@ -802,7 +815,7 @@ const FacultyPage = () => {
 
       {/* ── Toast ── */}
       {showDesignationModal && (
-        <DesignationManagementModal 
+        <DesignationManagementModal
           onClose={() => setShowDesignationModal(false)}
           onUpdated={() => {
             fetch(`${API}/deva/designations`, { headers: authHeaders() })
@@ -826,15 +839,15 @@ const FacultyPage = () => {
 const getDesigClass = (d = '') => {
   const dl = d.toLowerCase();
   if (dl.includes('professor & dean') || dl.includes('hod')) return 'fp-desig-dean';
-  if (dl.includes('assoc'))          return 'fp-desig-assoc';
-  if (dl.includes('sr.'))            return 'fp-desig-senior';
-  if (dl.includes('senior level'))   return 'fp-desig-senior';
-  if (dl.includes('entry level'))    return 'fp-desig-entry';
-  if (dl.includes('contract'))       return 'fp-desig-contract';
+  if (dl.includes('assoc')) return 'fp-desig-assoc';
+  if (dl.includes('sr.')) return 'fp-desig-senior';
+  if (dl.includes('senior level')) return 'fp-desig-senior';
+  if (dl.includes('entry level')) return 'fp-desig-entry';
+  if (dl.includes('contract')) return 'fp-desig-contract';
   if (dl.includes('cap') || dl === 'cap') return 'fp-desig-cap';
-  if (dl.includes('ta') || dl === 'ta')   return 'fp-desig-ta';
-  if (dl.includes('teaching'))       return 'fp-desig-ta';
-  if (dl.includes('internal'))       return 'fp-desig-cap';
+  if (dl.includes('ta') || dl === 'ta') return 'fp-desig-ta';
+  if (dl.includes('teaching')) return 'fp-desig-ta';
+  if (dl.includes('internal')) return 'fp-desig-cap';
   return 'fp-desig-default';
 };
 

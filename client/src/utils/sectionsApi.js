@@ -17,7 +17,7 @@ let sectionsEndpointUnavailable = isSectionsEndpointLikelyUnsupported();
 let unavailableSince = sectionsEndpointUnavailable ? Date.now() : null;
 const RETRY_AFTER_MS = 5 * 60 * 1000; // retry after 5 minutes
 
-export const fetchSectionsConfig = async () => {
+export const fetchSectionsConfig = async (academicYear) => {
   // If unavailable, let it retry after the backoff window
   if (sectionsEndpointUnavailable) {
     if (unavailableSince && Date.now() - unavailableSince >= RETRY_AFTER_MS) {
@@ -28,7 +28,8 @@ export const fetchSectionsConfig = async () => {
     }
   }
 
-  const result = await fetchJsonWithRetry(`${API}/deva/settings/sections`, { headers: authHeader() });
+  const qs = academicYear ? `?academicYear=${encodeURIComponent(academicYear)}` : '';
+  const result = await fetchJsonWithRetry(`${API}/deva/settings/sections${qs}`, { headers: authHeader() });
   const data = result.data || {};
   if (result.status === 404) {
     sectionsEndpointUnavailable = true;
@@ -41,22 +42,25 @@ export const fetchSectionsConfig = async () => {
   return data.data || DEFAULT_SECTIONS;
 };
 
-export const addSectionConfig = async (year, section) => {
-  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}`, {
-    method: 'POST', headers: authHeader(), body: JSON.stringify({ section }),
+export const addSectionConfig = async (year, section, academicYear) => {
+  const qs = academicYear ? `?academicYear=${encodeURIComponent(academicYear)}` : '';
+  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}${qs}`, {
+    method: 'POST', headers: authHeader(), body: JSON.stringify({ section, academicYear }),
   });
   return res.json();
 };
 
-export const renameSectionConfig = async (year, oldSection, newSection) => {
-  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}/${encodeURIComponent(oldSection)}`, {
-    method: 'PUT', headers: authHeader(), body: JSON.stringify({ newSection }),
+export const renameSectionConfig = async (year, oldSection, newSection, academicYear) => {
+  const qs = academicYear ? `?academicYear=${encodeURIComponent(academicYear)}` : '';
+  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}/${encodeURIComponent(oldSection)}${qs}`, {
+    method: 'PUT', headers: authHeader(), body: JSON.stringify({ newSection, academicYear }),
   });
   return res.json();
 };
 
-export const deleteSectionConfig = async (year, section) => {
-  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}/${encodeURIComponent(section)}`, {
+export const deleteSectionConfig = async (year, section, academicYear) => {
+  const qs = academicYear ? `?academicYear=${encodeURIComponent(academicYear)}` : '';
+  const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}/${encodeURIComponent(section)}${qs}`, {
     method: 'DELETE', headers: authHeader(),
   });
   return res.json();

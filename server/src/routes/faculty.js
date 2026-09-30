@@ -47,6 +47,8 @@ const toClient = (doc) => ({
   remaining: doc.remaining ?? 18,
   workloadPercentage: doc.workloadPercentage || 0,
   status: doc.status || 'Available',
+  joiningDate: doc.joiningDate?.toISOString() || null,
+  relievingDate: doc.relievingDate?.toISOString() || null,
   createdAt: doc.createdAt?.toISOString() || null,
   updatedAt: doc.updatedAt?.toISOString() || null,
 });
@@ -284,12 +286,18 @@ router.post(
       const {
         empId, name, department = 'CSE', designation, mobile = '', email = '', capacity,
         qualification = '', experience = 0, role = 'faculty', username = '',
-        workingHours = '', joiningDate = null, address = '', gender = '',
+        workingHours = '', joiningDate = null, relievingDate = null, address = '', gender = '',
         dob = null, profilePicture = '', researchArea = '', specialization = '',
         status = 'Available',
       } = req.body;
 
-      const existing = await Faculty.findOne({ empId: empId.trim() }).session(session);
+      const safeEmpId = String(empId || '').trim();
+      const safeName = String(name || '').trim();
+      const safeDesignation = String(designation || '').trim();
+      const safeMobile = String(mobile || '').trim();
+      const safeEmail = String(email || '').trim();
+
+      const existing = await Faculty.findOne({ empId: safeEmpId }).session(session);
       if (existing) {
         logger.warn('Faculty with duplicate empId attempted', { empId, userId: req.user.id });
         await session.abortTransaction();
@@ -302,19 +310,20 @@ router.post(
 
       const createdDocs = await Faculty.create([{
         slNo,
-        empId: empId.trim(),
-        name: name.trim(),
+        empId: safeEmpId,
+        name: safeName,
         department: String(department || 'CSE').trim() || 'CSE',
-        designation: designation.trim(),
+        designation: safeDesignation,
         capacity: capacity !== undefined ? Number(capacity) : 18,
-        mobile,
-        email,
+        mobile: safeMobile,
+        email: safeEmail,
         qualification: String(qualification || '').trim(),
         experience: Number(experience) || 0,
         role: String(role || 'faculty').trim(),
         username: String(username || '').trim(),
         workingHours: String(workingHours || '').trim(),
         joiningDate: joiningDate || null,
+        relievingDate: relievingDate || null,
         address: String(address || '').trim(),
         gender: String(gender || '').trim(),
         dob: dob || null,
@@ -326,15 +335,15 @@ router.post(
       const doc = createdDocs[0];
 
       // ── Create User account for faculty with mobile as default password ──
-      const defaultPassword = mobile.trim() ? mobile.trim() : empId.trim();
+      const defaultPassword = safeMobile ? safeMobile : safeEmpId;
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
       await User.create([{
-        empId: empId.trim(),
-        name: name.trim(),
-        designation: designation.trim(),
-        mobile: mobile.trim(),
-        email: email.trim(),
+        empId: safeEmpId,
+        name: safeName,
+        designation: safeDesignation,
+        mobile: safeMobile,
+        email: safeEmail,
         passwordHash,
         role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
         canAccessAdmin: false,
@@ -418,7 +427,7 @@ router.put(
       const {
         name, department, designation, mobile, email, slNo, capacity,
         status, role, username, qualification, experience,
-        workingHours, joiningDate, address, gender, dob,
+        workingHours, joiningDate, relievingDate, address, gender, dob,
         profilePicture, researchArea, specialization, empId: newEmpId, semester
       } = req.body;
       const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
@@ -447,7 +456,8 @@ router.put(
       if (qualification !== undefined) allowedUpdates.qualification = String(qualification).trim();
       if (experience !== undefined) allowedUpdates.experience = Number(experience);
       if (workingHours !== undefined) allowedUpdates.workingHours = String(workingHours).trim();
-      if (joiningDate !== undefined) allowedUpdates.joiningDate = joiningDate;
+      if (joiningDate !== undefined) allowedUpdates.joiningDate = joiningDate || null;
+      if (relievingDate !== undefined) allowedUpdates.relievingDate = relievingDate || null;
       if (address !== undefined) allowedUpdates.address = String(address).trim();
       if (gender !== undefined) allowedUpdates.gender = String(gender).trim();
       if (dob !== undefined) allowedUpdates.dob = dob;

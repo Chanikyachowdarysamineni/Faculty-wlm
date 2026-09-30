@@ -19,6 +19,7 @@ const CourseAllocation = require('../models/CourseAllocation');
 const { mongoose } = require('../db');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 
 const router = express.Router();
 
@@ -41,8 +42,22 @@ const normalizeSections = (raw) => {
   return base;
 };
 
-const getSectionsConfig = async () => {
-  const doc = await Setting.findOne({ key: 'sections_config' }).lean();
+const getSectionsConfig = async (academicYear) => {
+  if (!academicYear) return DEFAULT_SECTIONS;
+  const key = `sections_config_${academicYear}`;
+  let doc = await Setting.findOne({ key }).lean();
+  
+  if (!doc?.value) {
+    const fallbackDoc = await Setting.findOne({ key: 'sections_config' }).lean();
+    if (fallbackDoc?.value) {
+      // Legacy support: if there's a global config but no year config, use global config for the current year.
+      const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+      if (currentYear && currentYear.name === academicYear) {
+        doc = fallbackDoc;
+      }
+    }
+  }
+
   if (!doc?.value) return DEFAULT_SECTIONS;
   try {
     return normalizeSections(JSON.parse(doc.value));
@@ -51,12 +66,14 @@ const getSectionsConfig = async () => {
   }
 };
 
-const saveSectionsConfig = async (sections) => {
+const saveSectionsConfig = async (sections, academicYear, session = null) => {
+  if (!academicYear) return DEFAULT_SECTIONS;
+  const key = `sections_config_${academicYear}`;
   const normalized = normalizeSections(sections);
   await Setting.findOneAndUpdate(
-    { key: 'sections_config' },
+    { key },
     { value: JSON.stringify(normalized) },
-    { upsert: true, new: true }
+    { upsert: true, new: true, session }
   );
   return normalized;
 };
@@ -109,51 +126,56 @@ router.put(
 );
 
 // GET /api/settings/sections
-router.get('/sections', requireAuth, async (req, res, next) => {
+router.get('/sections', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const sections = await getSectionsConfig();
+    const period = req.getPeriodFilter();
+    const sections = await getSectionsConfig(period.academicYear);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
 
 // PUT /api/settings/sections  (admin) - replace full map
-router.put('/sections', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/sections', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const sections = await saveSectionsConfig(req.body?.sections);
+    const period = req.getPeriodFilter();
+    const sections = await saveSectionsConfig(req.body?.sections, period.academicYear);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
 
 // POST /api/settings/sections/:year  (admin) - add section
-router.post('/sections/:year', requireAuth, requireAdmin, async (req, res, next) => {
+router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const year = String(req.params.year || '').trim();
     const section = String(req.body?.section || '').trim();
+    const period = req.getPeriodFilter();
     if (!year || !section) {
       return sendError(res, 'year and section are required.', 400);
     }
-    const current = await getSectionsConfig();
+    const current = await getSectionsConfig(period.academicYear);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     if (current[year].includes(section)) {
       return sendConflict(res, 'Section already exists.');
     }
     current[year].push(section);
-    const sections = await saveSectionsConfig(current);
+    const sections = await saveSectionsConfig(current, period.academicYear);
     sendCreated(res, sections);
   } catch (err) { next(err); }
 });
 
 // PUT /api/settings/sections/:year/:section  (admin) - rename section
-router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, res, next) => {
+router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
+    const period = req.getPeriodFilter();
+    const currentAcYear = period.academicYear;
     const year = String(req.params.year || '').trim();
     const oldSection = String(req.params.section || '').trim();
     const newSection = String(req.body?.newSection || '').trim();
     if (!year || !oldSection || !newSection) {
       return sendError(res, 'year, section and newSection are required.', 400);
     }
-    const current = await getSectionsConfig();
+    const current = await getSectionsConfig(currentAcYear);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     const idx = current[year].indexOf(oldSection);
     if (idx < 0) return sendNotFound(res, 'Section not found.');
@@ -162,14 +184,10 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
     }
     session.startTransaction();
     current[year][idx] = newSection;
-    await Workload.updateMany({ year, section: oldSection }, { $set: { section: newSection } }, { session });
-    await CourseAllocation.updateMany({ year, section: oldSection }, { $set: { section: newSection } }, { session });
+    await Workload.updateMany({ year, section: oldSection, academicYear: currentAcYear }, { $set: { section: newSection } }, { session });
+    await CourseAllocation.updateMany({ year, section: oldSection, academicYear: currentAcYear }, { $set: { section: newSection } }, { session });
     const normalized = normalizeSections(current);
-    await Setting.findOneAndUpdate(
-      { key: 'sections_config' },
-      { value: JSON.stringify(normalized) },
-      { upsert: true, new: true, session }
-    );
+    await saveSectionsConfig(normalized, currentAcYear, session);
     await session.commitTransaction();
     const sections = normalized;
     sendSuccess(res, sections, 200);
@@ -182,26 +200,24 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, async (req, re
 });
 
 // DELETE /api/settings/sections/:year/:section  (admin)
-router.delete('/sections/:year/:section', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/sections/:year/:section', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
+    const period = req.getPeriodFilter();
+    const currentAcYear = period.academicYear;
     const year = String(req.params.year || '').trim();
     const section = String(req.params.section || '').trim();
-    const current = await getSectionsConfig();
+    const current = await getSectionsConfig(currentAcYear);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     current[year] = current[year].filter(s => s !== section);
     if (current[year].length === 0) {
       return sendError(res, 'At least one section must remain for a year.', 400);
     }
     session.startTransaction();
-    await Workload.deleteMany({ year, section }, { session });
-    await CourseAllocation.deleteMany({ year, section }, { session });
+    await Workload.deleteMany({ year, section, academicYear: currentAcYear }, { session });
+    await CourseAllocation.deleteMany({ year, section, academicYear: currentAcYear }, { session });
     const normalized = normalizeSections(current);
-    await Setting.findOneAndUpdate(
-      { key: 'sections_config' },
-      { value: JSON.stringify(normalized) },
-      { upsert: true, new: true, session }
-    );
+    await saveSectionsConfig(normalized, currentAcYear, session);
     await session.commitTransaction();
     const sections = normalized;
     sendSuccess(res, sections, 200);

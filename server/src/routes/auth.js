@@ -16,6 +16,7 @@ const crypto   = require('crypto');
 const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const User     = require('../models/User');
+const Faculty  = require('../models/Faculty');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const TokenBlacklist = require('../models/TokenBlacklist');
 const { signToken } = require('../utils/jwt');
@@ -80,6 +81,13 @@ router.post(
       if (!user) {
         logger.warn('Login attempted for non-existent user', { empId: id, ip: getIp(req) });
         return sendError(res, 'Employee ID not found.', 401);
+      }
+
+      // Check if faculty is relieved
+      const facultyData = await Faculty.findOne({ empId: id }).lean();
+      if (facultyData?.relievingDate && new Date(facultyData.relievingDate) < new Date()) {
+        logger.warn('Login attempt on relieved account', { empId: id, relievingDate: facultyData.relievingDate });
+        return sendError(res, 'Account deactivated (Faculty Relieved).', 403);
       }
 
       // H-7: Check if account is locked before validating password

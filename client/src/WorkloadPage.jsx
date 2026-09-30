@@ -180,12 +180,12 @@ const WorkloadPage = ({ submissions }) => {
 
   const loadSectionsConfig = useCallback(async () => {
     try {
-      const cfg = await fetchSectionsConfig();
+      const cfg = await fetchSectionsConfig(selectedAcademicYear);
       setSectionsConfig(cfg);
     } catch {
       setSectionsConfig(DEFAULT_SECTIONS);
     }
-  }, []);
+  }, [selectedAcademicYear]);
 
   // ── Fetch Faculty Course Preferences when empId changes ──
   useEffect(() => {
@@ -435,7 +435,7 @@ const WorkloadPage = ({ submissions }) => {
     const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
     const section = window.prompt(`Add section for ${targetYear}:`);
     if (!section) return;
-    const data = await addSectionConfig(targetYear, section.trim());
+    const data = await addSectionConfig(targetYear, section.trim(), selectedAcademicYear);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not add section.'}`);
     await loadSectionsConfig();
     if (targetYear === form.year) setForm(p => ({ ...p, section: section.trim() }));
@@ -447,7 +447,7 @@ const WorkloadPage = ({ submissions }) => {
     const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
     const next = window.prompt(`Rename section '${form.section}'`, form.section);
     if (!next || next.trim() === form.section) return;
-    const data = await renameSectionConfig(targetYear, form.section, next.trim());
+    const data = await renameSectionConfig(targetYear, form.section, next.trim(), selectedAcademicYear);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not edit section.'}`);
     await loadSectionsConfig();
     setForm(p => ({ ...p, section: next.trim() }));
@@ -458,9 +458,9 @@ const WorkloadPage = ({ submissions }) => {
     if (!form.section || form.section === '__other__') return;
     const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
     if (!window.confirm(`Delete section '${form.section}' for ${targetYear}?`)) return;
-    const data = await deleteSectionConfig(targetYear, form.section);
+    const data = await deleteSectionConfig(targetYear, form.section, selectedAcademicYear);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not delete section.'}`);
-    const refreshed = await fetchSectionsConfig().catch(() => DEFAULT_SECTIONS);
+    const refreshed = await fetchSectionsConfig(selectedAcademicYear).catch(() => DEFAULT_SECTIONS);
     setSectionsConfig(refreshed);
     const nextList = refreshed[targetYear] || YEAR_SECTIONS[targetYear] || ['1'];
     setForm(p => ({ ...p, section: nextList[0] || '1' }));

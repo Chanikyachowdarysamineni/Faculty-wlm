@@ -90,7 +90,7 @@ router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, requireAcademi
     if (!doc) {
       // If no submission exists, return an empty submission template
       // This allows faculty to view and create preferences even if they haven't submitted yet
-      const member = await Faculty.findOne({ empId: req.params.empId.trim() }).lean();
+      const member = await Faculty.findOne({ empId: String(req.params.empId || '').trim() }).lean();
       
       logger.info('Empty submission returned (not yet submitted)', { empId: req.params.empId, userId: req.user.id });
       

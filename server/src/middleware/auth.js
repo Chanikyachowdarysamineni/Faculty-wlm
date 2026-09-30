@@ -32,9 +32,16 @@ const requireAuth = async (req, res, next) => {
 
     // B-8 FIX: Verify tokenVersion to instantly invalidate old tokens on password change
     // This requires a DB lookup, but it's necessary for secure token revocation
-    const user = await User.findOne({ empId: req.user.id }).select('tokenVersion');
+    const user = await User.findOne({ empId: req.user.id }).select('tokenVersion relievingDate');
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+    
+    if (user.relievingDate) {
+      const relievingDate = new Date(user.relievingDate);
+      if (new Date() > relievingDate) {
+        return res.status(403).json({ success: false, message: 'Account deactivated: relieving date has passed.' });
+      }
     }
     const tokenVer = req.user.tokenVersion || 0;
     if (tokenVer < (user.tokenVersion || 0)) {

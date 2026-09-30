@@ -312,12 +312,12 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const loadSectionsConfig = useCallback(async () => {
     try {
-      const cfg = await fetchSectionsConfig();
+      const cfg = await fetchSectionsConfig(selectedAcademicYear);
       setSectionsConfig(cfg);
     } catch {
       setSectionsConfig(DEFAULT_SECTIONS);
     }
-  }, []);
+  }, [selectedAcademicYear]);
 
   useEffect(() => { loadSectionsConfig(); }, [loadSectionsConfig]);
 

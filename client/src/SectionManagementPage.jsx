@@ -17,10 +17,12 @@ import {
   deleteSectionConfig,
 } from './utils/sectionsApi';
 import { useSharedData } from './DataContext';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 
 // const YEARS removed
 
 const SectionManagementPage = () => {
+  const { selectedAcademicYear } = useAcademicPeriod();
   const [activeYear, setActiveYear] = useState('I');
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   const [loading, setLoading] = useState(false);
@@ -34,15 +36,10 @@ const SectionManagementPage = () => {
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
 
-  // Load sections config on mount
-  useEffect(() => {
-    loadSectionsConfig();
-  }, []);
-
   const loadSectionsConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const cfg = await fetchSectionsConfig();
+      const cfg = await fetchSectionsConfig(selectedAcademicYear);
       setSectionsConfig(cfg);
       setSharedSectionsConfig(cfg);
       setMessage('');
@@ -54,7 +51,12 @@ const SectionManagementPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [setSharedSectionsConfig]);
+  }, [setSharedSectionsConfig, selectedAcademicYear]);
+
+  // Load sections config on mount
+  useEffect(() => {
+    loadSectionsConfig();
+  }, [loadSectionsConfig]);
 
   const showMessage = (text, type = 'success') => {
     setMessage(text);
@@ -71,7 +73,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await addSectionConfig(activeYear, newSectionInput.trim());
+      const result = await addSectionConfig(activeYear, newSectionInput.trim(), selectedAcademicYear);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to add section');
         showMessage(errMsg, 'error');
@@ -97,7 +99,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await renameSectionConfig(activeYear, oldName, editingValue.trim());
+      const result = await renameSectionConfig(activeYear, oldName, editingValue.trim(), selectedAcademicYear);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to rename section');
         showMessage(errMsg, 'error');
@@ -122,7 +124,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await deleteSectionConfig(activeYear, section);
+      const result = await deleteSectionConfig(activeYear, section, selectedAcademicYear);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to delete section');
         showMessage(errMsg, 'error');
