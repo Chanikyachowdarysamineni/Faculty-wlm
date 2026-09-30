@@ -42,11 +42,16 @@ const normalizeSections = (raw) => {
   return base;
 };
 
-const getSectionsConfig = async (academicYear) => {
-  if (!academicYear) return DEFAULT_SECTIONS;
-  const key = `sections_config_${academicYear}`;
+const getSectionsConfig = async (academicYear, semester) => {
+  if (!academicYear || !semester) return DEFAULT_SECTIONS;
+  const key = `sections_config_${academicYear}_${semester}`;
   let doc = await Setting.findOne({ key }).lean();
   
+  if (!doc?.value) {
+    const fallbackKey = `sections_config_${academicYear}`;
+    doc = await Setting.findOne({ key: fallbackKey }).lean();
+  }
+
   if (!doc?.value) {
     const fallbackDoc = await Setting.findOne({ key: 'sections_config' }).lean();
     if (fallbackDoc?.value) {
@@ -66,9 +71,9 @@ const getSectionsConfig = async (academicYear) => {
   }
 };
 
-const saveSectionsConfig = async (sections, academicYear, session = null) => {
-  if (!academicYear) return DEFAULT_SECTIONS;
-  const key = `sections_config_${academicYear}`;
+const saveSectionsConfig = async (sections, academicYear, semester, session = null) => {
+  if (!academicYear || !semester) return DEFAULT_SECTIONS;
+  const key = `sections_config_${academicYear}_${semester}`;
   const normalized = normalizeSections(sections);
   await Setting.findOneAndUpdate(
     { key },
@@ -129,7 +134,7 @@ router.put(
 router.get('/sections', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     const period = req.getPeriodFilter();
-    const sections = await getSectionsConfig(period.academicYear);
+    const sections = await getSectionsConfig(period.academicYear, period.semester);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
@@ -138,7 +143,7 @@ router.get('/sections', requireAuth, requireAcademicPeriod, async (req, res, nex
 router.put('/sections', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const period = req.getPeriodFilter();
-    const sections = await saveSectionsConfig(req.body?.sections, period.academicYear);
+    const sections = await saveSectionsConfig(req.body?.sections, period.academicYear, period.semester);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
@@ -152,13 +157,13 @@ router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod,
     if (!year || !section) {
       return sendError(res, 'year and section are required.', 400);
     }
-    const current = await getSectionsConfig(period.academicYear);
+    const current = await getSectionsConfig(period.academicYear, period.semester);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     if (current[year].includes(section)) {
       return sendConflict(res, 'Section already exists.');
     }
     current[year].push(section);
-    const sections = await saveSectionsConfig(current, period.academicYear);
+    const sections = await saveSectionsConfig(current, period.academicYear, period.semester);
     sendCreated(res, sections);
   } catch (err) { next(err); }
 });
@@ -169,13 +174,14 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademi
   try {
     const period = req.getPeriodFilter();
     const currentAcYear = period.academicYear;
+    const currentSem = period.semester;
     const year = String(req.params.year || '').trim();
     const oldSection = String(req.params.section || '').trim();
     const newSection = String(req.body?.newSection || '').trim();
     if (!year || !oldSection || !newSection) {
       return sendError(res, 'year, section and newSection are required.', 400);
     }
-    const current = await getSectionsConfig(currentAcYear);
+    const current = await getSectionsConfig(currentAcYear, currentSem);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     const idx = current[year].indexOf(oldSection);
     if (idx < 0) return sendNotFound(res, 'Section not found.');
@@ -184,10 +190,10 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademi
     }
     session.startTransaction();
     current[year][idx] = newSection;
-    await Workload.updateMany({ year, section: oldSection, academicYear: currentAcYear }, { $set: { section: newSection } }, { session });
-    await CourseAllocation.updateMany({ year, section: oldSection, academicYear: currentAcYear }, { $set: { section: newSection } }, { session });
+    await Workload.updateMany({ year, section: oldSection, academicYear: currentAcYear, semester: currentSem }, { $set: { section: newSection } }, { session });
+    await CourseAllocation.updateMany({ year, section: oldSection, academicYear: currentAcYear, semester: currentSem }, { $set: { section: newSection } }, { session });
     const normalized = normalizeSections(current);
-    await saveSectionsConfig(normalized, currentAcYear, session);
+    await saveSectionsConfig(normalized, currentAcYear, currentSem, session);
     await session.commitTransaction();
     const sections = normalized;
     sendSuccess(res, sections, 200);
@@ -205,19 +211,20 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, requireAcad
   try {
     const period = req.getPeriodFilter();
     const currentAcYear = period.academicYear;
+    const currentSem = period.semester;
     const year = String(req.params.year || '').trim();
     const section = String(req.params.section || '').trim();
-    const current = await getSectionsConfig(currentAcYear);
+    const current = await getSectionsConfig(currentAcYear, currentSem);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     current[year] = current[year].filter(s => s !== section);
     if (current[year].length === 0) {
       return sendError(res, 'At least one section must remain for a year.', 400);
     }
     session.startTransaction();
-    await Workload.deleteMany({ year, section, academicYear: currentAcYear }, { session });
-    await CourseAllocation.deleteMany({ year, section, academicYear: currentAcYear }, { session });
+    await Workload.deleteMany({ year, section, academicYear: currentAcYear, semester: currentSem }, { session });
+    await CourseAllocation.deleteMany({ year, section, academicYear: currentAcYear, semester: currentSem }, { session });
     const normalized = normalizeSections(current);
-    await saveSectionsConfig(normalized, currentAcYear, session);
+    await saveSectionsConfig(normalized, currentAcYear, currentSem, session);
     await session.commitTransaction();
     const sections = normalized;
     sendSuccess(res, sections, 200);

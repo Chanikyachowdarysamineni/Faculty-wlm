@@ -180,12 +180,12 @@ const WorkloadPage = ({ submissions }) => {
 
   const loadSectionsConfig = useCallback(async () => {
     try {
-      const cfg = await fetchSectionsConfig(selectedAcademicYear);
+      const cfg = await fetchSectionsConfig(selectedAcademicYear, selectedSemester);
       setSectionsConfig(cfg);
     } catch {
       setSectionsConfig(DEFAULT_SECTIONS);
     }
-  }, [selectedAcademicYear]);
+  }, [selectedAcademicYear, selectedSemester]);
 
   // ── Fetch Faculty Course Preferences when empId changes ──
   useEffect(() => {
@@ -460,7 +460,7 @@ const WorkloadPage = ({ submissions }) => {
     if (!window.confirm(`Delete section '${form.section}' for ${targetYear}?`)) return;
     const data = await deleteSectionConfig(targetYear, form.section, selectedAcademicYear);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not delete section.'}`);
-    const refreshed = await fetchSectionsConfig(selectedAcademicYear).catch(() => DEFAULT_SECTIONS);
+    const refreshed = await fetchSectionsConfig(selectedAcademicYear, selectedSemester).catch(() => DEFAULT_SECTIONS);
     setSectionsConfig(refreshed);
     const nextList = refreshed[targetYear] || YEAR_SECTIONS[targetYear] || ['1'];
     setForm(p => ({ ...p, section: nextList[0] || '1' }));

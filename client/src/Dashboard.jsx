@@ -579,14 +579,14 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
   const fetchSections = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      const sections = await fetchSectionsConfig(selectedAcademicYear);
+      const sections = await fetchSectionsConfig(selectedAcademicYear, selectedSemester);
       setSectionsConfig(sections || null);
       setSharedSectionsConfig(sections || null);
     } catch {
       setSectionsConfig(null);
       setSharedSectionsConfig(null);
     }
-  }, [isAdmin, setSharedSectionsConfig, selectedAcademicYear]);
+  }, [isAdmin, setSharedSectionsConfig, selectedAcademicYear, selectedSemester]);
 
   useEffect(() => {
     if (!isAdmin || activeNav !== 'dashboard') return;

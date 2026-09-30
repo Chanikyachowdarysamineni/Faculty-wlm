@@ -22,7 +22,7 @@ import { useAcademicPeriod } from './AcademicPeriodContext';
 // const YEARS removed
 
 const SectionManagementPage = () => {
-  const { selectedAcademicYear } = useAcademicPeriod();
+  const { selectedAcademicYear, selectedSemester } = useAcademicPeriod();
   const [activeYear, setActiveYear] = useState('I');
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,7 @@ const SectionManagementPage = () => {
   const loadSectionsConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const cfg = await fetchSectionsConfig(selectedAcademicYear);
+      const cfg = await fetchSectionsConfig(selectedAcademicYear, selectedSemester);
       setSectionsConfig(cfg);
       setSharedSectionsConfig(cfg);
       setMessage('');
@@ -51,7 +51,7 @@ const SectionManagementPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [setSharedSectionsConfig, selectedAcademicYear]);
+  }, [setSharedSectionsConfig, selectedAcademicYear, selectedSemester]);
 
   // Load sections config on mount
   useEffect(() => {
@@ -73,7 +73,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await addSectionConfig(activeYear, newSectionInput.trim(), selectedAcademicYear);
+      const result = await addSectionConfig(activeYear, newSectionInput.trim(), selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to add section');
         showMessage(errMsg, 'error');
@@ -99,7 +99,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await renameSectionConfig(activeYear, oldName, editingValue.trim(), selectedAcademicYear);
+      const result = await renameSectionConfig(activeYear, oldName, editingValue.trim(), selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to rename section');
         showMessage(errMsg, 'error');
@@ -124,7 +124,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await deleteSectionConfig(activeYear, section, selectedAcademicYear);
+      const result = await deleteSectionConfig(activeYear, section, selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to delete section');
         showMessage(errMsg, 'error');
