@@ -133,8 +133,9 @@ router.put(
 // GET /api/settings/sections
 router.get('/sections', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const period = req.getPeriodFilter();
-    const sections = await getSectionsConfig(period.academicYear, period.semester);
+    const acYear = req.academicPeriod?.academicYear?.name || req.query.academicYear;
+    const sem = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester;
+    const sections = await getSectionsConfig(acYear, sem);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
@@ -142,8 +143,9 @@ router.get('/sections', requireAuth, requireAcademicPeriod, async (req, res, nex
 // PUT /api/settings/sections  (admin) - replace full map
 router.put('/sections', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const period = req.getPeriodFilter();
-    const sections = await saveSectionsConfig(req.body?.sections, period.academicYear, period.semester);
+    const acYear = req.academicPeriod?.academicYear?.name || req.body.academicYear;
+    const sem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester;
+    const sections = await saveSectionsConfig(req.body?.sections, acYear, sem);
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
@@ -153,17 +155,18 @@ router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod,
   try {
     const year = String(req.params.year || '').trim();
     const section = String(req.body?.section || '').trim();
-    const period = req.getPeriodFilter();
+    const acYear = req.academicPeriod?.academicYear?.name || req.body.academicYear || req.query.academicYear;
+    const sem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester || req.query.semester;
     if (!year || !section) {
       return sendError(res, 'year and section are required.', 400);
     }
-    const current = await getSectionsConfig(period.academicYear, period.semester);
+    const current = await getSectionsConfig(acYear, sem);
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     if (current[year].includes(section)) {
       return sendConflict(res, 'Section already exists.');
     }
     current[year].push(section);
-    const sections = await saveSectionsConfig(current, period.academicYear, period.semester);
+    const sections = await saveSectionsConfig(current, acYear, sem);
     sendCreated(res, sections);
   } catch (err) { next(err); }
 });
@@ -172,9 +175,8 @@ router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod,
 router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
-    const period = req.getPeriodFilter();
-    const currentAcYear = period.academicYear;
-    const currentSem = period.semester;
+    const currentAcYear = req.academicPeriod?.academicYear?.name || req.body.academicYear || req.query.academicYear;
+    const currentSem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester || req.query.semester;
     const year = String(req.params.year || '').trim();
     const oldSection = String(req.params.section || '').trim();
     const newSection = String(req.body?.newSection || '').trim();
@@ -209,9 +211,8 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademi
 router.delete('/sections/:year/:section', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
-    const period = req.getPeriodFilter();
-    const currentAcYear = period.academicYear;
-    const currentSem = period.semester;
+    const currentAcYear = req.academicPeriod?.academicYear?.name || req.body.academicYear || req.query.academicYear;
+    const currentSem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester || req.query.semester;
     const year = String(req.params.year || '').trim();
     const section = String(req.params.section || '').trim();
     const current = await getSectionsConfig(currentAcYear, currentSem);

@@ -42,8 +42,17 @@ const normalizeYear = (year) => {
   return trimmed; // Return as-is if not recognized
 };
 
-const getSectionsConfig = async () => {
-  const doc = await Setting.findOne({ key: 'sections_config' }).lean();
+const getSectionsConfig = async (academicYear, semester) => {
+  let doc = null;
+  if (academicYear && semester) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  }
+  if (!doc && academicYear) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  }
+  if (!doc) {
+    doc = await Setting.findOne({ key: 'sections_config' }).lean();
+  }
   if (!doc?.value) return DEFAULT_SECTIONS;
   try {
     const parsed = JSON.parse(doc.value);
@@ -315,7 +324,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     if (!courseId || !year || !section)
       return sendError(res, 'courseId, year, section required.', 400);
 
-    const sectionCfg = await getSectionsConfig();
+    const sectionCfg = await getSectionsConfig(yearName, semType);
     if (sectionCfg[year] && !sectionCfg[year].includes(section)) {
       return res.status(400).json({ success: false, message: `Invalid section '${section}' for year '${year}'.` });
     }

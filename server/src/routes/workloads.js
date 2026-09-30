@@ -105,8 +105,17 @@ const DEFAULT_SECTIONS = {
   I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))]
 };
 
-const getSectionsConfig = async () => {
-  const doc = await Setting.findOne({ key: 'sections_config' }).lean();
+const getSectionsConfig = async (academicYear, semester) => {
+  let doc = null;
+  if (academicYear && semester) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  }
+  if (!doc && academicYear) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  }
+  if (!doc) {
+    doc = await Setting.findOne({ key: 'sections_config' }).lean();
+  }
   if (!doc?.value) return DEFAULT_SECTIONS;
   try {
     const parsed = JSON.parse(doc.value);
@@ -116,8 +125,8 @@ const getSectionsConfig = async () => {
   }
 };
 
-const ensureValidSection = async (year, section) => {
-  const cfg = await getSectionsConfig();
+const ensureValidSection = async (year, section, acYear, sem) => {
+  const cfg = await getSectionsConfig(acYear, sem);
   if (!cfg[year]) return { ok: true };
   if (!cfg[year].includes(section)) {
     return { ok: false, message: `Invalid section '${section}' for year '${year}'.` };
@@ -1078,7 +1087,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         return sendError(res, 'Missing or null required field in workload assignment.', 400);
       }
 
-      const sectionCheck = await ensureValidSection(normalizedYear, normalizedSection);
+      const sectionCheck = await ensureValidSection(normalizedYear, normalizedSection, yearName, semType);
       if (!sectionCheck.ok) {
         logger.warn('Invalid section for workload', { year: normalizedYear, section: normalizedSection, userId: req.user.id });
         return sendError(res, sectionCheck.message, 400);
@@ -1109,7 +1118,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           section: normalizedSection,
           facultyRole: 'Main Faculty',
           allocationStatus: 'ALLOCATED',
-          empId: { $ne: '' }
+          empId: { $ne: '' },
+          academicYear: yearName,
+          semester: semType,
         }).session(session).lean();
         if (existingMain) {
           logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1124,7 +1135,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           section: normalizedSection,
           facultyRole: 'TA',
           allocationStatus: 'ALLOCATED',
-          empId: { $ne: '' }
+          empId: { $ne: '' },
+          academicYear: yearName,
+          semester: semType,
         }).session(session).lean();
         if (existingTa) {
           logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1174,6 +1187,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         section: normalizedSection,
         facultyRole: normalizedFacultyRole,
         allocationStatus: 'ALLOCATED',
+        academicYear: yearName,
+        semester: semType,
       }).session(session).lean();
       if (duplicateRole) {
         logger.warn('Duplicate role assignment', { empId: effectiveMember.empId, courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, role: normalizedFacultyRole, userId: req.user.id });
@@ -1259,7 +1274,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
 );
 
 // PUT /api/workloads/:id  (admin)
-router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req, res, next) => {
+router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkloadUpdate, async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -1293,7 +1308,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
     const nextYear = String(updates.year ?? current.year).trim();
     const nextSection = String(updates.section ?? current.section).trim();
 
-    const sectionCheck = await ensureValidSection(nextYear, nextSection);
+    const yearName = req.academicPeriod?.academicYear?.name;
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType;
+    const sectionCheck = await ensureValidSection(nextYear, nextSection, yearName, semType);
     if (!sectionCheck.ok) {
       logger.warn('Invalid section in workload update', { id: req.params.id, year: nextYear, section: nextSection, userId: req.user.id });
       return sendError(res, sectionCheck.message, 400);
@@ -1388,7 +1405,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
         section: nextSection,
         facultyRole: 'Main Faculty',
         allocationStatus: 'ALLOCATED',
-        empId: { $ne: '' }
+        empId: { $ne: '' },
+        academicYear: yearName,
+        semester: semType,
       }).session(session).lean();
       if (duplicateMain) {
         logger.warn('Main faculty duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
@@ -1411,7 +1430,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
             facultyRole: 'TA',
             allocationRow: nextAllocationRow,
             allocationStatus: 'ALLOCATED',
-            empId: { $ne: '' }
+            empId: { $ne: '' },
+            academicYear: yearName,
+            semester: semType,
           }).session(session).lean();
           if (duplicateTa) {
             logger.warn('TA duplicate in update', { id: req.params.id, courseId: effectiveCourse.courseId, year: nextYear, section: nextSection, userId: req.user.id });
@@ -1427,7 +1448,9 @@ router.put('/:id', requireAuth, requireAdmin, validateWorkloadUpdate, async (req
       year: nextYear,
       section: nextSection,
       facultyRole: normalizedFacultyRole,
-      allocationStatus: 'ALLOCATED'
+      allocationStatus: 'ALLOCATED',
+      academicYear: yearName,
+      semester: semType,
     }).session(session).lean();
 
     if (duplicateRole) {

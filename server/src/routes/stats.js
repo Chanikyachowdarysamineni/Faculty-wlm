@@ -25,8 +25,17 @@ const DEFAULT_SECTIONS = {
   I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))]
 };
 
-const getSectionsConfig = async () => {
-  const doc = await Setting.findOne({ key: 'sections_config' }).lean();
+const getSectionsConfig = async (academicYear, semester) => {
+  let doc = null;
+  if (academicYear && semester) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  }
+  if (!doc && academicYear) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  }
+  if (!doc) {
+    doc = await Setting.findOne({ key: 'sections_config' }).lean();
+  }
   if (!doc?.value) return DEFAULT_SECTIONS;
   try {
     const parsed = JSON.parse(doc.value);

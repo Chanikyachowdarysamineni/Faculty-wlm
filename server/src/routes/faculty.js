@@ -267,7 +267,7 @@ router.get('/:empId', requireAuth, requireAcademicPeriod, async (req, res, next)
 // POST /api/faculty  (admin)
 router.post(
   '/',
-  requireAuth, requireAdmin,
+  requireAuth, requireAdmin, requireAcademicPeriod,
   validateFacultyCreate,
   async (req, res, next) => {
     const mongoose = require('mongoose');
@@ -357,8 +357,12 @@ router.post(
 
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
 
-      // Initialize semester capacity records
-      await recalculateCapacity(doc.empId, { updatedBy: req.user.id });
+      // Initialize semester capacity records for current academic year context
+      await recalculateCapacity(doc.empId, { 
+        updatedBy: req.user.id,
+        academicYear: req.academicPeriod?.academicYear?.name,
+        semester: req.academicPeriod?.academicYearSemester?.semesterType
+      });
 
       // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
       // For now, the creation is successful.
@@ -404,7 +408,7 @@ router.put(
 // PUT /api/faculty/:empId  (admin or self)
 router.put(
   '/:empId',
-  requireAuth, requireSelfOrAdmin,
+  requireAuth, requireSelfOrAdmin, requireAcademicPeriod,
   validateFacultyUpdate,
   async (req, res, next) => {
     const session = await mongoose.startSession();
@@ -571,7 +575,11 @@ router.put(
       session.endSession();
 
       // Update semester capacities
-      await recalculateCapacity(allowedUpdates.empId || empId, { updatedBy: req.user.id, semester: semester || null });
+      await recalculateCapacity(allowedUpdates.empId || empId, { 
+        updatedBy: req.user.id, 
+        semester: semester || req.academicPeriod?.academicYearSemester?.semesterType,
+        academicYear: req.academicPeriod?.academicYear?.name
+      });
 
       // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
       const refreshSemester = req.query.semester;
