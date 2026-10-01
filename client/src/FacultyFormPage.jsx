@@ -38,6 +38,9 @@ const FacultyFormPage = ({
   const [designations, setLocalDesignations] = useState([]);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
+  // Admin faculty search
+  const [facultySearch, setFacultySearch] = useState('');
+  const [showFacultyDropdown, setShowFacultyDropdown] = useState(false);
   const [submissionFilter, setSubmissionFilter] = useState('all'); // 'all' | 'submitted' | 'notsubmitted'
 
   // Sync shared context data to local state
@@ -81,6 +84,29 @@ const FacultyFormPage = ({
     if (!date) return 'Not synced yet';
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, []);
+
+  // Close faculty search dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.ff-faculty-search-wrap')) {
+        setShowFacultyDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filtered faculty list for search dropdown
+  const facultySearchResults = useMemo(() => {
+    const q = facultySearch.trim().toLowerCase();
+    if (!q) return facultyList.slice(0, 8); // Show first 8 when no query
+    return facultyList.filter(f =>
+      f.empId.toLowerCase().includes(q) ||
+      f.name.toLowerCase().includes(q) ||
+      (f.designation || '').toLowerCase().includes(q) ||
+      (f.mobile || '').includes(q)
+    ).slice(0, 12);
+  }, [facultySearch, facultyList]);
 
   // Load master data (faculty and courses) from API
   const loadMasterData = useCallback(async ({ silent = true } = {}) => {
@@ -133,6 +159,7 @@ const FacultyFormPage = ({
   
   const startNewSubmission = (empId) => {
     setEmpIdInput(empId);
+    setFacultySearch('');
     setPrefs(['', '', '', '', '']);
     setEditMode(false);
     setEditTargetId(null);
@@ -141,8 +168,10 @@ const FacultyFormPage = ({
     setActiveTab('form');
   };
 
-    const startEditing = (sub) => {
+  const startEditing = (sub) => {
+    const fac = facultyList.find(f => f.empId === sub.empId);
     setEmpIdInput(sub.empId);
+    setFacultySearch(fac ? `[${fac.empId}] ${fac.name}` : sub.empId);
     const filled = [...sub.prefs.map(String)];
     while (filled.length < 5) filled.push('');
     setPrefs(filled);
@@ -484,55 +513,119 @@ const cancelEdit = () => {
                 <div className="ff-id-row">
                   <div className="ff-fg">
                     <label>Employee ID *</label>
-                    {editMode ? (
-                      <input value={empIdInput} readOnly className="ff-readonly" />
-                    ) : (
-                      <>
-                        <select
-                          value={empIdInput}
+                  {/* Admin faculty search input */}
+                  {editMode ? (
+                    <input value={empIdInput} readOnly className="ff-readonly" />
+                  ) : (
+                    <div className="ff-faculty-search-wrap">
+                      <div className="ff-faculty-search-input-wrap">
+                        <svg className="ff-faculty-search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input
+                          className="ff-faculty-search-input"
+                          placeholder="Search by ID, name, designation, mobile…"
+                          value={facultySearch}
                           disabled={!formEnabled && !editMode}
-                          className="ff-empid-select"
+                          autoComplete="off"
                           onChange={e => {
-                            setEmpIdInput(e.target.value);
+                            setFacultySearch(e.target.value);
+                            setShowFacultyDropdown(true);
+                            if (!e.target.value.trim()) {
+                              setEmpIdInput('');
+                            }
+                          }}
+                          onFocus={() => setShowFacultyDropdown(true)}
+                        />
+                        {facultySearch && (
+                          <button className="ff-faculty-search-clear" onClick={() => {
+                            setFacultySearch('');
+                            setEmpIdInput('');
                             setEmpOtherDetails({ empId: '', name: '', designation: '' });
                             setErrors({});
-                            setSubmitted(false);
-                          }}
-                        >
-                          <option value="">— Select Employee —</option>
-                          {[...facultyList]
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(f => (
-                              <option key={f.empId} value={f.empId}>
-                                [{f.empId}] {f.name}
-                              </option>
-                            ))}
-                          <option value="__other__">Other…</option>
-                        </select>
-                        {empIdInput === '__other__' && (
-                          <div className="ff-other-group">
-                            <input className="ff-other-input" placeholder="Employee ID *"
-                              disabled={!formEnabled && !editMode}
-                              value={empOtherDetails.empId}
-                              onChange={e => setEmpOtherDetails(p => ({ ...p, empId: e.target.value }))} />
-                            <input className="ff-other-input" placeholder="Employee Name"
-                              disabled={!formEnabled && !editMode}
-                              value={empOtherDetails.name}
-                              onChange={e => setEmpOtherDetails(p => ({ ...p, name: e.target.value }))} />
-                            <select className="ff-other-input"
-                              disabled={!formEnabled && !editMode}
-                              value={empOtherDetails.designation}
-                              onChange={e => setEmpOtherDetails(p => ({ ...p, designation: e.target.value }))}
-                            >
-                              <option value="">Select Designation</option>
-                              {designations.map(d => (
-                                <option key={d} value={d}>{d}</option>
-                              ))}
-                            </select>
-                          </div>
+                            setShowFacultyDropdown(false);
+                          }}>✕</button>
                         )}
-                      </>
-                    )}
+                      </div>
+                      {showFacultyDropdown && (
+                        <div className="ff-faculty-dropdown">
+                          {facultySearchResults.length === 0 ? (
+                            <>
+                              <div className="ff-faculty-dropdown-empty">No faculty found for "{facultySearch}"</div>
+                              <div
+                                className="ff-faculty-dropdown-item ff-faculty-other"
+                                onMouseDown={() => {
+                                  setEmpIdInput('__other__');
+                                  setFacultySearch('Other…');
+                                  setShowFacultyDropdown(false);
+                                  setErrors({});
+                                }}
+                              >
+                                <span className="ff-faculty-item-id">+</span>
+                                <span className="ff-faculty-item-name">Enter manually (Other)</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {facultySearchResults.map(f => (
+                                <div
+                                  key={f.empId}
+                                  className={`ff-faculty-dropdown-item${empIdInput === f.empId ? ' ff-faculty-item-selected' : ''}`}
+                                  onMouseDown={() => {
+                                    setEmpIdInput(f.empId);
+                                    setFacultySearch(`[${f.empId}] ${f.name}`);
+                                    setShowFacultyDropdown(false);
+                                    setEmpOtherDetails({ empId: '', name: '', designation: '' });
+                                    setErrors({});
+                                    setSubmitted(false);
+                                  }}
+                                >
+                                  <span className="ff-faculty-item-id">{f.empId}</span>
+                                  <span className="ff-faculty-item-name">{f.name}</span>
+                                  <span className="ff-faculty-item-desig">{f.designation}</span>
+                                  {f.mobile && <span className="ff-faculty-item-mobile">📱 {f.mobile}</span>}
+                                </div>
+                              ))}
+                              <div
+                                className="ff-faculty-dropdown-item ff-faculty-other"
+                                onMouseDown={() => {
+                                  setEmpIdInput('__other__');
+                                  setFacultySearch('Other…');
+                                  setShowFacultyDropdown(false);
+                                  setErrors({});
+                                }}
+                              >
+                                <span className="ff-faculty-item-id">+</span>
+                                <span className="ff-faculty-item-name">Enter manually (Other)</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {empIdInput === '__other__' && (
+                    <div className="ff-other-group">
+                      <input className="ff-other-input" placeholder="Employee ID *"
+                        disabled={!formEnabled && !editMode}
+                        value={empOtherDetails.empId}
+                        onChange={e => setEmpOtherDetails(p => ({ ...p, empId: e.target.value }))} />
+                      <input className="ff-other-input" placeholder="Employee Name"
+                        disabled={!formEnabled && !editMode}
+                        value={empOtherDetails.name}
+                        onChange={e => setEmpOtherDetails(p => ({ ...p, name: e.target.value }))} />
+                      <select className="ff-other-input"
+                        disabled={!formEnabled && !editMode}
+                        value={empOtherDetails.designation}
+                        onChange={e => setEmpOtherDetails(p => ({ ...p, designation: e.target.value }))}
+                      >
+                        <option value="">Select Designation</option>
+                        {designations.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                     {errors.empId && <span className="ff-err">{errors.empId}</span>}
                   </div>
                   <div className="ff-fg">
