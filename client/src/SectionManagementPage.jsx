@@ -149,6 +149,22 @@ const SectionManagementPage = () => {
       <h1 className="smp-heading">Section Management</h1>
       <p className="smp-subheading">Centralized section management for all academic years</p>
 
+      {/* Statistics Cards - moved to top */}
+      <div className="smp-stats">
+        <div className="smp-stat-item">
+          <span className="smp-stat-label">Total Sections (All Years):</span>
+          <span className="smp-stat-value">
+            {Object.values(sectionsConfig).reduce((sum, secs) => sum + (Array.isArray(secs) ? secs.length : 0), 0)}
+          </span>
+        </div>
+        {Object.entries(sectionsConfig).map(([year, secs]) => (
+          <div key={year} className="smp-stat-item">
+            <span className="smp-stat-label">{`${year} Year`}:</span>
+            <span className="smp-stat-value">{Array.isArray(secs) ? secs.length : 0}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Message/Alert */}
       {message && (
         <div className={`smp-alert smp-alert-${messageType}`}>
@@ -281,23 +297,7 @@ const SectionManagementPage = () => {
         )}
       </div>
 
-      {/* Statistics Footer */}
-      <div className="smp-footer">
-        <div className="smp-stats">
-          <div className="smp-stat-item">
-            <span className="smp-stat-label">Total Sections (All Years):</span>
-            <span className="smp-stat-value">
-              {Object.values(sectionsConfig).reduce((sum, secs) => sum + (Array.isArray(secs) ? secs.length : 0), 0)}
-            </span>
-          </div>
-          {Object.entries(sectionsConfig).map(([year, secs]) => (
-            <div key={year} className="smp-stat-item">
-              <span className="smp-stat-label">{`${year} Year`}:</span>
-              <span className="smp-stat-value">{Array.isArray(secs) ? secs.length : 0}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+
     </main>
   );
 };

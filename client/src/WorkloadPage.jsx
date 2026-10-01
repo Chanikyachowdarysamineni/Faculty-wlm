@@ -1121,24 +1121,7 @@ const WorkloadPage = ({ submissions }) => {
         </div>
       )}
 
-      {/* ── Quick employee filter chips ── */}
-      {empOptions.length > 0 && (
-        <div className="wl-emp-filters">
-          <button
-            className={`wl-emp-chip${!filterEmp ? ' active' : ''}`}
-            onClick={() => setFilterEmp('')}
-          >All</button>
-          {empOptions.map(w => (
-            <button
-              key={w.empId}
-              className={`wl-emp-chip${filterEmp === w.empId ? ' active' : ''}`}
-              onClick={() => setFilterEmp(filterEmp === w.empId ? '' : w.empId)}
-            >
-              {w.empId} — {w.empName.split(' ').slice(0, 2).join(' ')}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* ── Quick employee filter chips removed ── */}
 
       {/* ════════════════════════════════════════════════
           ASSIGNMENT FORM (inline card below topbar)

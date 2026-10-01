@@ -874,17 +874,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
           ),
           color: '#6b74e8', bg: '#eef0fd',
         },
-        {
-          label: 'Overloaded Faculty',
-          value: dashboardComputed.overloadedFaculty ? dashboardComputed.overloadedFaculty.length : 0,
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-          ),
-          color: '#ec4899', bg: '#fce7f3',
-        },
+
         {
           label: 'Pending Faculty',
           value: dashboardComputed.availableFaculty ? dashboardComputed.availableFaculty.length : 0,
@@ -1488,31 +1478,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                                 );
                               })()}
 
-                              {/* ── Features Section (Restored to previous layout) ── */}
-                              {isAdmin && (
-                                <>
-                                  <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', marginBottom: '16px', marginTop: '32px' }}>Features</h2>
-                                  <div className="dash-table-card" style={{ marginTop: '0' }}>
-                                    <div className="dash-table-header">
-                                      <span className="dash-table-title">Overloaded Faculty Alert</span>
-                                      <span className="dash-table-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                                        {dashboardComputed.overloadedFaculty.length} overloaded
-                                      </span>
-                                    </div>
-                                    <div className="dash-alert-wrap">
-                                      {dashboardComputed.overloadedFaculty.length === 0
-                                        ? <span className="dash-muted">No overloads detected.</span>
-                                        : dashboardComputed.overloadedFaculty.map(f => (
-                                          <div key={f.empId} className="dash-overload-row">
-                                            <strong>{f.name} ({f.empId})</strong>
-                                            <span>Assigned {f.assignedHours}h / Capacity {f.capacity}h</span>
-                                            <span className="dash-over-badge">Excess {Math.abs(f.pendingLoad).toFixed(2)}h</span>
-                                          </div>
-                                        ))}
-                                    </div>
-                                  </div>
-                                </>
-                              )}
+                              {/* ── Features Section (Overloaded Faculty removed) ── */}
 
                               {/* Overloaded Faculty Modal */}
                               {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} selectedSemester={selectedSemester} />}
