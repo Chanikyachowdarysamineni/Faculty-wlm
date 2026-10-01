@@ -272,12 +272,7 @@ const validateCourseCreate = [
   body('courseType')
     .trim()
     .notEmpty()
-    .withMessage('Course type is required')
-    .custom(async (value) => {
-      const valid = await isValidConfigValue('courseTypes', value);
-      if (!valid) throw new Error('Invalid course type.');
-      return true;
-    }),
+    .withMessage('Course type is required'),
 
   body('subjectCode')
     .trim()

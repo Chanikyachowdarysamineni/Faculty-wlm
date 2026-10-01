@@ -103,7 +103,39 @@ const CoursesPage = ({ isAdmin = true }) => {
 
 
 
-  // ── Course CRUD handlers ──
+  // ── Export handler ──
+  const handleExport = (format) => {
+    const columns = [
+      { header: 'S.No.',       key: 'sno' },
+      { header: 'Course Code', key: 'subjectCode' },
+      { header: 'Course Name', key: 'subjectName' },
+      { header: 'Short Name',  key: 'shortName' },
+      { header: 'Course Type', key: 'courseType' },
+      { header: 'L',           key: 'L' },
+      { header: 'T',           key: 'T' },
+      { header: 'P',           key: 'P' },
+      { header: 'C',           key: 'C' },
+    ];
+    const rows = filteredCourses.map((c, i) => ({
+      sno: i + 1,
+      subjectCode: c.subjectCode,
+      subjectName: c.subjectName,
+      shortName: c.shortName,
+      courseType: c.courseType,
+      L: c.L,
+      T: c.T,
+      P: c.P,
+      C: c.C,
+    }));
+    const fileName = 'courses_' + activeProgram + '_' + activeYear + '_' + Date.now();
+    if (format === 'csv') {
+      exportAsCSV({ fileName, columns, rows });
+    } else {
+      exportAsExcel({ fileName, columns, rows });
+    }
+  };
+
+    // ── Course CRUD handlers ──
   const openAddCourse = () => {
     setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear });
     setEditCourse(null);
@@ -427,12 +459,6 @@ const CoursesPage = ({ isAdmin = true }) => {
                   <label>Short Name *</label>
                   <input value={courseForm.shortName} placeholder="e.g. OS"
                     onChange={e => setCourseForm(p => ({ ...p, shortName: e.target.value }))} />
-                </div>
-                {/* Allowed Sections */}
-                <div className="cp-fg">
-                  <label>Allowed Sections</label>
-                  <input value={courseForm.allowedSectionsText || ''} placeholder="e.g. 1, 2, 3 (Leave empty for all)"
-                    onChange={e => setCourseForm(p => ({ ...p, allowedSectionsText: e.target.value }))} />
                 </div>
                 {/* Subject Name — full width */}
                 <div className="cp-fg cp-fg-full">
