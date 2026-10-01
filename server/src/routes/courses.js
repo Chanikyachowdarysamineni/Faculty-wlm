@@ -160,7 +160,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 // POST /api/courses  (admin)
 router.post(
   '/',
-  requireAuth, requireAdmin,
+  requireAuth, requireAdmin, requireAcademicPeriod,
   validateCourseCreate,
   async (req, res, next) => {
     try {
@@ -173,11 +173,23 @@ router.post(
       const maxDoc = await Course.findOne().sort({ courseId: -1 }).lean();
       const courseId = await nextSequence('course_id', Number(maxDoc?.courseId || 0));
 
-      const { program, courseType, year = '', subjectCode, subjectName, shortName, L, T, P, C, department, academicYear, semester, regulations, status, description, allocationStatus, allowedSections = [] } = req.body;
+      const { program, courseType, year = '', subjectCode, subjectName, shortName, L, T, P, C, department, academicYear: bodyAcademicYear, semester: bodySemester, regulations, status, description, allocationStatus, allowedSections = [] } = req.body;
       const normalizedSubjectCode = String(subjectCode || '').trim().toUpperCase();
       const normalizedYear = normalizeYear(year);
 
-      const courseTypeNormalized = String(courseType || '').trim();
+      // Resolve academicYear and semester from request body first, then fall back to academic period context
+      const resolvedAcademicYear =
+        String(bodyAcademicYear || '').trim() ||
+        req.academicPeriod?.academicYear?.name ||
+        '';
+      const resolvedSemester =
+        String(bodySemester || '').trim() ||
+        req.academicPeriod?.academicYearSemester?.semesterType ||
+        'ODD'; // default to ODD if nothing resolved
+
+      if (!resolvedAcademicYear) {
+        return res.status(400).json({ success: false, message: 'Academic year context is required. Please select an academic year.' });
+      }
 
       const doc = await Course.create({
         courseId,
@@ -192,8 +204,8 @@ router.post(
         P: Number(P) || 0,
         C: Number(C) || 0,
         department: String(department || 'CSE').trim(),
-        academicYear: String(academicYear || '').trim(),
-        semester: String(semester || '').trim(),
+        academicYear: resolvedAcademicYear,
+        semester: resolvedSemester,
         regulations: String(regulations || '').trim(),
         status: status || 'Active',
         description: String(description || '').trim(),

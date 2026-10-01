@@ -184,8 +184,14 @@ const CoursesPage = ({ isAdmin = true }) => {
         ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean) 
         : []};
     try {
+      // Build URL with academic period query params so the server middleware can resolve context
+      const qp = new URLSearchParams();
+      if (selectedAcademicYearId) qp.set('academicYearId', selectedAcademicYearId);
+      if (selectedSemester) qp.set('semester', selectedSemester);
+      const qs = qp.toString() ? `?${qp.toString()}` : '';
+      const baseUrl = editCourse ? `${API}/deva/courses/${editCourse.id}` : `${API}/deva/courses`;
       const res = await fetch(
-        editCourse ? `${API}/deva/courses/${editCourse.id}` : `${API}/deva/courses`,
+        `${baseUrl}${qs}`,
         {
           method: editCourse ? 'PUT' : 'POST',
           headers: authHeaders(),
