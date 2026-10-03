@@ -17,6 +17,7 @@ const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound,
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { getFacultyWorkloadSummary, getFacultyWorkloadReport } = require('../utils/workloadHours');
+const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 
 const router = express.Router();
 
@@ -256,7 +257,8 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     const semStart = req.academicPeriod?.academicYear?.startDate;
     const semEnd = req.academicPeriod?.academicYear?.endDate;
-    const facultyMatch = { isDeleted: { $ne: true } };
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
     if (semEnd) {
       facultyMatch.$or = [
         { joiningDate: { $lte: new Date(semEnd) } },
@@ -378,7 +380,8 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
 
     const semStart = req.academicPeriod?.academicYear?.startDate;
     const semEnd = req.academicPeriod?.academicYear?.endDate;
-    const facultyMatch = { isDeleted: { $ne: true } };
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
     if (semEnd) {
       facultyMatch.$or = [
         { joiningDate: { $lte: new Date(semEnd) } },

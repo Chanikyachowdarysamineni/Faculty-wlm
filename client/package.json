@@ -8,6 +8,7 @@
     "compression": "^1.7.4",
     "core-js": "3.50.0",
     "date-fns": "^4.1.0",
+    "dompurify": "^3.4.16",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "jsx-ast-utils": "^3.3.5",
@@ -17,7 +18,7 @@
     "postinstall-postinstall": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^6.30.6",
     "react-scripts": "5.0.1",
     "recharts": "^3.8.0",
     "xlsx": "npm:@e965/xlsx@^0.20.0"

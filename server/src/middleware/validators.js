@@ -178,7 +178,9 @@ const validateFacultyCreate = [
     .trim()
     .if((value) => value && String(value).trim() !== '')
     .isEmail()
-    .withMessage('Valid email address is required'),
+    .withMessage('Valid email address is required')
+    .matches(/\.com$/i)
+    .withMessage('Email address must end with .com'),
 
   body('mobile')
     .optional({ checkFalsy: true })
@@ -223,7 +225,9 @@ const validateFacultyUpdate = [
     .trim()
     .if((value) => value && String(value).trim() !== '')
     .isEmail()
-    .withMessage('Valid email address is required'),
+    .withMessage('Valid email address is required')
+    .matches(/\.com$/i)
+    .withMessage('Email address must end with .com'),
 
   body('mobile')
     .optional({ checkFalsy: true })

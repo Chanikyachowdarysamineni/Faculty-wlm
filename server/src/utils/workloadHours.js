@@ -182,8 +182,10 @@ const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, pra
  */
 const getFacultyWorkloadReport = async (year = null, semester = null, periodStart = null, periodEnd = null) => {
   try {
-    // H-8: Exclude soft-deleted faculty from reports
-    const facultyMatch = { isDeleted: { $ne: true } };
+    // H-8: Exclude soft-deleted faculty and admins from reports
+    const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
     if (periodEnd) {
       facultyMatch.$or = [
         { joiningDate: { $lte: new Date(periodEnd) } },

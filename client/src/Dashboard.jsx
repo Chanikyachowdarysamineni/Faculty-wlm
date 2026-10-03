@@ -1481,7 +1481,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                               {/* ── Features Section (Overloaded Faculty removed) ── */}
 
                               {/* Overloaded Faculty Modal */}
-                              {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} selectedSemester={selectedSemester} />}
+                              {isAdmin && <OverloadedFacultyModal isOpen={showOverloadedModal} onClose={() => setShowOverloadedModal(false)} selectedSemester={selectedSemester} selectedAcademicYear={selectedAcademicYear} />}
 
                               {!isAdmin && (
                                 <>

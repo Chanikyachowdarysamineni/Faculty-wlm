@@ -530,3 +530,56 @@ body {
     font-size: 20px;
   }
 }
+
+/* ── OTP Digit Row ─────────────────────────────────── */
+.wlm-otp-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 6px 0 18px;
+}
+
+.wlm-otp-box {
+  width: 46px;
+  height: 54px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  caret-color: #a5b4fc;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  font-family: 'Courier New', monospace;
+}
+
+.wlm-otp-box:focus {
+  border-color: #a5b4fc;
+  background: rgba(165, 180, 252, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+.wlm-otp-box.wlm-otp-filled {
+  border-color: #818cf8;
+  background: rgba(129, 140, 248, 0.2);
+}
+
+/* ── Button loading spinner ─────────────────────────── */
+.wlm-btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wlm-spin 0.7s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes wlm-spin {
+  to { transform: rotate(360deg); }
+}

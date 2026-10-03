@@ -30,7 +30,12 @@ class WebSocketClient {
       backendUrl = `${protocol}//${host}`;
     }
 
-    return `${backendUrl}/ws`;
+    let url = `${backendUrl}/ws`;
+    const token = localStorage.getItem('token');
+    if (token) {
+      url += `?token=${token}`;
+    }
+    return url;
   }
 
   /**

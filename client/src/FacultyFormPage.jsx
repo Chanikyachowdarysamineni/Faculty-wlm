@@ -12,7 +12,10 @@ const FacultyFormPage = ({
   isAdmin, currentUser,
 }) => {
   const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
+  const YEARS_ORDER = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
   
   // Auto-fill empId for logged-in faculty
   const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
@@ -673,19 +676,23 @@ const cancelEdit = () => {
                     }}
                   >
                     <option value="">— Select a course —</option>
-                    {YEARS_ORDER.map(yr => {
-                      const yrCourses = courseList.filter(c => c.program === 'B.Tech' && c.year === yr);
-                      if (!yrCourses.length) return null;
-                      return (
-                        <optgroup key={yr} label={`── B.Tech ${yr} Year ──`}>
-                          {yrCourses.map(c => (
-                            <option key={c.id} value={c.id} disabled={prefs.some((v, j) => j !== i && v === String(c.id))}>
-                              [{c.subjectCode}] {c.subjectName} ({c.shortName})
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
+                    {PROGRAMS.map(prog => (
+                      <React.Fragment key={prog}>
+                        {YEARS_ORDER.map(yr => {
+                          const yrCourses = courseList.filter(c => (c.program === prog || (prog === 'B.Tech' && !c.program)) && c.year === yr);
+                          if (!yrCourses.length) return null;
+                          return (
+                            <optgroup key={`${prog}-${yr}`} label={`── ${prog} ${yr} Year ──`}>
+                              {yrCourses.map(c => (
+                                <option key={c.id} value={c.id} disabled={prefs.some((v, j) => j !== i && v === String(c.id))}>
+                                  [{c.subjectCode}] {c.subjectName} ({c.shortName})
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))}
                     <option value="__other__">Other…</option>
                   </select>
                   {p === '__other__' && (

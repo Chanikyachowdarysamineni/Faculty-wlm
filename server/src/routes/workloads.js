@@ -823,11 +823,11 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, requireAcade
 
 /**
  * PATCH /deva/workloads/bulk-visibility
- * Global toggle: Set visibility for ALL workloads in the database
+ * Global toggle: Set visibility for ALL workloads in the current academic period
  */
-router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, next) => {
+router.patch('/bulk-visibility', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const { isVisible, semester = 'ODD' } = req.body;
+    const { isVisible } = req.body;
 
     if (isVisible === undefined || isVisible === null) {
       logger.warn('Missing isVisible in bulk-visibility request', { userId: req.user.id });
@@ -835,20 +835,17 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
     }
 
     const boolIsVisible = Boolean(isVisible);
-    const semesterFilter = semester;
-    const academicYear = req.query.academicYear || req.body.academicYear;
 
-    // Update workloads for the given semester
-    const result = await Workload.updateMany(
-      { semester: semesterFilter, ...(academicYear && { academicYear }) },
-      { $set: { isVisible: boolIsVisible } }
-    );
+    // Use getPeriodFilter to scope to the correct academic year + semester
+    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+    const filter = { isDeleted: { $ne: true }, ...periodFilter };
 
-
+    const result = await Workload.updateMany(filter, { $set: { isVisible: boolIsVisible } });
 
     logger.info('Global workload visibility toggled', {
       isVisible: boolIsVisible,
       modifiedCount: result.modifiedCount,
+      filter,
       userId: req.user.id
     });
 
@@ -865,29 +862,26 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, async (req, res, nex
 
 /**
  * PATCH /deva/workloads/faculty-visibility/:empId
- * Toggle visibility for ALL workloads of a specific faculty
+ * Toggle visibility for ALL workloads of a specific faculty in the current academic period
  * MUST BE BEFORE /:id/visibility route to match correctly
  */
-router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, async (req, res, next) => {
+router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const { isVisible, semester = 'ODD' } = req.body;
+    const { isVisible } = req.body;
 
-    // Validate input
     if (isVisible === undefined || isVisible === null) {
       logger.warn('Missing isVisible in request', { empId, userId: req.user.id });
       return sendError(res, 'isVisible is required (true/false).', 400);
     }
 
     const boolIsVisible = Boolean(isVisible);
-    const semesterFilter = semester;
-    const academicYear = req.query.academicYear || req.body.academicYear;
 
-    // Update workloads for this faculty and semester
-    const result = await Workload.updateMany(
-      { empId, semester: semesterFilter, ...(academicYear && { academicYear }) },
-      { $set: { isVisible: boolIsVisible } }
-    );
+    // Use getPeriodFilter to scope to the correct academic year + semester
+    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+    const filter = { empId, isDeleted: { $ne: true }, ...periodFilter };
+
+    const result = await Workload.updateMany(filter, { $set: { isVisible: boolIsVisible } });
 
     if (result.matchedCount === 0) {
       logger.warn('No workloads found for faculty visibility toggle', { empId, userId: req.user.id });

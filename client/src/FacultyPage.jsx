@@ -61,7 +61,7 @@ const FacultyPage = () => {
   const refetchFaculty = useCallback(async () => {
     try {
       setSyncing(true);
-      const response = await fetchAllPages('/deva/faculty', {}, { headers: authHeaders() });
+      const response = await fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeaders() });
       if (response?.success && Array.isArray(response.data)) {
         const deduplicated = deduplicateList(response.data);
         setList(deduplicated);

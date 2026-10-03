@@ -13,12 +13,18 @@ const authHeader = () => authJsonHeaders();
 /**
  * Fetch faculty preferences from API
  * @param {string} empId - Employee ID of faculty
+ * @param {string} semester - Current selected semester
+ * @param {string} academicYear - Current selected academic year
  * @returns {Promise} { empId, preferredCourseIds, isSubmitted, submittedAt, notes }
  */
-export const fetchFacultyPreferences = async (empId) => {
+export const fetchFacultyPreferences = async (empId, semester, academicYear) => {
   try {
+    const url = new URL(`${API}/deva/faculty-preferences/${encodeURIComponent(empId)}`);
+    if (semester) url.searchParams.append('semester', semester);
+    if (academicYear) url.searchParams.append('academicYear', academicYear);
+    
     const response = await fetch(
-      `${API}/deva/faculty-preferences/${encodeURIComponent(empId)}`,
+      url.toString(),
       {
         method: 'GET',
         headers: authHeader(),
@@ -148,7 +154,7 @@ export const fetchFilteredCourses = async (empId, year = '', courseType = '') =>
  * @param {string} notes - (optional) Notes/reason for preferences
  * @returns {Promise} { empId, preferredCourseIds, isSubmitted, submittedAt, notes, message }
  */
-export const saveFacultyPreferences = async (empId, preferredCourseIds, notes = '') => {
+export const saveFacultyPreferences = async (empId, preferredCourseIds, notes = '', semester = '', academicYear = '') => {
   try {
     const response = await fetch(`${API}/deva/faculty-preferences`, {
       method: 'POST',
@@ -157,6 +163,8 @@ export const saveFacultyPreferences = async (empId, preferredCourseIds, notes = 
         empId,
         preferredCourseIds,
         notes,
+        semester,
+        academicYear,
       }),
     });
 
@@ -184,7 +192,7 @@ export const saveFacultyPreferences = async (empId, preferredCourseIds, notes = 
  * @param {string} notes - (optional) Updated notes
  * @returns {Promise} { empId, preferredCourseIds, isSubmitted, submittedAt, notes, message }
  */
-export const updateFacultyPreferences = async (empId, preferredCourseIds = null, notes = null) => {
+export const updateFacultyPreferences = async (empId, preferredCourseIds = null, notes = null, semester = '', academicYear = '') => {
   try {
     const body = {};
     if (preferredCourseIds !== null) {
@@ -193,6 +201,8 @@ export const updateFacultyPreferences = async (empId, preferredCourseIds = null,
     if (notes !== null) {
       body.notes = notes;
     }
+    if (semester) body.semester = semester;
+    if (academicYear) body.academicYear = academicYear;
 
     const response = await fetch(
       `${API}/deva/faculty-preferences/${encodeURIComponent(empId)}`,

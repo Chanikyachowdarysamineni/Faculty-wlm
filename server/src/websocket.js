@@ -25,9 +25,36 @@ class WebSocketHandler {
     });
 
     // Handle new connections
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', async (ws, req) => {
       const clientIp = req.socket.remoteAddress;
-      logger.info(`✓ WebSocket client connected from ${clientIp}`);
+      const parsedUrl = url.parse(req.url, true);
+      const token = parsedUrl.query.token;
+
+      if (!token) {
+        logger.warn(`WebSocket connection rejected (No token) from ${clientIp}`);
+        ws.close(1008, 'Authentication required');
+        return;
+      }
+
+      try {
+        const { verifyToken } = require('./utils/jwt');
+        const TokenBlacklist = require('./models/TokenBlacklist');
+        const user = verifyToken(token);
+        
+        const blacklisted = await TokenBlacklist.findOne({ token });
+        if (blacklisted) {
+          logger.warn(`WebSocket connection rejected (Blacklisted token) from ${clientIp}`);
+          ws.close(1008, 'Token blacklisted');
+          return;
+        }
+        ws.user = user;
+      } catch (error) {
+        logger.warn(`WebSocket connection rejected (Invalid token) from ${clientIp}`);
+        ws.close(1008, 'Invalid or expired token');
+        return;
+      }
+
+      logger.info(`✓ WebSocket client connected from ${clientIp} (User: ${ws.user.id})`);
 
       // Add to clients set
       this.clients.add(ws);

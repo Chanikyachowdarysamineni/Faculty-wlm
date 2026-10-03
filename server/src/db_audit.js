@@ -4,7 +4,7 @@ const CourseAllocation = require('./models/CourseAllocation');
 require('dotenv').config({ path: '../.env' });
 
 async function audit() {
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/faculty_wlm');
+  await mongoose.connect(process.env.MONGO_URI);
   console.log('Connected to MongoDB');
 
   const workloads = await Workload.find({ year: 'II' }).lean();

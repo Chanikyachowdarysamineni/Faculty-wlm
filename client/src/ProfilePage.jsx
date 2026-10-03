@@ -7,7 +7,7 @@ import { useSharedData } from './DataContext';
 
 
 const ProfilePage = ({ user, submissions = [], onLogout }) => {
-  const { faculty: contextFaculty, setFaculty, courses: contextCourses, selectedSemester } = useSharedData();
+  const { faculty: contextFaculty, setFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear } = useSharedData();
   
   const [myWorkloads, setMyWorkloads] = useState([]);
   const [facultyList, setFacultyList] = useState([]);
@@ -26,10 +26,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     }
   }, [contextFaculty, contextCourses]);
 
-  // Change password state
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwMsg, setPwMsg] = useState({ text: '', ok: false });
+
 
   // Edit profile state
   const [editMode, setEditMode] = useState(false);
@@ -48,10 +45,15 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     if (!user?.id) return;
     if (withLoader) setLoading(true);
     setApiError('');
+    
+    // Clear old data immediately to prevent stale cross-semester leakage
+    if (withLoader) setMyWorkloads([]);
 
     try {
       const headers = authHeaders();
-      const workloadParams = user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true ? { semester: selectedSemester } : { empId: String(user.id), semester: selectedSemester };
+      const workloadParams = user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true 
+        ? { semester: selectedSemester, academicYear: selectedAcademicYear } 
+        : { empId: String(user.id), semester: selectedSemester, academicYear: selectedAcademicYear };
       const [wData] = await Promise.all([
         fetchAllPages('/deva/workloads', workloadParams, { headers }),
       ]);
@@ -71,7 +73,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [authHeaders, user, selectedSemester]);
+  }, [authHeaders, user, selectedSemester, selectedAcademicYear]);
 
   // Refetch current user's faculty data from backend
   const refetchFacultyProfile = useCallback(async () => {
@@ -135,8 +137,8 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   const openEditMode = useCallback(() => {
     if (profile) {
       setEditForm({
-        mobile: profile.mobile || '',
-        email: profile.email || '',
+        mobile: profile.mobile === 'N/A' ? '' : (profile.mobile || ''),
+        email: profile.email === 'N/A' ? '' : (profile.email || ''),
       });
       setEditMsg({ text: '', ok: false });
       setEditMode(true);
@@ -158,14 +160,10 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     setEditMsg({ text: '', ok: false });
 
     try {
-      // Only send non-empty fields
-      const payload = {};
-      Object.entries(editForm).forEach(([key, value]) => {
-        const trimmedValue = String(value).trim();
-        if (trimmedValue !== '') {
-          payload[key] = trimmedValue;
-        }
-      });
+      const payload = {
+        mobile: String(editForm.mobile).trim(),
+        email: String(editForm.email).trim(),
+      };
 
 
 
@@ -506,148 +504,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
           )}
         </section>
 
-        {/* ── Change Password ─────────────────────────── */}
-        <section className="pp-section">
-          <h2 className="pp-sec-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            Change Password
-          </h2>
-          
-          {pwMsg.text && (
-            <div style={{
-              marginBottom: '16px',
-              padding: '12px 14px',
-              borderRadius: '6px',
-              background: pwMsg.ok ? '#dcfce7' : '#fee2e2',
-              color: pwMsg.ok ? '#166534' : '#991b1b',
-              fontSize: '14px',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span>{pwMsg.ok ? '✓' : '⚠'}</span>
-              {pwMsg.text}
-            </div>
-          )}
 
-          <div className="pp-detail-grid" style={{ maxWidth: 480 }}>
-            <div className="pp-fg cp-fg-full">
-              <label className="pp-dc-label">Current Password</label>
-              <input
-                type="password"
-                className="cp-input"
-                value={pwForm.currentPassword}
-                onChange={e => setPwForm(p => ({ ...p, currentPassword: e.target.value }))}
-                autoComplete="current-password"
-                placeholder="Enter your current password"
-                disabled={pwSaving}
-              />
-            </div>
-            <div className="pp-fg cp-fg-full">
-              <label className="pp-dc-label">New Password</label>
-              <input
-                type="password"
-                className="cp-input"
-                value={pwForm.newPassword}
-                onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))}
-                autoComplete="new-password"
-                placeholder="Enter a new password (min 8 characters)"
-                disabled={pwSaving}
-              />
-              <span style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                Must be at least 8 characters
-              </span>
-            </div>
-            <div className="pp-fg cp-fg-full">
-              <label className="pp-dc-label">Confirm New Password</label>
-              <input
-                type="password"
-                className="cp-input"
-                value={pwForm.confirmPassword}
-                onChange={e => setPwForm(p => ({ ...p, confirmPassword: e.target.value }))}
-                autoComplete="new-password"
-                placeholder="Re-enter your new password"
-                disabled={pwSaving}
-              />
-              {pwForm.newPassword && pwForm.confirmPassword && pwForm.newPassword !== pwForm.confirmPassword && (
-                <span style={{ fontSize: '12px', color: '#dc2626', marginTop: '4px' }}>
-                  Passwords do not match
-                </span>
-              )}
-              {pwForm.newPassword && pwForm.confirmPassword && pwForm.newPassword === pwForm.confirmPassword && (
-                <span style={{ fontSize: '12px', color: '#16a34a', marginTop: '4px' }}>
-                  ✓ Passwords match
-                </span>
-              )}
-            </div>
-          </div>
-          
-          <button
-            className="cp-btn cp-btn-save"
-            style={{ marginTop: 16 }}
-            disabled={pwSaving || !pwForm.currentPassword || !pwForm.newPassword || !pwForm.confirmPassword || pwForm.newPassword !== pwForm.confirmPassword || pwForm.newPassword.length < 8}
-            onClick={async () => {
-              setPwMsg({ text: '', ok: false });
-              
-              if (!pwForm.currentPassword || !pwForm.newPassword) {
-                setPwMsg({ text: 'Please fill in all password fields.', ok: false });
-                return;
-              }
-              if (pwForm.newPassword !== pwForm.confirmPassword) {
-                setPwMsg({ text: 'New passwords do not match.', ok: false });
-                return;
-              }
-              if (pwForm.newPassword.length < 8) {
-                setPwMsg({ text: 'New password must be at least 8 characters.', ok: false });
-                return;
-              }
-              if (pwForm.newPassword === pwForm.currentPassword) {
-                setPwMsg({ text: 'New password must be different from current password.', ok: false });
-                return;
-              }
-
-              setPwSaving(true);
-              try {
-
-                const res = await fetch(`${API}/deva/auth/change-password`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                  body: JSON.stringify({ 
-                    currentPassword: pwForm.currentPassword, 
-                    newPassword: pwForm.newPassword 
-                  }),
-                });
-
-                const data = await res.json();
-
-
-                if (!res.ok || !data.success) {
-                  setPwMsg({ text: data.message || 'Failed to change password. Please check your current password and try again.', ok: false });
-                } else {
-                  setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-                  setPwMsg({ text: 'Password changed successfully! You can now log in with your new password.', ok: true });
-                  
-                  // Clear message after 3 seconds
-                  setTimeout(() => {
-                    setPwMsg({ text: '', ok: false });
-                  }, 3000);
-                }
-              } catch (err) {
-                console.error('Password change error:', err);
-                setPwMsg({ text: 'Network error: ' + (err.message || 'Please try again.'), ok: false });
-              } finally {
-                setPwSaving(false);
-              }
-            }}
-          >
-            {pwSaving ? 'Changing Password…' : 'Change Password'}
-          </button>
-        </section>
 
         {/* ── Logout ──────────────────────────────────── */}
         <section className="pp-section">
@@ -776,7 +633,12 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
                     value={editForm.email}
                     onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="Enter your email address"
+                    pattern=".*\.com$"
+                    title="Email must end with .com"
                   />
+                  <span style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'block' }}>
+                    Must end with .com
+                  </span>
                 </div>
               </div>
             </div>

@@ -22,6 +22,8 @@ const requireAcademicPeriod = async (req, res, next) => {
     // If nothing is provided, pass through without scoping
     if (!yearId && !yearName) {
       req.academicPeriod = null;
+      req.getPeriodFilter = () => ({});
+      req.getSemesterId = () => null;
       return next();
     }
 
@@ -39,6 +41,8 @@ const requireAcademicPeriod = async (req, res, next) => {
 
     if (!academicYear) {
       req.academicPeriod = null;
+      req.getPeriodFilter = () => ({});
+      req.getSemesterId = () => null;
       return next();
     }
 
@@ -100,6 +104,8 @@ const requireAcademicPeriod = async (req, res, next) => {
   } catch (error) {
     console.error('requireAcademicPeriod Error:', error);
     req.academicPeriod = null;
+    req.getPeriodFilter = () => ({});
+    req.getSemesterId = () => null;
     next(); // Soft-fail — never block a request
   }
 };

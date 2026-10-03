@@ -33,8 +33,13 @@ const SectionManagementPage = () => {
   const [editingValue, setEditingValue] = useState('');
 
   const { setSectionsConfig: setSharedSectionsConfig, systemConfig } = useSharedData();
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
+  const [activeProgram, setActiveProgram] = useState('B.Tech');
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const displayYears = activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS;
+  const yearKey = activeProgram === 'B.Tech' ? activeYear : `${activeProgram}_${activeYear}`;
 
   const loadSectionsConfig = useCallback(async () => {
     setLoading(true);
@@ -73,7 +78,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await addSectionConfig(activeYear, newSectionInput.trim(), selectedAcademicYear, selectedSemester);
+      const result = await addSectionConfig(yearKey, newSectionInput.trim(), selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to add section');
         showMessage(errMsg, 'error');
@@ -99,7 +104,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await renameSectionConfig(activeYear, oldName, editingValue.trim(), selectedAcademicYear, selectedSemester);
+      const result = await renameSectionConfig(yearKey, oldName, editingValue.trim(), selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to rename section');
         showMessage(errMsg, 'error');
@@ -124,7 +129,7 @@ const SectionManagementPage = () => {
 
     setLoading(true);
     try {
-      const result = await deleteSectionConfig(activeYear, section, selectedAcademicYear, selectedSemester);
+      const result = await deleteSectionConfig(yearKey, section, selectedAcademicYear, selectedSemester);
       if (!result.success) {
         const errMsg = result?.errors?.length ? result.errors.join(' | ') : (result?.message || 'Failed to delete section');
         showMessage(errMsg, 'error');
@@ -142,165 +147,182 @@ const SectionManagementPage = () => {
     }
   };
 
-  const sections = sectionsConfig[activeYear] || [];
+  const sections = sectionsConfig[yearKey] || [];
 
   return (
     <main className="smp-main">
-      <h1 className="smp-heading">Section Management</h1>
-      <p className="smp-subheading">Centralized section management for all academic years</p>
+      {/* Page header */}
+      <div className="smp-page-header">
+        <h1 className="smp-heading">Section Management</h1>
+        <p className="smp-subheading">Centralized section management for all academic years</p>
+      </div>
 
-      {/* Statistics Cards - moved to top */}
-      <div className="smp-stats">
-        <div className="smp-stat-item">
-          <span className="smp-stat-label">Total Sections (All Years):</span>
-          <span className="smp-stat-value">
-            {Object.values(sectionsConfig).reduce((sum, secs) => sum + (Array.isArray(secs) ? secs.length : 0), 0)}
+      <div className="smp-content">
+
+        {/* Program Tabs */}
+        <div className="smp-prog-tabs">
+          {PROGRAMS.map(p => (
+            <button
+              key={p}
+              className={`smp-prog-tab${activeProgram === p ? ' active' : ''}`}
+              onClick={() => { setActiveProgram(p); setActiveYear('I'); }}
+              disabled={loading}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* Alert/Message */}
+        {message && (
+          <div className={`smp-alert smp-alert-${messageType}`}>
+            {message}
+            <button className="smp-alert-close" onClick={() => setMessage('')}>✕</button>
+          </div>
+        )}
+
+        {/* Year Tabs */}
+        <div className="smp-year-tabs">
+          {displayYears.map(year => (
+            <button
+              key={year}
+              className={`smp-year-tab${activeYear === year ? ' active' : ''}`}
+              onClick={() => setActiveYear(year)}
+              disabled={loading}
+            >
+              {`${year} Year`}
+            </button>
+          ))}
+        </div>
+
+        {/* Statistics Cards */}
+        <div className="smp-stats">
+          <div className="smp-stat-item">
+            <span className="smp-stat-label">Total Sections (All Years)</span>
+            <span className="smp-stat-value">
+              {Object.values(sectionsConfig).reduce((sum, secs) => sum + (Array.isArray(secs) ? secs.length : 0), 0)}
+            </span>
+          </div>
+          {Object.entries(sectionsConfig)
+            .filter(([k]) => activeProgram === 'B.Tech' ? !k.includes('_') : k.startsWith(activeProgram))
+            .map(([k, secs]) => {
+              const displayLabel = activeProgram === 'B.Tech' ? `${k} Year` : `${k.split('_')[1]} Year`;
+              return (
+                <div key={k} className="smp-stat-item">
+                  <span className="smp-stat-label">{displayLabel}</span>
+                  <span className="smp-stat-value">{Array.isArray(secs) ? secs.length : 0}</span>
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Current Year Info */}
+        <div className="smp-year-info">
+          <span className="smp-info-label">{`${activeYear} Year — ${activeProgram}`}</span>
+          <span className="smp-info-count">
+            {sections.length} section{sections.length !== 1 ? 's' : ''}
           </span>
         </div>
-        {Object.entries(sectionsConfig).map(([year, secs]) => (
-          <div key={year} className="smp-stat-item">
-            <span className="smp-stat-label">{`${year} Year`}:</span>
-            <span className="smp-stat-value">{Array.isArray(secs) ? secs.length : 0}</span>
-          </div>
-        ))}
-      </div>
 
-      {/* Message/Alert */}
-      {message && (
-        <div className={`smp-alert smp-alert-${messageType}`}>
-          {message}
-          <button 
-            className="smp-alert-close" 
-            onClick={() => setMessage('')}
-          >
-            ✕
-          </button>
+        {/* Add Section Form */}
+        <div className="smp-add-section">
+          <span className="smp-add-label">Add New Section</span>
+          <form onSubmit={handleAddSection} className="smp-form">
+            <input
+              type="text"
+              className="smp-input"
+              placeholder="Enter section name (e.g., A, B, 1, CSE-A)"
+              value={newSectionInput}
+              onChange={(e) => setNewSectionInput(e.target.value)}
+              disabled={loading}
+            />
+            <button
+              type="submit"
+              className="smp-btn smp-btn-add"
+              disabled={loading}
+            >
+              {loading ? 'Adding…' : '+ Add Section'}
+            </button>
+          </form>
         </div>
-      )}
 
-      {/* Year Tabs */}
-      <div className="smp-year-tabs">
-        {YEARS.map(year => (
-          <button
-            key={year}
-            className={`smp-year-tab${activeYear === year ? ' active' : ''}`}
-            onClick={() => setActiveYear(year)}
-            disabled={loading}
-          >
-            {`${year} Year`}
-          </button>
-        ))}
-      </div>
+        {/* Sections Grid */}
+        <div className="smp-sections-grid">
+          {sections.length === 0 ? (
+            <div className="smp-empty-state">
+              <span className="smp-empty-icon">📭</span>
+              <p>No sections configured for {`${activeYear} Year`}</p>
+              <p className="smp-empty-hint">Add a section using the form above</p>
+            </div>
+          ) : (
+            sections.map((section, index) => (
+              <div key={`${section}-${index}`} className="smp-section-card">
+                <div className="smp-card-header">
+                  <span className="smp-card-number">Sec {index + 1}</span>
+                  <div className="smp-card-actions">
+                    <button
+                      className="smp-action-btn smp-action-edit"
+                      onClick={() => {
+                        setEditingSection(section);
+                        setEditingValue(section);
+                      }}
+                      disabled={loading || editingSection !== null}
+                      title="Edit section"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="smp-action-btn smp-action-delete"
+                      onClick={() => handleDeleteSection(section)}
+                      disabled={loading || editingSection !== null}
+                      title="Delete section"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </div>
 
-      {/* Current Year Info */}
-      <div className="smp-year-info">
-        <span className="smp-info-label">
-          {`${activeYear} Year Sections:`}
-        </span>
-        <span className="smp-info-count">
-          {sections.length} section{sections.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Add Section Form */}
-      <div className="smp-add-section">
-        <form onSubmit={handleAddSection} className="smp-form">
-          <input
-            type="text"
-            className="smp-input"
-            placeholder="Enter section name (e.g., A, B, 1, CSE-A)"
-            value={newSectionInput}
-            onChange={(e) => setNewSectionInput(e.target.value)}
-            disabled={loading}
-          />
-          <button 
-            type="submit" 
-            className="smp-btn smp-btn-add" 
-            disabled={loading}
-          >
-            {loading ? 'Adding...' : '+ Add Section'}
-          </button>
-        </form>
-      </div>
-
-      {/* Sections Grid */}
-      <div className="smp-sections-grid">
-        {sections.length === 0 ? (
-          <div className="smp-empty-state">
-            <span className="smp-empty-icon">📭</span>
-            <p>No sections configured for {`${activeYear} Year`}</p>
-            <p className="smp-empty-hint">Add a section using the form above</p>
-          </div>
-        ) : (
-          sections.map((section, index) => (
-            <div key={`${section}-${index}`} className="smp-section-card">
-              <div className="smp-card-header">
-                <span className="smp-card-number">Sec {index + 1}</span>
-                <div className="smp-card-actions">
-                  <button
-                    className="smp-action-btn smp-action-edit"
-                    onClick={() => {
-                      setEditingSection(section);
-                      setEditingValue(section);
-                    }}
-                    disabled={loading || editingSection !== null}
-                    title="Edit section"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className="smp-action-btn smp-action-delete"
-                    onClick={() => handleDeleteSection(section)}
-                    disabled={loading || editingSection !== null}
-                    title="Delete section"
-                  >
-                    🗑
-                  </button>
+                <div className="smp-card-content">
+                  {editingSection === section ? (
+                    <div className="smp-edit-form">
+                      <input
+                        type="text"
+                        className="smp-edit-input"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        disabled={loading}
+                        autoFocus
+                        onBlur={() => {
+                          if (editingValue.trim() && editingValue.trim() !== section) {
+                            handleRenameSection(section);
+                          } else {
+                            setEditingSection(null);
+                            setEditingValue('');
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleRenameSection(section);
+                          } else if (e.key === 'Escape') {
+                            setEditingSection(null);
+                            setEditingValue('');
+                          }
+                        }}
+                      />
+                      <p className="smp-edit-hint">Press Enter to save, Esc to cancel</p>
+                    </div>
+                  ) : (
+                    <span className="smp-section-name">{section}</span>
+                  )}
                 </div>
               </div>
+            ))
+          )}
+        </div>
 
-              <div className="smp-card-content">
-                {editingSection === section ? (
-                  <div className="smp-edit-form">
-                    <input
-                      type="text"
-                      className="smp-edit-input"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      disabled={loading}
-                      autoFocus
-                      onBlur={() => {
-                        if (editingValue.trim() && editingValue.trim() !== section) {
-                          handleRenameSection(section);
-                        } else {
-                          setEditingSection(null);
-                          setEditingValue('');
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleRenameSection(section);
-                        } else if (e.key === 'Escape') {
-                          setEditingSection(null);
-                          setEditingValue('');
-                        }
-                      }}
-                    />
-                    <p className="smp-edit-hint">Press Enter to save, Esc to cancel</p>
-                  </div>
-                ) : (
-                  <span className="smp-section-name">{section}</span>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-
+      </div>{/* end smp-content */}
     </main>
   );
 };
 
 export default SectionManagementPage;
-

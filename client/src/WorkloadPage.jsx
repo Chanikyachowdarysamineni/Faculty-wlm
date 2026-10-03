@@ -199,7 +199,7 @@ const WorkloadPage = ({ submissions }) => {
     const fetchPreferences = async () => {
       setPreferencesLoading(true);
       try {
-        const preferences = await fetchFacultyPreferences(form.empId);
+        const preferences = await fetchFacultyPreferences(form.empId, selectedSemester, selectedAcademicYear);
         setFacultyPreferences(preferences);
 
         // Filter courses based on preferences
@@ -235,7 +235,7 @@ const WorkloadPage = ({ submissions }) => {
     if (withLoader) setLoading(true);
     setFetchError('');
     try {
-      const data = await fetchAllPages('/deva/workloads', {}, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
       if (data.success) {
         const normalized = (data.data || []).map(w => ({
           ...w,
@@ -261,19 +261,7 @@ const WorkloadPage = ({ submissions }) => {
           allocationRow: w.allocationRow ?? null}));
         setWorkloads(normalized);
 
-        // Comprehensive logging for debugging
-        console.log('✅ Workloads Fetched Successfully:', {
-          totalCount: normalized.length,
-          breakdown: {
-            mainFaculty: normalized.filter(w => w.facultyRole === 'Main Faculty').length,
-            supportingFaculty: normalized.filter(w => w.facultyRole === 'Supporting Faculty').length,
-            ta: normalized.filter(w => w.facultyRole === 'TA').length},
-          sectionDistribution: Array.from(
-            new Set(normalized.map(w => w.section))
-          ).map(sec => ({
-            section: sec,
-            count: normalized.filter(w => w.section === sec).length})),
-          sampleData: normalized.slice(0, 5)});
+
       } else {
         setWorkloads([]);
         setFetchError(data.message || 'Could not load workload details.');
@@ -384,7 +372,7 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}`, {
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
         headers: authHeader()
       });
       const data = await res.json();
@@ -686,18 +674,10 @@ const WorkloadPage = ({ submissions }) => {
             : form.courseType}),
         ...(selectedRole === 'TA' && {
           allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1}),
-        allowOverload: form.allowOverload};
+        allowOverload: form.allowOverload,
+        semester: selectedSemester,
+        academicYear: selectedAcademicYear};
 
-      // Debug logging for payload diagnosis
-      console.log('📤 Workload Payload:', {
-        empId: payload.empId,
-        courseId: payload.courseId,
-        year: payload.year,
-        section: payload.section,
-        facultyRole: payload.facultyRole,
-        hours: { L: payload.manualL, T: payload.manualT, P: payload.manualP },
-        isUpdate: !!editTarget,
-        timestamp: new Date().toISOString()});
 
       // Pre-flight validation before sending
       if (!payload.empId || !payload.year || !payload.section) {
@@ -1734,12 +1714,12 @@ const WorkloadPage = ({ submissions }) => {
       )}
 
       {/* ════════════════════════════════════════════════
-          YEAR-WISE TABS (B.Tech only)
+          YEAR-WISE TABS
       ════════════════════════════════════════════════ */}
       {workloads.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
           <div className="wl-year-tabs" style={{ marginBottom: 0 }}>
-            {['All', 'I', 'II', 'III', 'IV'].map(y => {
+            {['All', ...Array.from(new Set(workloads.map(w => w.year).filter(Boolean))).sort()].map(y => {
               const count = y === 'All'
                 ? workloads.length
                 : workloads.filter(w => w.year === y).length;
@@ -1749,7 +1729,7 @@ const WorkloadPage = ({ submissions }) => {
                   className={`wl-year-tab${activeYear === y ? ' wl-year-tab-active' : ''}`}
                   onClick={() => setActiveYear(y)}
                 >
-                  {y === 'All' ? '📋 All Years' : `${y} Year`}
+                  {y === 'All' ? '📋 All Years' : `${y.replace('_', ' ')} Year`}
                   {count > 0 && <span className="wl-year-tab-badge">{count}</span>}
                 </button>
               );

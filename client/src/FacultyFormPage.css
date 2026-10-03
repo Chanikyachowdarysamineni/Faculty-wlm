@@ -11,6 +11,7 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 /* ── Top bar ── */
@@ -21,6 +22,7 @@
   flex-wrap: wrap;
   gap: 14px;
   margin-bottom: 22px;
+  padding: 0 32px;
 }
 .ff-topbar-left  { display: flex; align-items: center; gap: 12px; }
 .ff-topbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -238,6 +240,13 @@
   opacity: .7; transition: opacity .15s;
 }
 .ff-banner-close:hover { opacity: 1; }
+
+/* ── Form panel & sub panel (content wrappers) ── */
+.ff-form-panel,
+.ff-sub-panel {
+  padding: 0 32px;
+  flex: 1;
+}
 
 /* ── Form card ── */
 .ff-card {
@@ -607,6 +616,7 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
+  row-gap: 10px;
 }
 
 .ff-sub-count {
@@ -856,16 +866,24 @@
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
+  .ff-topbar { padding: 0 20px; }
+  .ff-form-panel, .ff-sub-panel { padding: 0 20px; }
   .ff-id-row { grid-template-columns: 1fr 1fr; }
   .ff-filter-buttons { flex-direction: column; }
   .ff-filter-btn { width: 100%; }
 }
 @media (max-width: 600px) {
-  .ff-wrapper { padding: 18px 14px 48px; }
+  .ff-wrapper { padding: 16px 0 48px; }
+  .ff-topbar { padding: 0 14px; }
+  .ff-form-panel, .ff-sub-panel { padding: 0 14px; }
   .ff-id-row  { grid-template-columns: 1fr; }
-  .ff-search  { width: 200px; }
+  .ff-search  { width: 180px; }
   .ff-filter-buttons { flex-direction: column; gap: 8px; }
   .ff-filter-btn { width: 100%; padding: 10px 12px; font-size: 12px; }
+  .ff-topbar-left { gap: 8px; flex-wrap: wrap; }
+  .ff-topbar-right { gap: 8px; flex-wrap: wrap; }
+  .ff-card { padding: 18px 16px; }
+  .ff-sub-topbar { flex-direction: column; align-items: flex-start; }
 }
 
 /* ── Year Selector ── */

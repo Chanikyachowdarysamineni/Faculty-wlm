@@ -29,15 +29,17 @@ const DEFAULT_SECTIONS = {
   III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
   // C-5: Year IV has sections 1–19 + 51–59 (matching workloads.js, stats.js and index.js)
   IV:  [...Array.from({ length: 19 }, (_, i) => String(i + 1)), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
+  'M.Tech_I': ['1'],
+  'M.Tech_II': ['1']
 };
 
 const normalizeSections = (raw) => {
   const base = { ...DEFAULT_SECTIONS };
   if (!raw || typeof raw !== 'object') return base;
-  Object.keys(base).forEach((year) => {
-    const list = Array.isArray(raw[year]) ? raw[year] : base[year];
+  Object.keys(raw).forEach((year) => {
+    const list = Array.isArray(raw[year]) ? raw[year] : base[year] || [];
     const cleaned = Array.from(new Set(list.map(v => String(v).trim()).filter(Boolean)));
-    base[year] = cleaned.length ? cleaned : base[year];
+    base[year] = cleaned.length ? cleaned : (base[year] || []);
   });
   return base;
 };
@@ -161,6 +163,7 @@ router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod,
       return sendError(res, 'year and section are required.', 400);
     }
     const current = await getSectionsConfig(acYear, sem);
+    if (!current[year] && year.includes('M.Tech')) current[year] = [];
     if (!current[year]) return sendError(res, 'Invalid year.', 400);
     if (current[year].includes(section)) {
       return sendConflict(res, 'Section already exists.');

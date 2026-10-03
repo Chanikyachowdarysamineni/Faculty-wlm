@@ -223,9 +223,10 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
-  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'M.Tech') : ['I', 'II', 'III', 'IV'];
-  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
+  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
@@ -254,7 +255,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   }, [contextFaculty, contextCourses]);
 
   // yearKey must be defined before any hook that uses it
-  const yearKey = activeYear;
+  const yearKey = activeProgram === 'B.Tech' ? activeYear : `${activeProgram}_${activeYear}`;
 
   const markSynced = useCallback(() => setLastSyncedAt(new Date()), []);
 
@@ -269,7 +270,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchWorkloads = useCallback(async () => {
     setWorkloadsLoading(true);
     try {
-      const result = await fetchAllPages('/deva/workloads', { year: yearKey }, { headers: authHeader() });
+      const result = await fetchAllPages('/deva/workloads', { year: yearKey, semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
       if (!result.success) {
         setWorkloads([]);
         console.error('Failed to fetch workloads:', result.message);
@@ -322,8 +323,8 @@ const AllocationPage = ({ isAdmin = true }) => {
   useEffect(() => { loadSectionsConfig(); }, [loadSectionsConfig]);
 
   const yearCourses = useMemo(() =>
-    courseList.filter(c => c.program === 'B.Tech' && c.year === activeYear),
-  [activeYear, courseList]);
+    courseList.filter(c => c.program === activeProgram && c.year === activeYear),
+  [activeProgram, activeYear, courseList]);
 
   // Maps `courseId__section__T__rowIdx` / `__P__rowIdx` -> empId for TA workloads with allocationRow
   const taWorkloadMap = useMemo(() => {
@@ -368,7 +369,7 @@ const AllocationPage = ({ isAdmin = true }) => {
           const rowCount = typeRowCount(course, type);
           const assignedEmpIds = Array.from(
             new Set(
-              Array.from({ length: rowCount }, (_, i) => allocMap[`${course.id || course.courseId}__${sec}__${type}__${i}`]).filter(Boolean)
+              Array.from({ length: rowCount }, (_, i) => allocMap[`${course.courseId || course.id}__${sec}__${type}__${i}`]).filter(Boolean)
             )
           );
 
@@ -400,7 +401,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const fetchAllocations = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
     try {
-      const data = await fetchAllPages('/deva/allocations', { year: yearKey }, { headers: authHeader() });
+      const data = await fetchAllPages('/deva/allocations', { year: yearKey, semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
       if (!data.success) {
         return { success: false, message: data.message || 'Could not load allocations.' };
       }
@@ -774,10 +775,10 @@ const AllocationPage = ({ isAdmin = true }) => {
       sections.forEach(sec => {
         const hasData = ['L', 'T', 'P'].some(type =>
           Array.from({ length: typeRowCount(course, type) }, (_, i) =>
-            allocMap[`${course.id || course.courseId}__${sec}__${type}__${i}`]
+            allocMap[`${course.courseId || course.id}__${sec}__${type}__${i}`]
           ).some(Boolean)
         );
-        if (hasData) combos.add(`${course.id || course.courseId}__${sec}`);
+        if (hasData) combos.add(`${course.courseId || course.id}__${sec}`);
       });
     });
 
@@ -847,7 +848,7 @@ const AllocationPage = ({ isAdmin = true }) => {
         ['L', 'T', 'P'].forEach((type) => {
           const rowsCount = typeRowCount(course, type);
           for (let i = 0; i < rowsCount; i += 1) {
-            const key = `${course.id}__${section}__${type}__${i}`;
+            const key = `${course.courseId || course.id}__${section}__${type}__${i}`;
             const empId = allocMap[key] || '';
             if (!empId) {
               skippedCount += 1;
@@ -978,17 +979,17 @@ const AllocationPage = ({ isAdmin = true }) => {
           <button
             key={p}
             className={`ap-prog-tab${activeProgram === p ? ' active' : ''}`}
-            onClick={() => { setActiveProgram(p); if (p === 'B.Tech') setActiveYear('I'); }}
+            onClick={() => { setActiveProgram(p); setActiveYear('I'); }}
           >
             {p}
           </button>
         ))}
       </div>
 
-      {/* -- Year tabs (B.Tech only) -- */}
-      {activeProgram === 'B.Tech' && (
+      {/* -- Year tabs -- */}
+      {true && (
         <div className="ap-year-tabs">
-          {YEARS_BTECH.map(y => (
+          {(activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS).map(y => (
             <button
               key={y}
               className={`ap-year-tab${activeYear === y ? ' active' : ''}`}
@@ -1000,15 +1001,6 @@ const AllocationPage = ({ isAdmin = true }) => {
         </div>
       )}
 
-      {/* -- Section bar -- */}
-      <div className="ap-section-bar">
-        <span className="ap-section-label">Sections:</span>
-        {sections.map((s, i) => (
-          <span key={`${s}-${i}`} className="ap-section-pill">
-            Sec {i + 1} ({s})
-          </span>
-        ))}
-      </div>
 
       {/* -- Legend -- */}
       <div className="ap-legend">
@@ -1067,7 +1059,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
                     rows.push(
                       <tr
-                        key={`${course.id}-${type}-${rowIdx}`}
+                        key={`${course.courseId || course.id}-${type}-${rowIdx}`}
                         className={[
                           'ap-tr',
                           `ap-tr-${type.toLowerCase()}`,
@@ -1106,7 +1098,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
                         {/* Faculty cells — one per section */}
                         {sections.map((section, si) => {
-                          const courseIdVal = course.id || course.courseId;
+                          const courseIdVal = course.courseId || course.id;
                           const empId = allocMap[`${courseIdVal}__${section}__${type}__${rowIdx}`] || '';
                           const auto  = isAutoFilled(courseIdVal, section, type, rowIdx);
                           
@@ -1162,7 +1154,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                 // Spacer row between courses
                 if (ci < yearCourses.length - 1) {
                   rows.push(
-                    <tr key={`spacer-${course.id}`} className="ap-tr-spacer">
+                    <tr key={`spacer-${course.courseId || course.id}`} className="ap-tr-spacer">
                       <td colSpan={colCount} />
                     </tr>
                   );

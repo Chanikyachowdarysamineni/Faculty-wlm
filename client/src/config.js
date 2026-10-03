@@ -57,15 +57,7 @@ const resolveApiBase = () => {
 
 const API = resolveApiBase();
 
-// Debug logging in development
-if (process.env.NODE_ENV === 'development') {
-	console.log('[API Config] Environment:', {
-		NODE_ENV: process.env.NODE_ENV,
-		REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-		REACT_APP_USE_LOCAL_API: process.env.REACT_APP_USE_LOCAL_API,
-		resolvedAPI: API,
-	});
-}
+
 
 export const isSectionsEndpointLikelyUnsupported = () => {
 	try {

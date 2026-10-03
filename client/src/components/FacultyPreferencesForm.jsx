@@ -18,6 +18,8 @@ import {
   clearFacultyPreferences,
 } from '../utils/facultyPreferencesApi';
 
+import { useSharedData } from '../DataContext';
+
 /**
  * FacultyPreferencesForm Component
  * 
@@ -35,6 +37,8 @@ const FacultyPreferencesForm = ({
   isAdmin = false,
   readOnly = false,
 }) => {
+  const { selectedSemester, selectedAcademicYear } = useSharedData();
+
   const [preferences, setPreferences] = useState(null);
   const [selectedCourseIds, setSelectedCourseIds] = useState([]);
   const [notes, setNotes] = useState('');
@@ -54,7 +58,7 @@ const FacultyPreferencesForm = ({
       setLoading(true);
       setError('');
       try {
-        const data = await fetchFacultyPreferences(empId);
+        const data = await fetchFacultyPreferences(empId, selectedSemester, selectedAcademicYear);
         setPreferences(data);
         setSelectedCourseIds(data.preferredCourseIds || []);
         setNotes(data.notes || '');
@@ -122,10 +126,10 @@ const FacultyPreferencesForm = ({
       let result;
       if (preferences?.isSubmitted) {
         // Update existing
-        result = await updateFacultyPreferences(empId, selectedCourseIds, notes);
+        result = await updateFacultyPreferences(empId, selectedCourseIds, notes, selectedSemester, selectedAcademicYear);
       } else {
         // Create new
-        result = await saveFacultyPreferences(empId, selectedCourseIds, notes);
+        result = await saveFacultyPreferences(empId, selectedCourseIds, notes, selectedSemester, selectedAcademicYear);
       }
 
       setPreferences(result);

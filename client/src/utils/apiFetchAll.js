@@ -197,11 +197,16 @@ export const fetchAllPages = async (path, params = {}, options = {}) => {
 
     const chunk = Array.isArray(data.data) ? data.data : [];
     
-    // Deduplicate by document ID to prevent duplicate records from pagination retries
+    // Deduplicate by document ID to prevent duplicate records from pagination retries.
+    // IMPORTANT: Only use _id/id — never empId/courseId as a fallback, because multiple
+    // records can legitimately share the same empId (e.g. many workloads for one faculty).
     for (const record of chunk) {
-      const recordId = record?._id || record?.id || record?.empId || record?.courseId;
+      const recordId = record?._id || record?.id;
       if (recordId && !seenIds.has(String(recordId))) {
         seenIds.add(String(recordId));
+        merged.push(record);
+      } else if (!recordId) {
+        // No stable ID — always include (no dedup possible)
         merged.push(record);
       }
     }

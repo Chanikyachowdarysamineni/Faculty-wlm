@@ -33,8 +33,9 @@ const CoursesPage = ({ isAdmin = true }) => {
     : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
   
   const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
-  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
-  const YEARS_BTECH = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'M.Tech') : ['I', 'II', 'III', 'IV'];
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
+  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'Other') : ['I', 'II', 'III', 'IV'];
   
   // ── Data state ──
   const [courseList, setCourseList]   = useState([]);
@@ -69,7 +70,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   const fetchCourses = useCallback(async () => {
     try {
       setLoadingCourses(true);
-      const data = await fetchAllPages('/deva/courses', {}, { headers: authHeaders() });
+      const data = await fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeaders() });
       if (data?.success && Array.isArray(data.data)) {
         setCourseList(data.data);
         setContextCourses(data.data);
@@ -89,7 +90,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     const q = search.toLowerCase();
     return courseList.filter(c =>
       c.program === activeProgram &&
-      (activeProgram !== 'B.Tech' || c.year === activeYear) &&
+      c.year === activeYear &&
       (!q || c.subjectCode.toLowerCase().includes(q) ||
              c.subjectName.toLowerCase().includes(q) ||
              c.shortName.toLowerCase().includes(q))
@@ -283,7 +284,7 @@ const CoursesPage = ({ isAdmin = true }) => {
 
       {/* ── Program tabs ── B.Tech only */}
       <div className="cp-program-tabs">
-        {PROGRAMS.filter(p => p === 'B.Tech').map(p => (
+        {PROGRAMS.map(p => (
           <button
             key={p}
             className={`cp-prog-tab${activeProgram === p ? ' active' : ''}`}
@@ -298,11 +299,11 @@ const CoursesPage = ({ isAdmin = true }) => {
       </div>
 
       {/* ── B.Tech year tabs ── */}
-      {activeProgram === 'B.Tech' && (
+      {true && (
         <div className="cp-year-tabs">
-          {YEARS_BTECH.map(y => {
+          {(activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS).map(y => {
             const cnt = displayCourses.filter(
-              c => c.program === 'B.Tech' && c.year === y
+              c => c.program === activeProgram && c.year === y
             ).length;
             return (
               <button
@@ -327,7 +328,7 @@ const CoursesPage = ({ isAdmin = true }) => {
             <span className="cp-badge cp-badge-fixed">📌 Fixed Curriculum</span>
             <span className="cp-section-sub">
               {activeProgram}
-              {activeProgram === 'B.Tech' && ` · ${activeYear} Year`}
+              {` · ${activeYear} Year`}
               {` · ${filteredCourses.length} course${filteredCourses.length !== 1 ? 's' : ''}`}
             </span>
           </div>
@@ -360,7 +361,7 @@ const CoursesPage = ({ isAdmin = true }) => {
             </thead>
             <tbody>
               {displayCourses.length === 0 ? (
-                <tr><td colSpan={colCount} className="cp-td-empty">No courses found for {activeProgram === 'B.Tech' ? `${activeYear} Year` : 'M.Tech'}</td></tr>
+                <tr><td colSpan={colCount} className="cp-td-empty">No courses found for {activeProgram} {activeYear} Year</td></tr>
               ) : filteredCourses.map((c, i) => (
                 <tr key={c.id} className={i % 2 === 0 ? 'cp-tr-even' : 'cp-tr-odd'}>
                   <td className="cp-td-sno">{i + 1}</td>
@@ -403,7 +404,7 @@ const CoursesPage = ({ isAdmin = true }) => {
                 <div className="cp-fg">
                   <label>Program</label>
                   <select value={courseForm.program}
-                    onChange={e => setCourseForm(p => ({ ...p, program: e.target.value, year: e.target.value === 'M.Tech' ? '' : p.year }))}>
+                    onChange={e => setCourseForm(p => ({ ...p, program: e.target.value, year: p.year }))}>
                     {PROGRAMS.map(pr => <option key={pr}>{pr}</option>)}
                     <option value="__other__">Other…</option>
                   </select>
@@ -439,10 +440,7 @@ const CoursesPage = ({ isAdmin = true }) => {
                     <label>Year</label>
                     <select value={courseForm.year}
                       onChange={e => setCourseForm(p => ({ ...p, year: e.target.value }))}>
-                      {(courseForm.program === 'M.Tech'
-                        ? YEAR_OPTIONS.filter(o => o.value === 'M.Tech' || o.value === '__other__')
-                        : YEAR_OPTIONS.filter(o => o.value !== 'M.Tech')
-                      ).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      {YEAR_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                     {courseForm.year === '__other__' && (
                       <input

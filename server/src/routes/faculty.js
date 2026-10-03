@@ -27,6 +27,7 @@ const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated,
 const logger = require('../utils/logger');
 const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = require('../middleware/validators');
 const { recalculateCapacity } = require('../utils/capacityUtils');
+const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 
 const router = express.Router();
 
@@ -54,7 +55,12 @@ const toClient = (doc) => ({
 });
 
 const buildFacultyFilter = (matchFilter = {}, periodStart = null, periodEnd = null) => {
-  const baseFilter = { isDeleted: { $ne: true }, ...matchFilter };
+  const hiddenIds = ADMIN_EMPLOYEE_IDS;
+  const baseFilter = {
+    isDeleted: { $ne: true },
+    empId: { $nin: hiddenIds },
+    ...matchFilter
+  };
 
   if (periodEnd) {
     baseFilter.$or = [
@@ -358,7 +364,7 @@ router.post(
       logger.info('Faculty created', { empId: doc.empId, name: doc.name, userId: req.user.id });
 
       // Initialize semester capacity records for current academic year context
-      await recalculateCapacity(doc.empId, { 
+      await recalculateCapacity(doc.empId, {
         updatedBy: req.user.id,
         academicYear: req.academicPeriod?.academicYear?.name,
         semester: req.academicPeriod?.academicYearSemester?.semesterType
@@ -438,13 +444,11 @@ router.put(
       const isSelf = String(req.user.id) === String(empId);
 
       const allowedUpdates = {};
-      if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
-      // S-8 FIX: designation is admin-only — a non-admin cannot forge their own title
-      // and have it propagate to all workload records via Workload.updateMany
       if (mobile !== undefined) allowedUpdates.mobile = String(mobile).trim();
-      if (email !== undefined && String(email).trim()) allowedUpdates.email = String(email).trim();
+      if (email !== undefined) allowedUpdates.email = String(email).trim();
 
       if (isAdmin) {
+        if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
         if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
         if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
         if (slNo !== undefined) allowedUpdates.slNo = Number(slNo);
@@ -487,11 +491,13 @@ router.put(
         const userUpdates = {};
         if (allowedUpdates.name) userUpdates.name = allowedUpdates.name;
         if (allowedUpdates.designation) userUpdates.designation = allowedUpdates.designation;
-        if (allowedUpdates.email) userUpdates.email = allowedUpdates.email;
+        if (allowedUpdates.email !== undefined) userUpdates.email = allowedUpdates.email;
         if (allowedUpdates.empId) userUpdates.empId = allowedUpdates.empId;
-        if (allowedUpdates.mobile && allowedUpdates.mobile.trim()) {
+        if (allowedUpdates.mobile !== undefined) {
           userUpdates.mobile = allowedUpdates.mobile;
-          userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
+          if (allowedUpdates.mobile.trim()) {
+            userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
+          }
         }
 
         if (Object.keys(userUpdates).length > 0) {
@@ -575,8 +581,8 @@ router.put(
       session.endSession();
 
       // Update semester capacities
-      await recalculateCapacity(allowedUpdates.empId || empId, { 
-        updatedBy: req.user.id, 
+      await recalculateCapacity(allowedUpdates.empId || empId, {
+        updatedBy: req.user.id,
         semester: semester || req.academicPeriod?.academicYearSemester?.semesterType,
         academicYear: req.academicPeriod?.academicYear?.name
       });

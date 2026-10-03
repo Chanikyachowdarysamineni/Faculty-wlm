@@ -11,7 +11,10 @@ const MySubmissionsPage = ({
   onUpdateSubmission,
   onNavigateToForm,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
+  
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
   
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
@@ -59,8 +62,8 @@ const MySubmissionsPage = ({
     try {
       const headers = authHeaders();
       const [fReq, cReq] = await Promise.allSettled([
-        fetchAllPages('/deva/faculty', {}, { headers }),
-        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
+        fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
       ]);
       const facultyOk = fReq.status === 'fulfilled';
       const coursesOk = cReq.status === 'fulfilled';
@@ -288,9 +291,9 @@ const MySubmissionsPage = ({
                         }}
                       >
                         <option value="">— Select a course —</option>
-                        {['B.Tech'].map(prog => (
+                        {PROGRAMS.map(prog => (
                           <optgroup key={prog} label={`── ${prog} ──`}>
-                            {courseList.filter(c2 => c2.program === prog).map(c2 => (
+                            {courseList.filter(c2 => c2.program === prog || (prog === 'B.Tech' && !c2.program)).map(c2 => (
                               <option
                                 key={c2.id}
                                 value={c2.id}

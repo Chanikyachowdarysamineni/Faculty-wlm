@@ -1,178 +1,196 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import API from './config';
 import './LoginPage.css';
 
+const OTP_LENGTH = 6;
+
 const LoginPage = ({ onLogin }) => {
-  const [employeeId, setEmployeeId] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showForgot, setShowForgot] = useState(false);
-  const [forgotId, setForgotId] = useState('');
-  const [forgotSubmitted, setForgotSubmitted] = useState(false);
-  const [forgotMessage, setForgotMessage] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [resetMessage, setResetMessage] = useState('');
-  const [resetting, setResetting] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showForceChange, setShowForceChange] = useState(false);
-  const [tempAuthData, setTempAuthData] = useState(null);
-  const [forceNewPassword, setForceNewPassword] = useState('');
-  const [forceConfirmPassword, setForceConfirmPassword] = useState('');
-  const [forceError, setForceError] = useState('');
-  const [forceLoading, setForceLoading] = useState(false);
+  // ── Step: 'id' → 'otp'
+  const [step, setStep] = useState('id');
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (loading) return;
-    setError('');
-    if (!employeeId.trim() || !password.trim()) {
-      setError('Please enter your Employee ID and Password.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const loginUrl = `${API}/deva/auth/login`;
+  // Step 1 — Employee ID
+  const [employeeId, setEmployeeId]   = useState('');
+  const [sendLoading, setSendLoading] = useState(false);
+  const [sendError,   setSendError]   = useState('');
+  const [maskedEmail, setMaskedEmail] = useState('');
 
-      const res  = await fetch(loginUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ employeeId: employeeId.trim(), password }),
-      });
-
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.message || 'Login failed.');
-      } else if (data.data && data.data.token && data.data.user) {
-        // Successfully logged in - store token and user info
-        localStorage.setItem('wlm_token', data.data.token);
-        localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
-
-        onLogin(data.data.user);
-      } else {
-        setError('Invalid login response. Please try again.');
-      }
-    } catch (err) {
-      console.error('[Login] Error:', err.message, err);
-      setError('Could not reach server. Please check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForceChangeSubmit = async (e) => {
-    e.preventDefault();
-    if (forceLoading) return;
-    setForceError('');
-    if (forceNewPassword !== forceConfirmPassword) {
-      setForceError('Passwords do not match.');
-      return;
-    }
-    setForceLoading(true);
-    try {
-      const res = await fetch(`${API}/deva/auth/change-password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tempAuthData.token}`
-        },
-        body: JSON.stringify({ currentPassword: password, newPassword: forceNewPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setForceError(data.message || 'Failed to change password.');
-      } else {
-        // Update token and proceed
-        const newToken = data.data?.token || tempAuthData.token;
-        localStorage.setItem('wlm_token', newToken);
-        
-        // Update user payload
-        const updatedUser = { ...tempAuthData.user, forcePasswordChange: false };
-        localStorage.setItem('wlm_user', JSON.stringify(updatedUser));
-        
-        setShowForceChange(false);
-        onLogin(updatedUser);
-      }
-    } catch (err) {
-      setForceError('Network error while changing password.');
-    } finally {
-      setForceLoading(false);
-    }
-  };
-
-  const handleForgotSubmit = async (e) => {
-    e.preventDefault();
-    if (forgotSubmitted) return;
-    try {
-      const res = await fetch(`${API}/deva/auth/forgot-password`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ employeeId: forgotId.trim() }),
-      });  // No auth required for forgot-password
-      const data = await res.json();
-      setForgotMessage(data.message || 'Reset token has been generated.');
-      setResetToken(data.resetToken || '');
-    } catch { /* server unreachable — still show success UI */ }
-    setForgotSubmitted(true);
-  };
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    if (resetting) return;
-    if (!resetToken.trim() || !newPassword.trim()) {
-      setResetMessage('Please provide reset token and new password.');
-      return;
-    }
-    setResetting(true);
-    setResetMessage('');
-    try {
-      const res = await fetch(`${API}/deva/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: resetToken.trim(), newPassword }),
-      });  // No auth required for reset-password
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setResetMessage(data.message || 'Could not reset password.');
-      } else {
-        setResetMessage('Password reset successful. You can now log in with the new password.');
-      }
-    } catch {
-      setResetMessage('Network error while resetting password.');
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  const closeForgot = () => {
-    setShowForgot(false);
-    setForgotId('');
-    setForgotSubmitted(false);
-    setForgotMessage('');
-    setResetToken('');
-    setNewPassword('');
-    setResetMessage('');
-  };
+  // Step 2 — OTP
+  const [otpDigits, setOtpDigits] = useState(Array(OTP_LENGTH).fill(''));
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError,   setVerifyError]   = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);  // seconds
+  const otpRefs = useRef([]);
+  const cooldownTimer = useRef(null);
 
   const [logoLoaded, setLogoLoaded] = useState(false);
-
   const pub = process.env.PUBLIC_URL || '';
-  const wrapperBg = {
-    backgroundImage: `url('${pub}/image.webp')`,
+
+  // Countdown timer for resend cooldown
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    cooldownTimer.current = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(cooldownTimer.current);
+  }, [resendCooldown]);
+
+  // Focus first OTP box when entering OTP step
+  useEffect(() => {
+    if (step === 'otp' && otpRefs.current[0]) {
+      setTimeout(() => otpRefs.current[0]?.focus(), 80);
+    }
+  }, [step]);
+
+  // ── Step 1: Request OTP
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    if (sendLoading) return;
+    setSendError('');
+    if (!employeeId.trim()) {
+      setSendError('Please enter your Employee ID.');
+      return;
+    }
+    setSendLoading(true);
+    try {
+      const res  = await fetch(`${API}/deva/auth/send-otp`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ employeeId: employeeId.trim() }),
+      });
+      const data = await res.json();
+      if (!data.success && res.status !== 200) {
+        setSendError(data.message || 'Failed to send OTP. Please try again.');
+      } else {
+        setMaskedEmail(data.data?.maskedEmail || '');
+        setOtpDigits(Array(OTP_LENGTH).fill(''));
+        setVerifyError('');
+        setResendCooldown(60); // 60-second cooldown before resend
+        setStep('otp');
+      }
+    } catch {
+      setSendError('Could not reach server. Please check your connection.');
+    } finally {
+      setSendLoading(false);
+    }
   };
+
+  // ── Step 2: Verify OTP
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (verifyLoading) return;
+    const otp = otpDigits.join('');
+    if (otp.length < OTP_LENGTH) {
+      setVerifyError(`Please enter the full ${OTP_LENGTH}-digit OTP.`);
+      return;
+    }
+    setVerifyError('');
+    setVerifyLoading(true);
+    try {
+      const res  = await fetch(`${API}/deva/auth/verify-otp`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ employeeId: employeeId.trim(), otp }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setVerifyError(data.message || 'Invalid OTP. Please try again.');
+        // Clear OTP boxes on error
+        setOtpDigits(Array(OTP_LENGTH).fill(''));
+        setTimeout(() => otpRefs.current[0]?.focus(), 50);
+      } else {
+        localStorage.setItem('wlm_token', data.data.token);
+        localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
+        onLogin(data.data.user);
+      }
+    } catch {
+      setVerifyError('Could not reach server. Please check your connection.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  // ── OTP digit input handler
+  const handleOtpDigit = (index, value) => {
+    const digit = value.replace(/\D/g, '').slice(-1); // only last digit
+    const next  = [...otpDigits];
+    next[index] = digit;
+    setOtpDigits(next);
+    setVerifyError('');
+
+    if (digit && index < OTP_LENGTH - 1) {
+      otpRefs.current[index + 1]?.focus();
+    }
+    // Auto-submit when all filled
+    if (digit && index === OTP_LENGTH - 1 && next.every(d => d !== '')) {
+      setTimeout(() => handleVerifyOtp(null), 50);
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (otpDigits[index]) {
+        const next = [...otpDigits];
+        next[index] = '';
+        setOtpDigits(next);
+      } else if (index > 0) {
+        otpRefs.current[index - 1]?.focus();
+      }
+    }
+    if (e.key === 'ArrowLeft' && index > 0) otpRefs.current[index - 1]?.focus();
+    if (e.key === 'ArrowRight' && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+    if (!pasted) return;
+    const next = Array(OTP_LENGTH).fill('');
+    pasted.split('').forEach((ch, i) => { next[i] = ch; });
+    setOtpDigits(next);
+    const focusIndex = Math.min(pasted.length, OTP_LENGTH - 1);
+    otpRefs.current[focusIndex]?.focus();
+    if (pasted.length === OTP_LENGTH) {
+      setTimeout(() => handleVerifyOtp(null), 50);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || sendLoading) return;
+    setSendError('');
+    setVerifyError('');
+    setSendLoading(true);
+    try {
+      const res  = await fetch(`${API}/deva/auth/send-otp`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ employeeId: employeeId.trim() }),
+      });
+      const data = await res.json();
+      if (!data.success && res.status !== 200) {
+        setVerifyError(data.message || 'Failed to resend OTP.');
+      } else {
+        setMaskedEmail(data.data?.maskedEmail || maskedEmail);
+        setOtpDigits(Array(OTP_LENGTH).fill(''));
+        setResendCooldown(60);
+        setTimeout(() => otpRefs.current[0]?.focus(), 80);
+      }
+    } catch {
+      setVerifyError('Could not reach server.');
+    } finally {
+      setSendLoading(false);
+    }
+  };
+
+  const wrapperBg = { backgroundImage: `url('${pub}/image.webp')` };
 
   return (
     <div className="wlm-wrapper" style={wrapperBg}>
       <div className="wlm-card">
+
         {/* Left Panel */}
         <div className="wlm-left">
-          {/* Decorative shapes */}
           <span className="shape circle-outline top-right" />
           <span className="shape triangle-outline bottom-left" />
           <span className="shape diamond-outline mid-right" />
           <span className="shape circle-sm bottom-right" />
-
           <div className="avatar-container">
             <div className="wlm-logo-wrap">
               <img
@@ -184,7 +202,6 @@ const LoginPage = ({ onLogin }) => {
                 fetchpriority="high"
               />
             </div>
-            {/* Developer credit below logo */}
             <div className="wlm-dev-credit">
               <span className="wlm-dev-label">✦ Developed by ✦</span>
               <a
@@ -200,102 +217,19 @@ const LoginPage = ({ onLogin }) => {
         {/* Right Panel */}
         <div className="wlm-right">
           <div className="wlm-site-name">Faculty Work Load Management</div>
-          <h2 className="wlm-title">Member Login</h2>
 
-          <form className="wlm-form" onSubmit={handleLogin}>
-            {/* Employee ID */}
-            <div className="wlm-input-group">
-              <span className="wlm-input-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </span>
-              <input
-                type="text"
-                placeholder="Employee ID"
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                className="wlm-input"
-                required
-              />
-            </div>
-
-            {/* Password */}
-            <div className="wlm-input-group">
-              <span className="wlm-input-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-              </span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="wlm-input"
-                required
-              />
-              <button
-                type="button"
-                className="wlm-eye-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-              >
-                {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            {/* Login Button */}
-            <button type="submit" className="wlm-login-btn" disabled={loading}>
-              {loading ? 'LOGGING IN…' : 'LOGIN'}
-            </button>
-
-            {/* Inline error */}
-            {error && <p className="wlm-error">{error}</p>}
-          </form>
-
-          {/* Credential hint */}
-          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', textAlign: 'center', margin: '12px 0 0', lineHeight: 1.5 }}>
-            Use your <strong style={{ color: 'rgba(255,255,255,0.9)' }}>Employee ID</strong> &amp; registered{' '}
-            <strong style={{ color: 'rgba(255,255,255,0.9)' }}>mobile number</strong> as password
-          </p>
-
-          <p className="wlm-forgot">
-            Forgot{' '}
-            <button className="wlm-forgot-link" onClick={() => setShowForgot(true)}>
-              Employee ID / Password?
-            </button>
-          </p>
-        </div>
-      </div>
-
-      {/* Forgot Password Modal */}
-      {showForgot && (
-        <div className="wlm-modal-overlay" onClick={closeForgot}>
-          <div className="wlm-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="wlm-modal-close" onClick={closeForgot}>✕</button>
-            <h3 className="wlm-modal-title">Reset Password</h3>
-            <p className="wlm-modal-desc">
-              Enter your Employee ID to receive a password reset link.
-            </p>
-            {!forgotSubmitted ? (
-              <form onSubmit={handleForgotSubmit}>
+          {/* ── STEP 1: Employee ID ── */}
+          {step === 'id' && (
+            <>
+              <h2 className="wlm-title">Member Login</h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginBottom: '20px', lineHeight: 1.5 }}>
+                Enter your <strong style={{ color: '#fff' }}>Employee ID</strong> to receive a one-time password on your registered email.
+              </p>
+              <form className="wlm-form" onSubmit={handleSendOtp}>
                 <div className="wlm-input-group">
                   <span className="wlm-input-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                       <circle cx="12" cy="7" r="4"/>
                     </svg>
@@ -303,99 +237,96 @@ const LoginPage = ({ onLogin }) => {
                   <input
                     type="text"
                     placeholder="Employee ID"
-                    value={forgotId}
-                    onChange={(e) => setForgotId(e.target.value)}
+                    value={employeeId}
+                    onChange={e => setEmployeeId(e.target.value)}
                     className="wlm-input"
                     required
                     autoFocus
+                    autoComplete="username"
                   />
                 </div>
-                <button type="submit" className="wlm-login-btn" style={{ marginTop: '16px', width: '100%' }}>
-                  SEND RESET LINK
-                </button>
-              </form>
-            ) : (
-              <div className="wlm-modal-success">
-                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-                <p>{forgotMessage || <>Reset request submitted for Employee ID <strong>{forgotId}</strong>.</>}</p>
-                <form onSubmit={handleResetPassword} style={{ marginTop: '12px', width: '100%' }}>
-                  <div className="wlm-input-group" style={{ marginBottom: '10px' }}>
-                    <input
-                      type="text"
-                      placeholder="Reset token"
-                      value={resetToken}
-                      onChange={(e) => setResetToken(e.target.value)}
-                      className="wlm-input"
-                      required
-                    />
-                  </div>
-                  <div className="wlm-input-group">
-                    <input
-                      type="password"
-                      placeholder="New password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="wlm-input"
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="wlm-login-btn" style={{ marginTop: '12px', width: '100%' }} disabled={resetting}>
-                    {resetting ? 'RESETTING…' : 'RESET PASSWORD'}
-                  </button>
-                </form>
-                {resetMessage && <p style={{ marginTop: '8px', fontSize: '12px' }}>{resetMessage}</p>}
-                <button className="wlm-login-btn" style={{ marginTop: '16px', width: '100%' }} onClick={closeForgot}>
-                  BACK TO LOGIN
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Force Password Change Modal (First Login) */}
-      {showForceChange && (
-        <div className="wlm-modal-overlay">
-          <div className="wlm-modal">
-            <h3 className="wlm-modal-title">Action Required</h3>
-            <p className="wlm-modal-desc" style={{ color: '#ef4444' }}>
-              You are logging in with a default password. You must change your password to continue.
-            </p>
-            <form onSubmit={handleForceChangeSubmit} style={{ marginTop: '12px', width: '100%' }}>
-              <div className="wlm-input-group" style={{ marginBottom: '10px' }}>
-                <input
-                  type="password"
-                  placeholder="New Password"
-                  value={forceNewPassword}
-                  onChange={(e) => setForceNewPassword(e.target.value)}
-                  className="wlm-input"
-                  required
-                />
+                <button type="submit" className="wlm-login-btn" disabled={sendLoading}>
+                  {sendLoading
+                    ? <><span className="wlm-btn-spinner" /> SENDING OTP…</>
+                    : 'SEND OTP'}
+                </button>
+
+                {sendError && <p className="wlm-error">{sendError}</p>}
+              </form>
+            </>
+          )}
+
+          {/* ── STEP 2: OTP Entry ── */}
+          {step === 'otp' && (
+            <>
+              <h2 className="wlm-title">Enter OTP</h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginBottom: '6px', lineHeight: 1.5 }}>
+                A 6-digit OTP has been sent to
+              </p>
+              {maskedEmail && (
+                <p style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: 600, marginBottom: '20px', wordBreak: 'break-all' }}>
+                  {maskedEmail}
+                </p>
+              )}
+
+              <form className="wlm-form" onSubmit={handleVerifyOtp}>
+                {/* OTP digit boxes */}
+                <div className="wlm-otp-row" onPaste={handleOtpPaste}>
+                  {otpDigits.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={el => (otpRefs.current[i] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handleOtpDigit(i, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(i, e)}
+                      className={`wlm-otp-box${digit ? ' wlm-otp-filled' : ''}`}
+                      autoComplete="one-time-code"
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="submit"
+                  className="wlm-login-btn"
+                  disabled={verifyLoading || otpDigits.join('').length < OTP_LENGTH}
+                  style={{ marginTop: '8px' }}
+                >
+                  {verifyLoading
+                    ? <><span className="wlm-btn-spinner" /> VERIFYING…</>
+                    : 'VERIFY & LOGIN'}
+                </button>
+
+                {verifyError && <p className="wlm-error">{verifyError}</p>}
+              </form>
+
+              {/* Resend + Back */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                <button
+                  className="wlm-forgot-link"
+                  style={{ fontSize: '13px' }}
+                  onClick={() => { setStep('id'); setSendError(''); setVerifyError(''); }}
+                >
+                  ← Change ID
+                </button>
+                <button
+                  className="wlm-forgot-link"
+                  style={{ fontSize: '13px', opacity: resendCooldown > 0 ? 0.5 : 1, cursor: resendCooldown > 0 ? 'default' : 'pointer' }}
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || sendLoading}
+                >
+                  {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+                </button>
               </div>
-              <div className="wlm-input-group">
-                <input
-                  type="password"
-                  placeholder="Confirm New Password"
-                  value={forceConfirmPassword}
-                  onChange={(e) => setForceConfirmPassword(e.target.value)}
-                  className="wlm-input"
-                  required
-                />
-              </div>
-              {forceError && <p style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444' }}>{forceError}</p>}
-              <button type="submit" className="wlm-login-btn" style={{ marginTop: '16px', width: '100%' }} disabled={forceLoading}>
-                {forceLoading ? 'UPDATING...' : 'UPDATE PASSWORD'}
-              </button>
-            </form>
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
 export default LoginPage;
-
