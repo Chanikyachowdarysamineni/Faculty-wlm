@@ -16,7 +16,7 @@ const LoginPage = ({ onLogin }) => {
 
   // Step 2 — OTP
   const [otpDigits, setOtpDigits] = useState(Array(OTP_LENGTH).fill(''));
-  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyStatus, setVerifyStatus] = useState('idle'); // 'idle' | 'verifying' | 'success' | 'error'
   const [verifyError,   setVerifyError]   = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);  // seconds
   const otpRefs = useRef([]);
@@ -73,16 +73,17 @@ const LoginPage = ({ onLogin }) => {
   };
 
   // ── Step 2: Verify OTP
-  const handleVerifyOtp = async (e) => {
+  const handleVerifyOtp = async (e, directOtp) => {
     if (e) e.preventDefault();
-    if (verifyLoading) return;
-    const otp = otpDigits.join('');
+    if (verifyStatus === 'verifying' || verifyStatus === 'success') return;
+    const otp = directOtp || otpDigits.join('');
     if (otp.length < OTP_LENGTH) {
+      setVerifyStatus('error');
       setVerifyError(`Please enter the full ${OTP_LENGTH}-digit OTP.`);
       return;
     }
     setVerifyError('');
-    setVerifyLoading(true);
+    setVerifyStatus('verifying');
     try {
       const res  = await fetch(`${API}/deva/auth/verify-otp`, {
         method:  'POST',
@@ -91,19 +92,23 @@ const LoginPage = ({ onLogin }) => {
       });
       const data = await res.json();
       if (!data.success) {
+        setVerifyStatus('error');
         setVerifyError(data.message || 'Invalid OTP. Please try again.');
         // Clear OTP boxes on error
         setOtpDigits(Array(OTP_LENGTH).fill(''));
         setTimeout(() => otpRefs.current[0]?.focus(), 50);
       } else {
-        localStorage.setItem('wlm_token', data.data.token);
-        localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
-        onLogin(data.data.user);
+        setVerifyStatus('success');
+        // Let the success animation play briefly
+        setTimeout(() => {
+          localStorage.setItem('wlm_token', data.data.token);
+          localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
+          onLogin(data.data.user);
+        }, 1500);
       }
     } catch {
+      setVerifyStatus('error');
       setVerifyError('Could not reach server. Please check your connection.');
-    } finally {
-      setVerifyLoading(false);
     }
   };
 
@@ -120,7 +125,7 @@ const LoginPage = ({ onLogin }) => {
     }
     // Auto-submit when all filled
     if (digit && index === OTP_LENGTH - 1 && next.every(d => d !== '')) {
-      setTimeout(() => handleVerifyOtp(null), 50);
+      setTimeout(() => handleVerifyOtp(null, next.join('')), 50);
     }
   };
 
@@ -148,7 +153,7 @@ const LoginPage = ({ onLogin }) => {
     const focusIndex = Math.min(pasted.length, OTP_LENGTH - 1);
     otpRefs.current[focusIndex]?.focus();
     if (pasted.length === OTP_LENGTH) {
-      setTimeout(() => handleVerifyOtp(null), 50);
+      setTimeout(() => handleVerifyOtp(null, next.join('')), 50);
     }
   };
 
@@ -272,32 +277,37 @@ const LoginPage = ({ onLogin }) => {
 
               <form className="wlm-form" onSubmit={handleVerifyOtp}>
                 {/* OTP digit boxes */}
-                <div className="wlm-otp-row" onPaste={handleOtpPaste}>
-                  {otpDigits.map((digit, i) => (
-                    <input
-                      key={i}
-                      ref={el => (otpRefs.current[i] = el)}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={e => handleOtpDigit(i, e.target.value)}
-                      onKeyDown={e => handleOtpKeyDown(i, e)}
-                      className={`wlm-otp-box${digit ? ' wlm-otp-filled' : ''}`}
-                      autoComplete="one-time-code"
-                    />
-                  ))}
+                <div className={`wlm-otp-wrapper status-${verifyStatus}`}>
+                  <div className="wlm-otp-row" onPaste={handleOtpPaste}>
+                    {otpDigits.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={el => (otpRefs.current[i] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={e => handleOtpDigit(i, e.target.value)}
+                        onKeyDown={e => handleOtpKeyDown(i, e)}
+                        className={`wlm-otp-box${digit ? ' wlm-otp-filled' : ''}`}
+                        autoComplete="one-time-code"
+                        disabled={verifyStatus === 'verifying' || verifyStatus === 'success'}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   className="wlm-login-btn"
-                  disabled={verifyLoading || otpDigits.join('').length < OTP_LENGTH}
+                  disabled={verifyStatus === 'verifying' || verifyStatus === 'success' || otpDigits.join('').length < OTP_LENGTH}
                   style={{ marginTop: '8px' }}
                 >
-                  {verifyLoading
+                  {verifyStatus === 'verifying'
                     ? <><span className="wlm-btn-spinner" /> VERIFYING…</>
-                    : 'VERIFY & LOGIN'}
+                    : verifyStatus === 'success'
+                      ? 'SUCCESS!'
+                      : 'VERIFY & LOGIN'}
                 </button>
 
                 {verifyError && <p className="wlm-error">{verifyError}</p>}

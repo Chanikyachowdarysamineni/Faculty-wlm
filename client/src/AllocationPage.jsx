@@ -29,7 +29,10 @@ const TYPE_LABEL = { L: 'Lecture', T: 'Tutorial', P: 'Practical' };
 
 const isTADesignation = (designation = '') => {
   const value = String(designation || '').trim().toLowerCase();
-  return value === 'ta' || value.includes('teaching assistant');
+  return value === 'ta' || 
+         value.includes('teaching assistant') || 
+         value.includes('teaching associate') || 
+         value.includes('teaching instructor');
 };
 
 /**
@@ -114,6 +117,8 @@ const CellPicker = ({
         const desig = String(f.designation || '').toLowerCase();
         const isSupportingOrTA =
           desig.includes('teaching assistant') ||
+          desig.includes('teaching associate') ||
+          desig.includes('teaching instructor') ||
           desig === 'ta' ||
           desig.includes('supporting') ||
           f.empId === empId; // always include currently-selected faculty

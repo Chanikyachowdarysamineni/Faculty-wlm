@@ -154,7 +154,9 @@ const FacultyPage = () => {
       'Professor': 2,
       'Associate Professor': 3,
       'Assistant Professor': 4,
-      'Teaching Assistant': 5
+      'Teaching Associate': 5,
+      'Teaching Instructor': 6,
+      'Teaching Assistant': 7
     };
     const getRank = (desig) => {
       if (!desig) return 99;
@@ -411,7 +413,9 @@ const FacultyPage = () => {
 
       if (!res.ok || !data?.success) {
         console.error('[FacultyPage] Save failed:', { status: res.status, message: data?.message });
-        const errMsg = data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Could not save faculty record.');
+        const errMsg = data?.errors?.length 
+          ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') 
+          : (data?.message || 'Could not save faculty record.');
         showToast(errMsg);
         return;
       }
@@ -480,6 +484,37 @@ const FacultyPage = () => {
     a.href = url; a.download = 'faculty_list.csv'; a.click();
     URL.revokeObjectURL(url);
     showToast('Exported as faculty_list.csv');
+  };
+
+  const exportFacultyDetailsCSV = () => {
+    const headers = ['Employee ID', 'Name of the Faculty', 'Email', 'Designation', 'Mobile Number', 'Joining Date', 'Relieving Date'];
+    const rows = mergedList.map(f => {
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        try {
+          return new Date(dateStr).toISOString().split('T')[0];
+        } catch {
+          return dateStr;
+        }
+      };
+      
+      return [
+        f.empId,
+        `"${f.name || ''}"`,
+        `"${f.email || 'N/A'}"`,
+        `"${f.designation || ''}"`,
+        `"${f.mobile || 'N/A'}"`,
+        formatDate(f.joiningDate),
+        formatDate(f.relievingDate)
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'faculty_details.csv'; a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported as faculty_details.csv');
   };
 
   const getDesigClass = (desig) => {
@@ -565,14 +600,24 @@ const FacultyPage = () => {
 
           {/* Download */}
           {isAdmin && (
-            <button className="fp-btn fp-btn-export" onClick={exportCSV}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Download
-            </button>
+            <>
+              <button className="fp-btn fp-btn-export" onClick={exportCSV}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export Workload
+              </button>
+              <button className="fp-btn fp-btn-export" onClick={exportFacultyDetailsCSV} style={{ marginLeft: '10px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export Details
+              </button>
+            </>
           )}
 
           {isAdmin && (

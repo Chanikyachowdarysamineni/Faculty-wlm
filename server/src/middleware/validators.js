@@ -2,6 +2,7 @@
 
 const { body, validationResult, param, query } = require('express-validator');
 const { isValidConfigValue } = require('../utils/configManager');
+const Designation = require('../models/Designation');
 
 /**
  * Validation middleware error handler
@@ -185,7 +186,7 @@ const validateFacultyCreate = [
   body('mobile')
     .optional({ checkFalsy: true })
     .trim()
-    .if((value) => value && String(value).trim() !== '')
+    .if((value) => value && String(value).trim() !== '' && String(value).trim().toLowerCase() !== 'n/a')
     .matches(/^[0-9\s\-\+\(\)]{7,15}$/)
     .withMessage('Mobile number must be 7-15 characters (digits, spaces, hyphens, plus, parentheses)'),
 
@@ -194,7 +195,7 @@ const validateFacultyCreate = [
     .notEmpty()
     .withMessage('Designation is required')
     .custom(async (value) => {
-      const valid = await isValidConfigValue('designations', value);
+      const valid = await Designation.findOne({ name: new RegExp(`^${value}$`, 'i'), isEnabled: true });
       if (!valid) throw new Error('Invalid designation.');
       return true;
     }),
@@ -232,7 +233,7 @@ const validateFacultyUpdate = [
   body('mobile')
     .optional({ checkFalsy: true })
     .trim()
-    .if((value) => value && String(value).trim() !== '')
+    .if((value) => value && String(value).trim() !== '' && String(value).trim().toLowerCase() !== 'n/a')
     .matches(/^[0-9\s\-\+\(\)]{7,15}$/)
     .withMessage('Mobile number must be 7-15 characters (digits, spaces, hyphens, plus, parentheses)'),
 

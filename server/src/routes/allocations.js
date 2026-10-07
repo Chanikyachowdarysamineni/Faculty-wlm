@@ -23,6 +23,7 @@ const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: add export rate limiter
 const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
+const { isTADesignation } = require('../utils/designationUtils');
 
 const router = express.Router();
 
@@ -67,10 +68,7 @@ const hasDuplicateEmpId = (slots = []) => {
   return new Set(ids).size !== ids.length;
 };
 
-const isTADesignation = (designation = '') => {
-  const value = String(designation || '').trim().toLowerCase();
-  return value === 'ta' || value.includes('teaching assistant');
-};
+
 
 const emptySlot = () => ({ empId: '', empName: '', designation: '', hours: 0 });
 

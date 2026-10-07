@@ -393,7 +393,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
     }, AUTO_REFRESH_MS);
 
     return () => clearInterval(id);
-  }, [user, isAdmin, refreshSubmissions]);
+  }, [user, isAdmin, refreshSubmissions, selectedSemester, selectedAcademicYear]);
 
   const refreshDashboardData = useCallback(async () => {
     if (!isAdmin) return;

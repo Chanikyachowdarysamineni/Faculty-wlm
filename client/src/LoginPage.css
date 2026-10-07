@@ -531,12 +531,81 @@ body {
   }
 }
 
-/* ── OTP Digit Row ─────────────────────────────────── */
+.wlm-otp-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px auto 18px;
+  padding: 8px;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  width: max-content;
+}
+
+.wlm-otp-wrapper::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%; width: 200%; height: 200%;
+  background: conic-gradient(transparent, transparent, transparent, #8b5cf6);
+  animation: wlm-rotate-border 1.5s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s ease, background 0.3s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.wlm-otp-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: rgba(30, 30, 80, 0.95);
+  border-radius: 13px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.3s ease, background 0.3s ease;
+  pointer-events: none;
+}
+
+.wlm-otp-wrapper.status-verifying::before {
+  opacity: 1;
+}
+.wlm-otp-wrapper.status-verifying::after {
+  opacity: 1;
+}
+
+.wlm-otp-wrapper.status-success::before {
+  opacity: 1;
+  background: #22c55e;
+  animation: none;
+}
+.wlm-otp-wrapper.status-success::after {
+  opacity: 1;
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.wlm-otp-wrapper.status-error::before {
+  opacity: 1;
+  background: #ef4444;
+  animation: none;
+}
+.wlm-otp-wrapper.status-error::after {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+@keyframes wlm-rotate-border {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .wlm-otp-row {
   display: flex;
   gap: 10px;
   justify-content: center;
-  margin: 6px 0 18px;
+  position: relative;
+  z-index: 2;
 }
 
 .wlm-otp-box {
@@ -560,6 +629,12 @@ body {
   background: rgba(165, 180, 252, 0.15);
   transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+.wlm-otp-box:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .wlm-otp-box.wlm-otp-filled {

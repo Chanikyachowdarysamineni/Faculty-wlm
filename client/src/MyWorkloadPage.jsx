@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 import './MyWorkloadPage.css';
 
 const authHeader = () => ({
@@ -14,7 +15,8 @@ const YEAR_COLOR = { I: '#6b74e8', II: '#22c55e', III: '#f59e0b', IV: '#ec4899' 
 const AUTO_REFRESH_MS = 60000;
 
 const MyWorkloadPage = ({ currentUser }) => {
-  const { selectedSemester, selectedAcademicYear } = useSharedData();
+  const { selectedSemester, selectedAcademicYear } = useAcademicPeriod();
+  const { faculty } = useSharedData();
   const [workloads, setWorkloads] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [toast,     setToast]     = useState('');
@@ -76,7 +78,8 @@ const MyWorkloadPage = ({ currentUser }) => {
   const totalP = workloads.reduce((s, w) => s + (w.manualP ?? w.fixedP ?? 0), 0);
   const totalHrs = totalL + totalT + totalP;
   const designation = workloads[0]?.designation || '';
-  const target = 18;
+  const facultyData = faculty.find(f => String(f.empId) === String(currentUser?.id));
+  const target = Number(facultyData?.capacity) || 18;
   const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
   const uniqueCoursesCount = new Set(workloads.map(w => w.subjectCode)).size;
 

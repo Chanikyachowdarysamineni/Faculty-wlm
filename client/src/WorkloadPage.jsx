@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
@@ -11,11 +12,13 @@ import {
   fetchSectionsConfig,
   addSectionConfig,
   renameSectionConfig,
-  deleteSectionConfig} from './utils/sectionsApi';
+  deleteSectionConfig
+} from './utils/sectionsApi';
 import {
   fetchFacultyPreferences,
   filterCoursesByPreference,
-  hasFacultySubmittedPreferences} from './utils/facultyPreferencesApi';
+  hasFacultySubmittedPreferences
+} from './utils/facultyPreferencesApi';
 
 const AUTO_REFRESH_MS = 60000;
 
@@ -78,7 +81,8 @@ const emptyForm = {
   // 'Other' free-text companions
   yearOther: '', sectionOther: '', courseTypeOther: '',
   empIdOther: '', empNameOther: '', designationOther: '', mobileOther: '', courseOther: '',
-  allowOverload: false};
+  allowOverload: false
+};
 
 // helper: auth header from localStorage token
 const authHeader = () => authJsonHeaders();
@@ -87,7 +91,7 @@ const authHeader = () => authJsonHeaders();
 const WorkloadPage = ({ submissions }) => {
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
@@ -258,7 +262,8 @@ const WorkloadPage = ({ submissions }) => {
           manualT: Number(w.manualT || 0),
           manualP: Number(w.manualP || 0),
           capacity: Number(w.capacity),
-          allocationRow: w.allocationRow ?? null}));
+          allocationRow: w.allocationRow ?? null
+        }));
         setWorkloads(normalized);
 
 
@@ -307,7 +312,8 @@ const WorkloadPage = ({ submissions }) => {
           rowLabel: `R${idx + 1}`,
           empId: slot.empId || '',
           empName: slot.empName || '',
-          designation: slot.designation || ''};
+          designation: slot.designation || ''
+        };
       });
     };
 
@@ -339,7 +345,8 @@ const WorkloadPage = ({ submissions }) => {
         empName: '',
         designation: '',
         mobile: '',
-        courseId: '', manualL: '', manualT: '', manualP: ''}));
+        courseId: '', manualL: '', manualT: '', manualP: ''
+      }));
       setErrors({});
       setFacultyWorkloadSummary(null);
       return;
@@ -351,7 +358,8 @@ const WorkloadPage = ({ submissions }) => {
       empName: f ? f.name : '',
       designation: f ? f.designation : '',
       mobile: f ? (f.mobile || '') : '',
-      courseId: '', manualL: '', manualT: '', manualP: ''}));
+      courseId: '', manualL: '', manualT: '', manualP: ''
+    }));
     setErrors({});
 
     // Fetch faculty workload hours summary
@@ -416,7 +424,8 @@ const WorkloadPage = ({ submissions }) => {
       manualP: c ? String(c.P) : '',
       // AUTO-FETCH: Set year from course data and auto-select first section
       year: courseYear,
-      section: autoSection}));
+      section: autoSection
+    }));
   };
 
   const handleAddSection = async () => {
@@ -527,7 +536,8 @@ const WorkloadPage = ({ submissions }) => {
 
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
-      allowOverload: false});
+      allowOverload: false
+    });
     setEditTarget(w);
     setErrors({});
     setShowForm(true);
@@ -584,7 +594,8 @@ const WorkloadPage = ({ submissions }) => {
         if (conflict) {
           setErrors((prev) => ({
             ...prev,
-            section: 'Only one Department Elective can be assigned to this section for I/II/III years.'}));
+            section: 'Only one Department Elective can be assigned to this section for I/II/III years.'
+          }));
           showToast('⚠ Only one Department Elective can be assigned to this section for I/II/III years.');
           setSaving(false);
           return;
@@ -602,7 +613,8 @@ const WorkloadPage = ({ submissions }) => {
         if (duplicateTa) {
           setErrors((prev) => ({
             ...prev,
-            facultyRole: 'Only one TA can be assigned for the same subject and section.'}));
+            facultyRole: 'Only one TA can be assigned for the same subject and section.'
+          }));
           showToast('⚠ TA is already assigned for this subject and section. Only one TA is allowed per section.');
           setSaving(false);
           return;
@@ -628,7 +640,8 @@ const WorkloadPage = ({ submissions }) => {
           const errorMsg = `Cannot assign ${hoursToAssign}h. Faculty would exceed capacity by ${exceededBy}h (would be ${newTotal}h/${totalCapacity}h)`;
           setErrors((prev) => ({
             ...prev,
-            manualL: errorMsg}));
+            manualL: errorMsg
+          }));
           showToast(`⚠ ${errorMsg}`);
           setSaving(false);
           return;
@@ -644,7 +657,8 @@ const WorkloadPage = ({ submissions }) => {
         const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacity}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
         setErrors((prev) => ({
           ...prev,
-          capacity: errorMsg}));
+          capacity: errorMsg
+        }));
         showToast(`⚠ ${errorMsg}`);
         setSaving(false);
         return;
@@ -666,17 +680,21 @@ const WorkloadPage = ({ submissions }) => {
         ...(form.empId === '__other__' && {
           empNameOverride: form.empNameOther.trim() || 'Other Faculty',
           designationOverride: form.designationOther.trim() || 'Other',
-          mobileOverride: form.mobileOther.trim()}),
+          mobileOverride: form.mobileOther.trim()
+        }),
         ...(form.courseId === '__other__' && {
           courseNameOverride: form.courseOther.trim() || 'Other Course',
           courseTypeOverride: form.courseType === '__other__'
             ? (form.courseTypeOther.trim() || 'Other')
-            : form.courseType}),
+            : form.courseType
+        }),
         ...(selectedRole === 'TA' && {
-          allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1}),
+          allocationRow: { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1
+        }),
         allowOverload: form.allowOverload,
         semester: selectedSemester,
-        academicYear: selectedAcademicYear};
+        academicYear: selectedAcademicYear
+      };
 
 
       // Pre-flight validation before sending
@@ -686,7 +704,8 @@ const WorkloadPage = ({ submissions }) => {
           ...prev,
           empId: !payload.empId ? 'Employee ID required' : '',
           year: !payload.year ? 'Year required' : '',
-          section: !payload.section ? 'Section required' : ''}));
+          section: !payload.section ? 'Section required' : ''
+        }));
         showToast('⚠ Missing required fields: ' + (!payload.empId ? 'Employee, ' : '') + (!payload.year ? 'Year, ' : '') + (!payload.section ? 'Section' : ''));
         setSaving(false);
         return;
@@ -697,12 +716,14 @@ const WorkloadPage = ({ submissions }) => {
         res = await fetch(`${API}/deva/workloads/${editTarget.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify(payload)});
+          body: JSON.stringify(payload)
+        });
       } else {
         res = await fetch(`${API}/deva/workloads`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify(payload)});
+          body: JSON.stringify(payload)
+        });
       }
 
       const data = await res.json();
@@ -712,7 +733,8 @@ const WorkloadPage = ({ submissions }) => {
           statusText: res.statusText,
           errors: data?.errors,
           message: data?.message,
-          data: data});
+          data: data
+        });
 
         // Handle 409 Conflict: Faculty already assigned - offer to edit
         // Only trigger this fallback for NEW assignments (!editTarget). 
@@ -739,14 +761,16 @@ const WorkloadPage = ({ submissions }) => {
               manualT: String(existingWorkload.manualT || ''),
               manualP: String(existingWorkload.manualP || ''),
               facultyRole: existingWorkload.facultyRole,
-              allocationRow: existingWorkload.allocationRow || ''});
+              allocationRow: existingWorkload.allocationRow || ''
+            });
             showToast('✓ This workload exists. Opening for editing...');
             setSaving(false);
             return;
           }
         }
 
-        showToast(`⚠ ${data?.message || data?.errors?.join(', ') || 'Save failed.'}`);
+        const errorString = data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(', ') : (data?.message || 'Save failed.');
+        showToast(`⚠ ${errorString}`);
         setSaving(false);
         return;
       }
@@ -758,7 +782,8 @@ const WorkloadPage = ({ submissions }) => {
         // Reset only course/LTP — keep faculty & capacity for rapid multi-assignment
         setForm(prev => ({
           ...prev,
-          courseId: '', manualL: '', manualT: '', manualP: ''}));
+          courseId: '', manualL: '', manualT: '', manualP: ''
+        }));
         setErrors({});
       } else {
         setShowForm(false);
@@ -804,7 +829,8 @@ const WorkloadPage = ({ submissions }) => {
   const confirmDelete = async () => {
     try {
       const res = await fetch(`${API}/deva/workloads/${deleteTarget.id}`, {
-        method: 'DELETE', headers: authHeader()});
+        method: 'DELETE', headers: authHeader()
+      });
       const data = await res.json();
       if (!data.success) { showToast(`⚠ ${data.message}`); return; }
       await fetchWorkloads();
@@ -927,7 +953,8 @@ const WorkloadPage = ({ submissions }) => {
       title: `Workload Export (${selectedAcademicYear} - ${selectedSemester})`,
       columns: exportColumns,
       rows: filtered,
-      sheetName: 'Workloads'};
+      sheetName: 'Workloads'
+    };
     if (format === 'csv') return exportAsCSV(payload);
     if (format === 'excel') return exportAsExcel(payload);
     exportAsPDF(payload);
@@ -964,7 +991,8 @@ const WorkloadPage = ({ submissions }) => {
       prefL, prefT, prefP,
       pendingL: Math.max(0, prefL - assignedL),
       pendingT: Math.max(0, prefT - assignedT),
-      pendingP: Math.max(0, prefP - assignedP)};
+      pendingP: Math.max(0, prefP - assignedP)
+    };
   }, [form.empId, workloads, prefCourses]);
 
   // ── Unique employees in workloads (for quick filter) ──
@@ -985,7 +1013,8 @@ const WorkloadPage = ({ submissions }) => {
           department: w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
           mobile: fm?.mobile || '',
-          rows: []};
+          rows: []
+        };
       }
       map[w.empId].rows.push(w);
     });
@@ -998,7 +1027,8 @@ const WorkloadPage = ({ submissions }) => {
       if (!map[w.empId]) {
         map[w.empId] = {
           designation: w.designation || '',
-          assigned: 0};
+          assigned: 0
+        };
       }
       map[w.empId].assigned += Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0);
     });
@@ -1013,7 +1043,8 @@ const WorkloadPage = ({ submissions }) => {
         target,
         assigned,
         remaining,
-        status: assigned > target ? 'Overload' : 'Normal'};
+        status: assigned > target ? 'Overload' : 'Normal'
+      };
     });
 
     return map;
@@ -1030,7 +1061,8 @@ const WorkloadPage = ({ submissions }) => {
           department: w.department || fm?.department || DEFAULT_DEPARTMENT,
           designation: w.designation,
           mobile: w.mobile || fm?.mobile || '',
-          rows: []};
+          rows: []
+        };
       }
       map[w.empId].rows.push(w);
     });
@@ -1161,7 +1193,8 @@ const WorkloadPage = ({ submissions }) => {
                       maxHeight: '250px',
                       overflowY: 'auto',
                       zIndex: 1000,
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}}>
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}>
                       {filteredFaculty.length > 0 ? (
                         <>
                           {facultySearchInput && (
@@ -1181,7 +1214,8 @@ const WorkloadPage = ({ submissions }) => {
                                 cursor: 'pointer',
                                 borderBottom: '1px solid #f0f0f0',
                                 background: form.empId === f.empId ? '#e3f2fd' : '#fff',
-                                transition: 'background 0.15s'}}
+                                transition: 'background 0.15s'
+                              }}
                               onMouseEnter={e => e.target.style.background = '#f5f5f5'}
                               onMouseLeave={e => e.target.style.background = form.empId === f.empId ? '#e3f2fd' : '#fff'}
                             >
@@ -1205,7 +1239,8 @@ const WorkloadPage = ({ submissions }) => {
                               borderTop: '1px solid #fcd34d',
                               fontSize: '12px',
                               fontWeight: 600,
-                              color: '#92400e'}}
+                              color: '#92400e'
+                            }}
                             onMouseEnter={e => e.target.style.background = '#fde68a'}
                             onMouseLeave={e => e.target.style.background = '#fef3c7'}
                           >
@@ -1713,183 +1748,188 @@ const WorkloadPage = ({ submissions }) => {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════
+      {!showForms && (
+        <>
+          {/* ════════════════════════════════════════════════
           YEAR-WISE TABS
       ════════════════════════════════════════════════ */}
-      {workloads.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
-          <div className="wl-year-tabs" style={{ marginBottom: 0 }}>
-            {['All', ...Array.from(new Set(workloads.map(w => w.year).filter(Boolean))).sort()].map(y => {
-              const count = y === 'All'
-                ? workloads.length
-                : workloads.filter(w => w.year === y).length;
-              return (
-                <button
-                  key={y}
-                  className={`wl-year-tab${activeYear === y ? ' wl-year-tab-active' : ''}`}
-                  onClick={() => setActiveYear(y)}
-                >
-                  {y === 'All' ? '📋 All Years' : `${y.replace('_', ' ')} Year`}
-                  {count > 0 && <span className="wl-year-tab-badge">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
-          <div className="wl-search-wrap" style={{ margin: 0, minWidth: '300px' }}>
-            <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-            <input className="wl-search" placeholder="Search assigned faculty..." value={search} onChange={e => setSearch(e.target.value)} />
-            {search && <button className="wl-search-clear" onClick={() => setSearch('')}>✕</button>}
-          </div>
-        </div>
-      )}
+          {workloads.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '16px', flexWrap: 'wrap' }}>
+              <div className="wl-year-tabs" style={{ marginBottom: 0 }}>
+                {['All', ...Array.from(new Set(workloads.map(w => w.year).filter(Boolean))).sort()].map(y => {
+                  const count = y === 'All'
+                    ? workloads.length
+                    : workloads.filter(w => w.year === y).length;
+                  return (
+                    <button
+                      key={y}
+                      className={`wl-year-tab${activeYear === y ? ' wl-year-tab-active' : ''}`}
+                      onClick={() => setActiveYear(y)}
+                    >
+                      {y === 'All' ? '📋 All Years' : `${y.replace('_', ' ')} Year`}
+                      {count > 0 && <span className="wl-year-tab-badge">{count}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="wl-search-wrap" style={{ margin: 0, minWidth: '300px' }}>
+                <svg className="wl-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input className="wl-search" placeholder="Search assigned faculty..." value={search} onChange={e => setSearch(e.target.value)} />
+                {search && <button className="wl-search-clear" onClick={() => setSearch('')}>✕</button>}
+              </div>
+            </div>
+          )}
 
-      {/* ════════════════════════════════════════════════
+          {/* ════════════════════════════════════════════════
           WORKLOADS TABLE
       ════════════════════════════════════════════════ */}
-      {workloads.length === 0 && !loading ? (
-        <div className="wl-empty-state">
-          <div className="wl-empty-icon">📋</div>
-          <div className="wl-empty-title">No workloads assigned yet</div>
-          <div className="wl-empty-sub">
-            Click <strong>Assign Workload</strong> above to begin assigning faculty workloads.
-          </div>
-        </div>
-      ) : (
-        <>
-          {allFacultyWorkloadBlocks.length === 0 ? (
-            <div className="wl-table-wrap">
-              <div className="wl-report-head">No matching records</div>
-            </div>
-          ) : allFacultyWorkloadBlocks.map((fac) => {
-            const summary = facultyLoadSummary[fac.empId] || { remaining: 0, status: 'Normal', target: 0, assigned: 0 };
-            return (
-              <div className="wl-table-wrap wl-faculty-block" key={fac.empId}>
-                <div className="wl-report-head wl-faculty-head">
-                  <span>{fac.empName} ({fac.empId})</span>
-                  <span className="wl-faculty-meta">{fac.designation || '—'} • {fac.department || DEFAULT_DEPARTMENT} • Mobile: {fac.mobile || '—'}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`wl-report-status ${summary.status === 'Overload' ? 'wl-report-status-over' : 'wl-report-status-ok'}`}>
-                      {summary.status} | Assigned: {summary.assigned} / Target: {summary.target} | Remaining: {summary.remaining}
-                    </span>
-                    <button
-                      className="wl-action wl-edit-btn"
-                      onClick={() => {
-                        setEditCapacityTarget(fac.empId);
-                        setEditCapacityValue(String(summary.target));
-                      }}
-                      title="Edit capacity hours for this faculty"
-                      style={{ padding: '4px 8px', fontSize: '12px' }}
-                    >
-                      ✎ Edit Cap
-                    </button>
-                  </div>
-                </div>
-                <table className="wl-table">
-                  <thead>
-                    <tr>
-                      <th>Name of the Faculty</th>
-                      <th>#</th>
-                      <th>Subject Code</th>
-                      <th>Subject Name</th>
-                      <th>Role</th>
-                      <th>Year</th>
-                      <th>Sec</th>
-                      <th className="wl-th-num" title="Fixed Lecture">📌 L</th>
-                      <th className="wl-th-num" title="Fixed Tutorial">📌 T</th>
-                      <th className="wl-th-num" title="Fixed Practical">📌 P</th>
-                      <th className="wl-th-num wl-th-c" title="Credits">C</th>
-                      <th className="wl-th-num" title="Manual Lecture">✏ L</th>
-                      <th className="wl-th-num" title="Manual Tutorial">✏ T</th>
-                      <th className="wl-th-num" title="Manual Practical">✏ P</th>
-                      <th className="wl-th-num" title="Total assigned hours">Total</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      let totalFixedL = 0, totalFixedT = 0, totalFixedP = 0, totalC = 0;
-                      let totalManualL = 0, totalManualT = 0, totalManualP = 0, grandTotal = 0;
-                      fac.rows.forEach(w => {
-                        totalFixedL += Number(w.fixedL || 0);
-                        totalFixedT += Number(w.fixedT || 0);
-                        totalFixedP += Number(w.fixedP || 0);
-                        totalC += Number(w.C || 0);
-                        totalManualL += Number(w.manualL || 0);
-                        totalManualT += Number(w.manualT || 0);
-                        totalManualP += Number(w.manualP || 0);
-                        grandTotal += (Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0));
-                      });
-                      return (
-                        <>
-                          {fac.rows.map((w, i) => {
-                      const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
-                      const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
-                      return (
-                        <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
-                          <td style={{ fontWeight: 500 }}>{fac.empName}</td>
-                          <td className="wl-td-sl">{i + 1}</td>
-                          <td className="wl-td-code">{w.subjectCode}</td>
-                          <td className="wl-td-sname">{w.subjectName}</td>
-                          <td>{w.facultyRole || 'Main Faculty'}{w.facultyRole === 'TA' && w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
-                          <td><span className="wl-year-pill">{w.year}</span></td>
-                          <td><span className="wl-sec-pill">{w.section}</span></td>
-                          <td className="wl-td-num wl-td-fixed">{w.fixedL}</td>
-                          <td className="wl-td-num wl-td-fixed">{w.fixedT}</td>
-                          <td className="wl-td-num wl-td-fixed">{w.fixedP}</td>
-                          <td className="wl-td-num wl-td-c">{w.C}</td>
-                          <td className="wl-td-num wl-td-manual">{w.manualL}</td>
-                          <td className="wl-td-num wl-td-manual">{w.manualT}</td>
-                          <td className="wl-td-num wl-td-manual">{w.manualP}</td>
-                          <td className="wl-td-num wl-td-total">{rowTotal}</td>
-                          <td style={{ color: rowIsOverloaded ? '#dc2626' : '#16a34a', fontWeight: rowIsOverloaded ? '600' : '400' }}>
-                            {rowIsOverloaded ? '⚠ OVERLOAD' : '✓ Normal'}
-                          </td>
-                          <td>
-                            <div className="wl-actions">
-                              <button className="wl-action wl-edit-btn" onClick={() => openEdit(w)}>✎ Edit</button>
-                              <button className="wl-action wl-del-btn" onClick={() => setDeleteTarget(w)}>✕ Del</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                          })}
-                          <tr className="wl-tr-total" style={{ fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>
-                            <td colSpan="7" style={{ textAlign: 'right', paddingRight: '12px' }}>Total:</td>
-                            <td className="wl-td-num">{totalFixedL}</td>
-                            <td className="wl-td-num">{totalFixedT}</td>
-                            <td className="wl-td-num">{totalFixedP}</td>
-                            <td></td>
-                            <td className="wl-td-num">{totalManualL}</td>
-                            <td className="wl-td-num">{totalManualT}</td>
-                            <td className="wl-td-num">{totalManualP}</td>
-                            <td className="wl-td-num">{grandTotal}</td>
-                            <td colSpan="2"></td>
-                          </tr>
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
+          {workloads.length === 0 && !loading ? (
+            <div className="wl-empty-state">
+              <div className="wl-empty-icon">📋</div>
+              <div className="wl-empty-title">No workloads assigned yet</div>
+              <div className="wl-empty-sub">
+                Click <strong>Assign Workload</strong> above to begin assigning faculty workloads.
               </div>
-            );
-          })}
-        </>
-      )}
+            </div>
+          ) : (
+            <>
+              {allFacultyWorkloadBlocks.length === 0 ? (
+                <div className="wl-table-wrap">
+                  <div className="wl-report-head">No matching records</div>
+                </div>
+              ) : allFacultyWorkloadBlocks.map((fac) => {
+                const summary = facultyLoadSummary[fac.empId] || { remaining: 0, status: 'Normal', target: 0, assigned: 0 };
+                return (
+                  <div className="wl-table-wrap wl-faculty-block" key={fac.empId}>
+                    <div className="wl-report-head wl-faculty-head">
+                      <span>{fac.empName} ({fac.empId})</span>
+                      <span className="wl-faculty-meta">{fac.designation || '—'} • {fac.department || DEFAULT_DEPARTMENT} • Mobile: {fac.mobile || '—'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className={`wl-report-status ${summary.status === 'Overload' ? 'wl-report-status-over' : 'wl-report-status-ok'}`}>
+                          {summary.status} | Assigned: {summary.assigned} / Target: {summary.target} | Remaining: {summary.remaining}
+                        </span>
+                        <button
+                          className="wl-action wl-edit-btn"
+                          onClick={() => {
+                            setEditCapacityTarget(fac.empId);
+                            setEditCapacityValue(String(summary.target));
+                          }}
+                          title="Edit capacity hours for this faculty"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          ✎ Edit Cap
+                        </button>
+                      </div>
+                    </div>
+                    <table className="wl-table">
+                      <thead>
+                        <tr>
+                          <th>Name of the Faculty</th>
+                          <th>#</th>
+                          <th>Subject Code</th>
+                          <th>Subject Name</th>
+                          <th>Role</th>
+                          <th>Year</th>
+                          <th>Sec</th>
+                          <th className="wl-th-num" title="Fixed Lecture">📌 L</th>
+                          <th className="wl-th-num" title="Fixed Tutorial">📌 T</th>
+                          <th className="wl-th-num" title="Fixed Practical">📌 P</th>
+                          <th className="wl-th-num wl-th-c" title="Credits">C</th>
+                          <th className="wl-th-num" title="Manual Lecture">✏ L</th>
+                          <th className="wl-th-num" title="Manual Tutorial">✏ T</th>
+                          <th className="wl-th-num" title="Manual Practical">✏ P</th>
+                          <th className="wl-th-num" title="Total assigned hours">Total</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          let totalFixedL = 0, totalFixedT = 0, totalFixedP = 0, totalC = 0;
+                          let totalManualL = 0, totalManualT = 0, totalManualP = 0, grandTotal = 0;
+                          fac.rows.forEach(w => {
+                            totalFixedL += Number(w.fixedL || 0);
+                            totalFixedT += Number(w.fixedT || 0);
+                            totalFixedP += Number(w.fixedP || 0);
+                            totalC += Number(w.C || 0);
+                            totalManualL += Number(w.manualL || 0);
+                            totalManualT += Number(w.manualT || 0);
+                            totalManualP += Number(w.manualP || 0);
+                            grandTotal += (Number(w.manualL || 0) + Number(w.manualT || 0) + Number(w.manualP || 0));
+                          });
+                          return (
+                            <>
+                              {fac.rows.map((w, i) => {
+                                const rowTotal = (w.manualL || 0) + (w.manualT || 0) + (w.manualP || 0);
+                                const rowIsOverloaded = summary.target > 0 && summary.assigned > summary.target;
+                                return (
+                                  <tr key={w.id} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
+                                    <td style={{ fontWeight: 500 }}>{fac.empName}</td>
+                                    <td className="wl-td-sl">{i + 1}</td>
+                                    <td className="wl-td-code">{w.subjectCode}</td>
+                                    <td className="wl-td-sname">{w.subjectName}</td>
+                                    <td>{w.facultyRole || 'Main Faculty'}{w.facultyRole === 'TA' && w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
+                                    <td><span className="wl-year-pill">{w.year}</span></td>
+                                    <td><span className="wl-sec-pill">{w.section}</span></td>
+                                    <td className="wl-td-num wl-td-fixed">{w.fixedL}</td>
+                                    <td className="wl-td-num wl-td-fixed">{w.fixedT}</td>
+                                    <td className="wl-td-num wl-td-fixed">{w.fixedP}</td>
+                                    <td className="wl-td-num wl-td-c">{w.C}</td>
+                                    <td className="wl-td-num wl-td-manual">{w.manualL}</td>
+                                    <td className="wl-td-num wl-td-manual">{w.manualT}</td>
+                                    <td className="wl-td-num wl-td-manual">{w.manualP}</td>
+                                    <td className="wl-td-num wl-td-total">{rowTotal}</td>
+                                    <td style={{ color: rowIsOverloaded ? '#dc2626' : '#16a34a', fontWeight: rowIsOverloaded ? '600' : '400' }}>
+                                      {rowIsOverloaded ? '⚠ OVERLOAD' : '✓ Normal'}
+                                    </td>
+                                    <td>
+                                      <div className="wl-actions">
+                                        <button className="wl-action wl-edit-btn" onClick={() => openEdit(w)}>✎ Edit</button>
+                                        <button className="wl-action wl-del-btn" onClick={() => setDeleteTarget(w)}>✕ Del</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="wl-tr-total" style={{ fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>
+                                <td colSpan="7" style={{ textAlign: 'right', paddingRight: '12px' }}>Total:</td>
+                                <td className="wl-td-num">{totalFixedL}</td>
+                                <td className="wl-td-num">{totalFixedT}</td>
+                                <td className="wl-td-num">{totalFixedP}</td>
+                                <td></td>
+                                <td className="wl-td-num">{totalManualL}</td>
+                                <td className="wl-td-num">{totalManualT}</td>
+                                <td className="wl-td-num">{totalManualP}</td>
+                                <td className="wl-td-num">{grandTotal}</td>
+                                <td colSpan="2"></td>
+                              </tr>
+                            </>
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </>
+          )}
 
-      {/* ── Legend ── */}
-      {workloads.length > 0 && (
-        <div className="wl-legend">
-          <span className="wl-legend-item">
-            <span className="wl-legend-dot wl-ld-fixed" />📌 Fixed (from curriculum)
-          </span>
-          <span className="wl-legend-item">
-            <span className="wl-legend-dot wl-ld-manual" />✏ Admin manual override
-          </span>
-          <span className="wl-legend-item">
-            <span className="wl-legend-dot wl-ld-c" />C = Credits (fixed)
-          </span>
-        </div>
+          {/* ── Legend ── */}
+          {workloads.length > 0 && (
+            <div className="wl-legend">
+              <span className="wl-legend-item">
+                <span className="wl-legend-dot wl-ld-fixed" />📌 Fixed (from curriculum)
+              </span>
+              <span className="wl-legend-item">
+                <span className="wl-legend-dot wl-ld-manual" />✏ Admin manual override
+              </span>
+              <span className="wl-legend-item">
+                <span className="wl-legend-dot wl-ld-c" />C = Credits (fixed)
+              </span>
+            </div>
+          )}
+
+        </>
       )}
 
       {/* ════════════════════════════════════════════════
@@ -1919,9 +1959,11 @@ const WorkloadPage = ({ submissions }) => {
                 th { background: #1a202c; color: #fff; padding: 7px 8px; text-align: center; font-weight: 600; }
                 td { border: 1px solid #ccc; padding: 6px 8px; text-align: center; }
                 td.left { text-align: left; }
+                .wlf-table tr { page-break-inside: avoid; }
                 .wlf-total-row td { background: #f0fdf4; font-weight: 700; }
+                .wlf-summary-bar { page-break-inside: avoid; margin-top: 10px; }
                 .wlf-sum-row { display: flex; gap: 24px; margin-top: 8px; font-size: 12px; }
-                .wlf-sign-row { display: flex; justify-content: space-between; margin-top: 28px; font-size: 11.5px; }
+                .wlf-sign-row { display: flex; justify-content: space-between; margin-top: 28px; font-size: 11.5px; page-break-inside: avoid; }
                 .wlf-sign-box { border-top: 1px solid #555; width: 160px; text-align: center; padding-top: 4px; }
               </style></head><body>${el.innerHTML}</body></html>`);
               w.document.close();
@@ -1950,7 +1992,7 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wlf-inst-header">
                     <div className="wlf-inst-name">Vignan Foundation for Science Technology &amp; Research</div>
                     <div className="wlf-inst-dept">Department of Computer Science &amp; Engineering</div>
-                    <div className="wlf-inst-sub">Faculty Workload Statement &mdash; Academic Year 2025-26</div>
+                    <div className="wlf-inst-sub">Faculty Workload Statement &mdash; Academic Year {selectedAcademicYear || 'N/A'}</div>
                   </div>
 
                   {/* Faculty details */}
@@ -2077,7 +2119,8 @@ const WorkloadPage = ({ submissions }) => {
                   borderRadius: '4px',
                   border: '1px solid #ccc',
                   fontSize: '14px',
-                  boxSizing: 'border-box'}}
+                  boxSizing: 'border-box'
+                }}
               />
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', padding: '0 16px 16px 16px' }}>

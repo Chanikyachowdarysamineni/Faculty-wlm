@@ -8,6 +8,7 @@
 const Workload = require('../models/Workload');
 const Faculty = require('../models/Faculty');
 const FacultyCapacity = require('../models/FacultyCapacity');
+const { getDefaultCapacity } = require('./designationUtils');
 
 /**
  * Calculate total teaching hours for a faculty member
@@ -102,7 +103,7 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
     }
 
     // Use semester-specific capacity if available, fallback to faculty.capacity
-    let capacity = Number(faculty.capacity || 18);
+    let capacity = Number(faculty.capacity || getDefaultCapacity(faculty.designation));
     if (semester) {
       const capRecord = await FacultyCapacity.findOne({ empId: String(empId).trim(), semester }).lean();
       if (capRecord) capacity = Number(capRecord.capacity || capacity);
@@ -141,11 +142,12 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
  * @param {Number} practicalHours - Practical hours to add
  * @param {String} excludeWorkloadId - Optional: workload ID to exclude (for updates)
  * @param {Object} session - Optional mongoose session
+ * @param {String} semester - Optional: semester to filter workload calculation
  * @returns {Object} { canAssign: Boolean, reason: String, summary: Object }
  */
-const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null, session = null) => {
+const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null, session = null, semester = null) => {
   try {
-    const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session);
+    const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session, semester);
     const additionalHours = Number(lectureHours || 0) + Number(tutorialHours || 0) + Number(practicalHours || 0);
     const newTotal = summary.currentLoad + additionalHours;
     const capacity = summary.capacity;

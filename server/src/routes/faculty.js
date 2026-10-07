@@ -28,6 +28,7 @@ const logger = require('../utils/logger');
 const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = require('../middleware/validators');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+const { getDefaultCapacity } = require('../utils/designationUtils');
 
 const router = express.Router();
 
@@ -40,12 +41,12 @@ const toClient = (doc) => ({
   mobile: String(doc.mobile || '').trim() || 'N/A',
   designation: String(doc.designation || '').trim() || 'N/A',
   department: String(doc.department || '').trim() || 'CSE',
-  capacity: doc.capacity ?? 18,
+  capacity: doc.capacity ?? getDefaultCapacity(doc.designation),
   lectureHours: doc.lectureHours || 0,
   tutorialHours: doc.tutorialHours || 0,
   practicalHours: doc.practicalHours || 0,
   allocated: doc.allocated || 0,
-  remaining: doc.remaining ?? 18,
+  remaining: doc.remaining ?? getDefaultCapacity(doc.designation),
   workloadPercentage: doc.workloadPercentage || 0,
   status: doc.status || 'Available',
   joiningDate: doc.joiningDate?.toISOString() || null,
@@ -320,7 +321,7 @@ router.post(
         name: safeName,
         department: String(department || 'CSE').trim() || 'CSE',
         designation: safeDesignation,
-        capacity: capacity !== undefined ? Number(capacity) : 18,
+        capacity: capacity !== undefined ? Number(capacity) : getDefaultCapacity(safeDesignation),
         mobile: safeMobile,
         email: safeEmail,
         qualification: String(qualification || '').trim(),
@@ -523,8 +524,8 @@ router.put(
         logger.info('Propagated faculty changes to workload records', { empId, workloadUpdates });
       }
 
-      // Propagate empId changes to CourseAllocation
-      if (allowedUpdates.empId) {
+      // Propagate empId/name/designation changes to CourseAllocation
+      if (allowedUpdates.empId || allowedUpdates.name || allowedUpdates.designation) {
         const allocs = await CourseAllocation.find({
           $or: [
             { "lectureSlots.empId": empId },
@@ -537,11 +538,12 @@ router.put(
         for (const alloc of allocs) {
           const updSlot = (s) => {
             if (s && String(s.empId) === String(empId)) {
-              s.empId = allowedUpdates.empId;
+              if (allowedUpdates.empId) s.empId = allowedUpdates.empId;
+              if (allowedUpdates.name) s.empName = allowedUpdates.name;
+              if (allowedUpdates.designation) s.designation = allowedUpdates.designation;
             }
           };
           if (alloc.lectureSlots) alloc.lectureSlots.forEach(updSlot);
-
           if (alloc.lectureSlot) updSlot(alloc.lectureSlot);
           if (alloc.tutorialSlots) alloc.tutorialSlots.forEach(updSlot);
           if (alloc.practicalSlots) alloc.practicalSlots.forEach(updSlot);
@@ -552,14 +554,15 @@ router.put(
           alloc.markModified('practicalSlots');
           await alloc.save({ session });
         }
-        logger.info('Propagated faculty empId changes to CourseAllocation', { empId, newEmpId: allowedUpdates.empId });
+        logger.info('Propagated faculty changes to CourseAllocation', { empId, updates: allowedUpdates });
       }
 
-      // Propagate empId/name changes to Submissions
-      if (allowedUpdates.empId || allowedUpdates.name) {
+      // Propagate empId/name/designation changes to Submissions
+      if (allowedUpdates.empId || allowedUpdates.name || allowedUpdates.designation) {
         const subUpdates = {};
         if (allowedUpdates.empId) subUpdates.empId = allowedUpdates.empId;
         if (allowedUpdates.name) subUpdates.empName = allowedUpdates.name;
+        if (allowedUpdates.designation) subUpdates.designation = allowedUpdates.designation;
         await mongoose.connection.db.collection('submissions').updateMany(
           { empId },
           { $set: subUpdates },

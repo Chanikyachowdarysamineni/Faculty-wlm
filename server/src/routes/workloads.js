@@ -353,7 +353,10 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
     
     const { page, limit, skip } = parsePagination(req.query);
     // L-1/M-4: Always exclude soft-deleted workloads
-    const filter = { isDeleted: { $ne: true } };
+    const filter = { 
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] }
+    };
     const isDualAccessAdmin = req.user?.canAccessAdmin === true;
     const isFacultyOnly = req.user.role === 'faculty' && !isDualAccessAdmin;
     const effectiveEmp = isFacultyOnly ? req.user.id : req.query.empId;
@@ -383,7 +386,7 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
       Workload.countDocuments(filter),
       Workload.find(filter)
         .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow allocationStatus createdAt')
-        .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1 })
+        .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1, _id: 1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -1096,9 +1099,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
 
       const courseTypeKey = normalizeCourseTypeKey(effectiveCourse.courseType);
       if (normalizedFacultyRole === 'Main Faculty' && courseTypeKey === 'DE' && isRestrictedDeYear(normalizedYear)) {
-        const existingDe = await Workload.findOne(
-          buildDeSectionConflictFilter({ year: normalizedYear, section: normalizedSection })
-        ).session(session).lean();
+        const filter = buildDeSectionConflictFilter({ year: normalizedYear, section: normalizedSection });
+        filter.isDeleted = { $ne: true };
+        const existingDe = await Workload.findOne(filter).session(session).lean();
         if (existingDe && existingDe.empId !== effectiveMember.empId) {
           logger.warn('Department Elective duplicate for section', { year: normalizedYear, section: normalizedSection, userId: req.user.id });
           return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
@@ -1115,6 +1118,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           empId: { $ne: '' },
           academicYear: yearName,
           semester: semType,
+          isDeleted: { $ne: true },
         }).session(session).lean();
         if (existingMain) {
           logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1132,6 +1136,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           empId: { $ne: '' },
           academicYear: yearName,
           semester: semType,
+          isDeleted: { $ne: true },
+          allocationRow: Number(allocationRow),
         }).session(session).lean();
         if (existingTa) {
           logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
@@ -1151,7 +1157,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       const hoursToAssign = lectureHours + tutorialHours + practicalHours;
 
       try {
-        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours, null, session);
+        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours, null, session, semType);
         if (!workloadCheck.canAssign && !req.body.allowOverload) {
           logger.warn('Faculty workload capacity exceeded', { 
             empId: effectiveMember.empId, 
@@ -1494,7 +1500,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
         safeUpdates.manualT,
         safeUpdates.manualP,
         req.params.id,
-        session
+        session,
+        safeUpdates.semester
       );
       if (!workloadCheck.canAssign && !req.body.allowOverload) {
         logger.warn('Faculty workload capacity exceeded during update', {

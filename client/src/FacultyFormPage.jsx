@@ -208,7 +208,7 @@ const cancelEdit = () => {
         });
         const data = await res.json();
         if (!res.ok || !data?.success) { 
-          setApiError(data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Update failed.')); 
+          setApiError(data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') : (data?.message || 'Update failed.')); 
           setSaving(false); 
           return; 
         }
@@ -253,7 +253,7 @@ const cancelEdit = () => {
       });
       const data = await res.json();
       if (!res.ok || !data?.success) { 
-        setApiError(data?.errors?.length ? data.errors.join(' | ') : (data?.message || 'Submission failed.')); 
+        setApiError(data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') : (data?.message || 'Submission failed.')); 
         setSaving(false); 
         return; 
       }
