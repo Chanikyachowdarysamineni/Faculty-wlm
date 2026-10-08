@@ -40,13 +40,15 @@ const getMailTransport = () => {
   if (mailTransport) return mailTransport;
   if (!process.env.SMTP_HOST) return null;
   
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE !== undefined 
+    ? process.env.SMTP_SECURE === 'true' 
+    : port === 465;
+  
   mailTransport = nodemailer.createTransport({
-    pool: true,
-    maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS || 5),
-    maxMessages: Number(process.env.SMTP_MAX_MESSAGES || 100),
     host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -152,7 +154,7 @@ Regards,
 Department of Computer Science & Engineering
 VFSTR.`;
 
-  await transport.sendMail({
+  const info = await transport.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
     replyTo: fromEmail,
     to: toEmail,
@@ -160,6 +162,7 @@ VFSTR.`;
     text: textBody,
     html: htmlBody
   });
+  return info;
 };
 
 

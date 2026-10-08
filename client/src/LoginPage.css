@@ -29,19 +29,18 @@ body {
 
 /* ── Glassmorphism card ───────────────────────────────── */
 .wlm-card {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.05); /* Subtle white tint to let background shine through */
+  backdrop-filter: blur(10px); /* Lower blur so you can actually see the background */
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
   display: flex;
   width: 100%;
   max-width: 780px;
   min-height: 420px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.2),
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
@@ -55,8 +54,8 @@ body {
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  background: rgba(255, 255, 255, 0.15);
-  border-right: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* ── Logo image ── */
@@ -172,7 +171,7 @@ body {
   flex-direction: column;
   justify-content: center;
   padding: 48px 52px;
-  background: rgba(255, 255, 255, 0.18);
+  background: transparent;
 }
 
 /* Site title */
