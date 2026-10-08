@@ -195,7 +195,7 @@ const toPct = (value) => Math.max(0, Math.min(100, value));
 
 const AUTO_REFRESH_MS = 60000;
 
-const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
+const Dashboard = ({ user, onLogout }) => {
   const publicUrl = process.env.PUBLIC_URL || '';
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1205,52 +1205,6 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                               <h1 className="dash-heading">
                                 {isAdmin ? 'Admin Overview' : `Welcome, ${user.name || 'Faculty'}`}
                               </h1>
-
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '16px',
-                                padding: `${remainingSeconds < 300 ? '14px' : '12px'} 16px`,
-                                background: remainingSeconds < 300
-                                  ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
-                                  : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-                                border: `2px solid ${remainingSeconds < 300 ? '#f59e0b' : '#93c5fd'}`,
-                                borderRadius: '8px',
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                color: remainingSeconds < 300 ? '#92400e' : '#1e40af',
-                                boxShadow: remainingSeconds < 300
-                                  ? '0 4px 12px rgba(245, 158, 11, 0.2)'
-                                  : '0 2px 8px rgba(59, 130, 246, 0.1)',
-                                transition: 'all 0.3s ease',
-                              }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: remainingSeconds < 300 ? '16px' : '14px' }}>
-                                    {remainingSeconds < 300
-                                      ? '⏱️ Session ending soon'
-                                      : '✅ Active session'}
-                                  </span>
-                                </span>
-                                <span style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '6px 12px',
-                                  background: remainingSeconds < 300 ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)',
-                                  borderRadius: '6px',
-                                  fontSize: remainingSeconds < 300 ? '14px' : '13px',
-                                }}>
-                                  Time remaining:
-                                  <strong style={{
-                                    fontFamily: 'monospace',
-                                    fontSize: remainingSeconds < 300 ? '15px' : '14px',
-                                    letterSpacing: '1px',
-                                  }}>
-                                    {formatSessionTime(remainingSeconds)}
-                                  </strong>
-                                </span>
-                              </div>
 
                               <div className="dash-sync-row">
                                 <span className="dash-sync-pill">Dashboard sync: {formatSyncedAt(dashboardLastSyncedAt)}</span>

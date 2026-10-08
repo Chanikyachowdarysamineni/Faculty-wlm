@@ -4,6 +4,7 @@ import { authJsonHeaders } from '../utils/apiFetchAll';
 
 const AdminManagement = ({ user }) => {
   const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
 
@@ -60,6 +61,11 @@ const AdminManagement = ({ user }) => {
     }
   };
 
+  const filteredUsers = users.filter(u => 
+    String(u.empId || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    String(u.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div style={{ background: '#fff', color: '#1e293b', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
       <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Admin Management</h2>
@@ -73,6 +79,22 @@ const AdminManagement = ({ user }) => {
         <p>Loading...</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <input
+              type="text"
+              placeholder="Search by Employee ID or Name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '10px 14px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                fontSize: '14px'
+              }}
+            />
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
@@ -84,7 +106,7 @@ const AdminManagement = ({ user }) => {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {filteredUsers.map(u => (
                 <tr key={u.empId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '12px', fontWeight: '500' }}>{u.empId}</td>
                   <td style={{ padding: '12px' }}>{u.name}</td>
