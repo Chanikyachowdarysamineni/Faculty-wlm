@@ -64,8 +64,8 @@ const getMailTransport = () => {
 const sendOtpEmail = async ({ toEmail, empId, otp, expiryMinutes }) => {
   const transport = getMailTransport();
   if (!transport) {
-    logger.warn('OTP email not sent — SMTP not configured');
-    return;
+    logger.error('SMTP configuration missing: SMTP_HOST environment variable is not set.');
+    throw new Error('SMTP environment variables are not configured on the production server.');
   }
 
   const fromName  = process.env.MAIL_FROM_NAME || 'VFSTR Faculty System';
