@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import './WorkloadPage.css';
+import { getDefaultCapacity } from './utils/designationUtils';
 import API from './config';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
@@ -938,7 +939,8 @@ const WorkloadPage = ({ submissions }) => {
     {
       header: 'Status', value: (r) => {
         const assigned = Number(r.manualL || 0) + Number(r.manualT || 0) + Number(r.manualP || 0);
-        return assigned > 18 ? 'OVERLOADED' : 'Normal';
+        const limit = Number(r.capacity) || getDefaultCapacity(r.designation);
+        return assigned > limit ? 'OVERLOADED' : 'Normal';
       }
     },
   ];

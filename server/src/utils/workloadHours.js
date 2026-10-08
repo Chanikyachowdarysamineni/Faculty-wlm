@@ -225,7 +225,7 @@ const getFacultyWorkloadReport = async (year = null, semester = null, periodStar
     let capacityMap = new Map();
     if (semester) {
       const capacities = await FacultyCapacity.find({ semester }).lean();
-      capacities.forEach(c => capacityMap.set(c.empId, Number(c.capacity || 18)));
+      capacities.forEach(c => capacityMap.set(c.empId, c.capacity));
     }
 
     const pipeline = [
@@ -274,8 +274,11 @@ const getFacultyWorkloadReport = async (year = null, semester = null, periodStar
       return acc;
     }, {});
 
+    const { getDefaultCapacity } = require('./designationUtils');
     const report = allFaculty.map(faculty => {
-      const capacity = semester && capacityMap.has(faculty.empId) ? capacityMap.get(faculty.empId) : Number(faculty.capacity || 18);
+      const defaultCap = getDefaultCapacity(faculty.designation);
+      let mapCap = semester && capacityMap.has(faculty.empId) ? capacityMap.get(faculty.empId) : null;
+      const capacity = mapCap !== null ? Number(mapCap) : Number(faculty.capacity || defaultCap);
       const data = workloadMap[faculty.empId] || { currentLoad: 0, assignments: [] };
       const currentLoad = data.currentLoad;
       const remaining = capacity - currentLoad;

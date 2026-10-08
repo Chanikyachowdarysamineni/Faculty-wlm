@@ -8,9 +8,10 @@ import * as XLSX from 'xlsx';
 import DesignationManagementModal from './components/DesignationManagementModal';
 
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
+import { getDefaultCapacity } from './utils/designationUtils';
 import './FacultyPage.css';
 
-const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: 18, joiningDate: '', relievingDate: '' };
+const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: '', joiningDate: '', relievingDate: '' };
 
 const FacultyPage = () => {
   const { currentUser } = useAuth();
@@ -336,7 +337,7 @@ const FacultyPage = () => {
           name: String(row.name || row['Name of the Faculty'] || row['Name'] || '').trim(),
           designation: String(row.designation || row['Designation'] || '').trim(),
           department: String(row.department || row['Department'] || 'CSE').trim(),
-          capacity: Number(row.capacity || row['Capacity']) || 18,
+          capacity: Number(row.capacity || row['Capacity']) || getDefaultCapacity(String(row.designation || row['Designation'] || '').trim()),
           email: String(row.email || row['Email'] || '').trim(),
           mobile: String(row.mobile || row['Mobile No'] || '').trim()
         })).filter(r => r.empId && r.name);
@@ -395,7 +396,7 @@ const FacultyPage = () => {
       mobile: form.mobile || '',
       email: form.email || '',
       department: form.department || 'CSE',
-      capacity: Number(form.capacity) || 18,
+      capacity: Number(form.capacity) || getDefaultCapacity(form.designation.trim()),
       semester: undefined, joiningDate: form.joiningDate || null, relievingDate: form.relievingDate || null
     };
     try {
@@ -724,7 +725,7 @@ const FacultyPage = () => {
                     </strong>
                   </td>
                   <td>{f.capacity}</td>
-                  <td>{f.remaining ?? 18}</td>
+                  <td>{f.remaining ?? (f.capacity || getDefaultCapacity(f.designation))}</td>
                   <td>{f.workloadPercentage ? `${f.workloadPercentage}%` : '0%'}</td>
                   <td style={{ fontWeight: 'bold', color: f.status === 'Available' ? '#22c55e' : f.status === 'Nearly Full' ? '#eab308' : f.status === 'Full' ? '#f97316' : '#ef4444' }}>
                     {f.status}

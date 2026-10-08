@@ -428,11 +428,16 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
       ])
     ]);
 
+    const { getDefaultCapacity } = require('../utils/designationUtils');
     // Build capacity map: empId -> capacity (semester-specific, fallback to faculty.capacity)
     const capacityMap = new Map();
-    capacityList.forEach(c => capacityMap.set(c.empId, Number(c.capacity) || 18));
+    capacityList.forEach(c => {
+      if (c.capacity != null) capacityMap.set(c.empId, Number(c.capacity));
+    });
     facultyList.forEach(f => {
-      if (!capacityMap.has(f.empId)) capacityMap.set(f.empId, Number(f.capacity) || 18);
+      if (!capacityMap.has(f.empId)) {
+        capacityMap.set(f.empId, Number(f.capacity || getDefaultCapacity(f.designation)));
+      }
     });
 
     const workloadMap = new Map();
@@ -449,7 +454,8 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
 
     facultyList.forEach(f => {
       const wData = workloadMap.get(f.empId) || { assignedHours: 0, courseCount: 0 };
-      const capacity = capacityMap.get(f.empId) || Number(f.capacity) || 18;
+      const defaultCap = getDefaultCapacity(f.designation);
+      const capacity = capacityMap.get(f.empId) || Number(f.capacity || defaultCap);
       const assignedHours = wData.assignedHours;
       const pendingLoad = capacity - assignedHours;
 

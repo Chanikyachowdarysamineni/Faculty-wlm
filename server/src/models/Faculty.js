@@ -18,7 +18,10 @@ const facultySchema = new mongoose.Schema(
     passwordHash:{ type: String, default: null },
     capacity: { 
       type: Number, 
-      default: 18, 
+      default: function() {
+        const { getDefaultCapacity } = require('../utils/designationUtils');
+        return getDefaultCapacity(this.designation);
+      },
       min: [1, 'Capacity must be at least 1'], 
       max: [60, 'Capacity cannot exceed 60'],
       validate: {
@@ -27,7 +30,12 @@ const facultySchema = new mongoose.Schema(
       }
     },
     allocated: { type: Number, default: 0 },
-    remaining: { type: Number, default: 18 },
+    remaining: { 
+      type: Number, 
+      default: function() {
+        return this.capacity || 18;
+      }
+    },
     workloadPercentage: { type: Number, default: 0 },
     status: { type: String, default: 'Available' },
     isDeleted: { type: Boolean, default: false },

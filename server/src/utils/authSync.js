@@ -84,7 +84,7 @@ const syncAuthAndRBAC = async () => {
         department: 'CSE',
         mobile: '0000000000',
         email: 'admin@wlm.local',
-        capacity: 18,
+        capacity: require('./designationUtils').getDefaultCapacity(user.role),
       });
       logger.info(`Initialized default admin faculty record: ${adminId}`);
     }

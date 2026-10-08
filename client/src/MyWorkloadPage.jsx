@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 import { useAcademicPeriod } from './AcademicPeriodContext';
+import { getDefaultCapacity } from './utils/designationUtils';
 import './MyWorkloadPage.css';
 
 const authHeader = () => ({
@@ -79,7 +80,8 @@ const MyWorkloadPage = ({ currentUser }) => {
   const totalHrs = totalL + totalT + totalP;
   const designation = workloads[0]?.designation || '';
   const facultyData = faculty.find(f => String(f.empId) === String(currentUser?.id));
-  const target = Number(facultyData?.capacity) || 18;
+  const defaultCap = getDefaultCapacity(facultyData?.designation || designation);
+  const target = Number(facultyData?.capacity) || defaultCap;
   const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;
   const uniqueCoursesCount = new Set(workloads.map(w => w.subjectCode)).size;
 

@@ -667,7 +667,9 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
       return sendNotFound(res, 'Faculty not found.');
     }
 
-    const totalCapacity = Number(faculty.capacity || 18);
+    const { getDefaultCapacity } = require('../utils/designationUtils');
+    const defaultCap = getDefaultCapacity(faculty.designation);
+    const totalCapacity = Number(faculty.capacity || defaultCap);
     
     // Get current total hours excluding this workload
     const otherWorkloads = await Workload.find({ 

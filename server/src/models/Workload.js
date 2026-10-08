@@ -91,7 +91,7 @@ const workloadSchema = new mongoose.Schema(
 // Prevent duplicate same-role assignment for the same faculty/course/year/section
 workloadSchema.index(
   { empId: 1, courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
-  { unique: true, name: 'uniq_emp_course_year_section_role' }
+  { unique: true, partialFilterExpression: { isDeleted: false }, name: 'uniq_emp_course_year_section_role' }
 );
 
 // Only one TA assignment per course + year + section.
@@ -99,7 +99,7 @@ workloadSchema.index(
   { courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
   {
     unique: true,
-    partialFilterExpression: { facultyRole: 'TA', year: { $in: ['II', 'III', 'IV'] } },
+    partialFilterExpression: { isDeleted: false, facultyRole: 'TA', year: { $in: ['II', 'III', 'IV'] } },
     name: 'uniq_ta_per_course_section_year',
   }
 );
@@ -109,7 +109,7 @@ workloadSchema.index(
   { courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1 },
   {
     unique: true,
-    partialFilterExpression: { facultyRole: 'Main Faculty', year: { $in: ['II', 'III', 'IV'] } },
+    partialFilterExpression: { isDeleted: false, facultyRole: 'Main Faculty', year: { $in: ['II', 'III', 'IV'] } },
     name: 'uniq_main_per_course_section_year',
   }
 );

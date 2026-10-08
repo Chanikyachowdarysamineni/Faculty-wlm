@@ -1188,7 +1188,7 @@ const Dashboard = ({ user, onLogout, remainingSeconds = 1800 }) => {
                           />
                         ) :
                           activeNav === 'profile' ? (
-                            <ProfilePage user={user} submissions={submissions} onLogout={onLogout} />
+                            <ProfilePage user={user} submissions={submissions} onLogout={onLogout} dashMode={dashMode} />
                           ) : activeNav === 'admin-management' && isAdmin ? (
                               <AdminManagement user={user} />
                             ) : activeNav === 'designations' && isAdmin ? (

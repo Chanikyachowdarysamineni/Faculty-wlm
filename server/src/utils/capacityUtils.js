@@ -69,7 +69,7 @@ const recalculateCapacity = async (empId, options = {}) => {
         empId,
         semester: currentSemester,
         academicYear: currentAcademicYear,
-        capacity: (faculty.capacity !== undefined && faculty.capacity !== null) ? Number(faculty.capacity) : 18,
+        capacity: (faculty.capacity !== undefined && faculty.capacity !== null) ? Number(faculty.capacity) : require('./designationUtils').getDefaultCapacity(faculty.designation),
       });
     }
 

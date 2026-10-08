@@ -142,7 +142,22 @@ const buildFacultyPipeline = (matchFilter = {}, sort = { slNo: 1 }, skip = 0, li
     },
     {
       $addFields: {
-        capacity: { $ifNull: ["$capacityObj.capacity", { $ifNull: ["$capacity", 18] }] },
+        capacity: { 
+          $ifNull: [
+            "$capacityObj.capacity", 
+            { $ifNull: [
+                "$capacity", 
+                { 
+                  $cond: [
+                    { $regexMatch: { input: { $ifNull: ["$designation", ""] }, regex: /teaching assistant|teaching associate|teaching instructor|^ta$/i } },
+                    12,
+                    18
+                  ]
+                }
+              ] 
+            }
+          ] 
+        },
         lectureHours: {
           $reduce: {
             input: '$workloads',
@@ -742,7 +757,7 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
         name: String(name).trim(),
         department: String(department || 'CSE').trim(),
         designation: String(designation).trim(),
-        capacity: item.capacity !== undefined ? Number(item.capacity) : 18,
+        capacity: item.capacity !== undefined ? Number(item.capacity) : require('../utils/designationUtils').getDefaultCapacity(String(designation).trim()),
         mobile: String(mobile).trim(),
         email: String(email).trim(),
       }], { session });

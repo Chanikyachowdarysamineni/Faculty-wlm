@@ -51,9 +51,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
     try {
       const headers = authHeaders();
-      const workloadParams = user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true 
-        ? { semester: selectedSemester, academicYear: selectedAcademicYear } 
-        : { empId: String(user.id), semester: selectedSemester, academicYear: selectedAcademicYear };
+      const workloadParams = { empId: String(user.id), semester: selectedSemester, academicYear: selectedAcademicYear };
       const [wData] = await Promise.all([
         fetchAllPages('/deva/workloads', workloadParams, { headers }),
       ]);
@@ -64,9 +62,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       }
 
       const allWorkloads = wData.data || [];
-      setMyWorkloads(user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true
-        ? allWorkloads
-        : allWorkloads.filter((workload) => String(workload.empId) === String(user.id)));
+      setMyWorkloads(allWorkloads.filter((workload) => String(workload.empId) === String(user.id)));
       setLastSyncedAt(new Date());
     } catch {
       setApiError('Failed to load profile data.');
@@ -113,7 +109,22 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   }, [loadProfileData]);
 
   // Find this faculty member by their login employee ID
-  const profile = facultyList.find(f => f.empId === user.id) || {};
+  let profile = facultyList.find(f => f.empId === user.id);
+  
+  if (!profile && (user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true)) {
+    profile = {
+      empId: user.id,
+      name: user.name || 'System Administrator',
+      designation: 'Admin',
+      mobile: 'N/A',
+      email: 'N/A',
+      capacity: 0,
+      status: 'Green',
+      allocatedHours: 0,
+      remainingHours: 0,
+      utilizationPercentage: 0
+    };
+  }
 
   // Their preference submission (if any)
   const mySubmission = submissions.find(s => s.empId === user.id);
