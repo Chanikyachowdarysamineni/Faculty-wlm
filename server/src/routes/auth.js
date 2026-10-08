@@ -34,9 +34,16 @@ const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 30
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
 
 // ── Email transport (configured via env vars) ──────────────
-const createMailTransport = () => {
+let mailTransport = null;
+
+const getMailTransport = () => {
+  if (mailTransport) return mailTransport;
   if (!process.env.SMTP_HOST) return null;
-  return nodemailer.createTransport({
+  
+  mailTransport = nodemailer.createTransport({
+    pool: true,
+    maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS || 5),
+    maxMessages: Number(process.env.SMTP_MAX_MESSAGES || 100),
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_SECURE === 'true',
@@ -44,12 +51,16 @@ const createMailTransport = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
+  return mailTransport;
 };
 
 // ── OTP Email sender ──────────────────────────────────────
 const sendOtpEmail = async ({ toEmail, empId, otp, expiryMinutes }) => {
-  const transport = createMailTransport();
+  const transport = getMailTransport();
   if (!transport) {
     logger.warn('OTP email not sent — SMTP not configured');
     return;
@@ -147,12 +158,7 @@ VFSTR.`;
     to: toEmail,
     subject: 'Your OTP Login Code – Faculty Workload Management System',
     text: textBody,
-    html: htmlBody,
-    headers: {
-      'X-Priority': '1 (Highest)',
-      'X-Mailer': 'Nodemailer',
-      'Precedence': 'transactional'
-    }
+    html: htmlBody
   });
 };
 

@@ -3,6 +3,7 @@
 const { body, validationResult, param, query } = require('express-validator');
 const { isValidConfigValue } = require('../utils/configManager');
 const Designation = require('../models/Designation');
+const logger = require('../utils/logger');
 
 /**
  * Validation middleware error handler
@@ -11,7 +12,7 @@ const Designation = require('../models/Designation');
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    console.error('Validation Error:', JSON.stringify(errors.array()));
+    logger.warn('Validation Error', { errors: errors.array(), path: req.originalUrl, ip: req.ip });
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
@@ -179,9 +180,7 @@ const validateFacultyCreate = [
     .trim()
     .if((value) => value && String(value).trim() !== '')
     .isEmail()
-    .withMessage('Valid email address is required')
-    .matches(/\.com$/i)
-    .withMessage('Email address must end with .com'),
+    .withMessage('Valid email address is required'),
 
   body('mobile')
     .optional({ checkFalsy: true })
@@ -226,9 +225,7 @@ const validateFacultyUpdate = [
     .trim()
     .if((value) => value && String(value).trim() !== '')
     .isEmail()
-    .withMessage('Valid email address is required')
-    .matches(/\.com$/i)
-    .withMessage('Email address must end with .com'),
+    .withMessage('Valid email address is required'),
 
   body('mobile')
     .optional({ checkFalsy: true })
