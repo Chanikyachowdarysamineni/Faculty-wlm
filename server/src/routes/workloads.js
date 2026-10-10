@@ -785,7 +785,7 @@ router.patch('/faculty/:empId/capacity', requireAuth, requireAdmin, requireAcade
     const yearName = req.academicPeriod?.academicYear?.name;
 
     if (!yearName) {
-      return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+      return sendError(res, 'Validation failed', 400);
     }
 
     const FacultyCapacity = require('../models/FacultyCapacity');
@@ -1065,7 +1065,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       const yearName = req.academicPeriod?.academicYear?.name;
       const semType = req.academicPeriod?.academicYearSemester?.semesterType;
       if (!semType) {
-        return res.status(400).json({ success: false, message: 'Semester context missing.' });
+        return sendError(res, 'Validation failed', 400);
       }
       if (course && course.semester && course.semester !== semType) {
         return sendError(res, `Course belongs to ${course.semester} semester, but active context is ${semType} semester.`, 400);
@@ -1073,7 +1073,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       const semId = req.getSemesterId();
       
       if (!yearName) {
-        return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+        return sendError(res, 'Validation failed', 400);
       }
 
       const requiredFields = [

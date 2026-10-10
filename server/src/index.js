@@ -50,6 +50,7 @@ const workloadsRoutes   = require('./routes/workloads');
 const settingsRoutes    = require('./routes/settings');
 const statsRoutes       = require('./routes/stats');
 const allocationsRoutes = require('./routes/allocations');
+const courseWorkloadPlanRoutes = require('./routes/courseWorkloadPlan');
 
 const facultyPreferencesRoutes = require('./routes/faculty-preferences');
 const facultyCapacityRoutes = require('./routes/facultyCapacity');
@@ -58,6 +59,8 @@ const sectionsRoutes = require('./routes/sections');
 const configRoutes = require('./routes/config');
 const academicYearsRoutes = require('./routes/academicYears');
 const adminManagementRoutes = require('./routes/adminManagement');
+const courseTypesRoutes = require('./routes/courseTypes');
+const courseLoadsRoutes = require('./routes/courseLoads');
 
 // ── Import WebSocket handler ────────────────────────────────
 const WebSocketHandler  = require('./websocket');
@@ -310,12 +313,15 @@ app.use('/deva/settings',              settingsRoutes);
 app.use('/deva/sections',              require('./routes/sections'));
 app.use('/deva/stats',                 statsRoutes);
 app.use('/deva/allocations',           allocationsRoutes);
+app.use('/deva/course-workload-plan',  courseWorkloadPlanRoutes);
 
 app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
 // NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
 app.use('/deva/config', configRoutes);
 app.use('/deva/academic-years', academicYearsRoutes);
 app.use('/deva/admin-management', adminManagementRoutes);
+app.use('/deva/course-types', courseTypesRoutes);
+app.use('/deva/course-loads', courseLoadsRoutes);
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything

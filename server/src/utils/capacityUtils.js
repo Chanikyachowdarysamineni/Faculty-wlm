@@ -40,7 +40,16 @@ const recalculateCapacity = async (empId, options = {}) => {
 
 
     // Ensure we have academicYear
-    const currentAcademicYear = options.academicYear || '2026-2027';
+    let currentAcademicYear = options.academicYear;
+    if (!currentAcademicYear) {
+      const AcademicYear = mongoose.model('AcademicYear');
+      const currentYrDoc = await AcademicYear.findOne({ isCurrent: true }).session(session);
+      if (currentYrDoc) {
+        currentAcademicYear = currentYrDoc.name;
+      } else {
+        currentAcademicYear = '2026-2027';
+      }
+    }
 
     // C-4: Aggregate total allocated hours — exclude cancelled/unallocated/deleted workloads
     const workloads = await Workload.find({
@@ -80,7 +89,7 @@ const recalculateCapacity = async (empId, options = {}) => {
     if (capacity > 0) {
       workloadPercentage = (allocated / capacity) * 100;
     }
-    
+
     workloadPercentage = Math.round(workloadPercentage * 100) / 100;
     const status = getStatus(remaining, workloadPercentage);
 

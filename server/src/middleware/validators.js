@@ -5,6 +5,9 @@ const { isValidConfigValue } = require('../utils/configManager');
 const Designation = require('../models/Designation');
 const logger = require('../utils/logger');
 
+const { sendError } = require('../utils/response');
+const MESSAGES = require('../utils/messages');
+
 /**
  * Validation middleware error handler
  * Use this after validation chains to return errors
@@ -13,17 +16,11 @@ const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     logger.warn('Validation Error', { errors: errors.array(), path: req.originalUrl, ip: req.ip });
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors
-        .array()
-        .map((err) => ({
-          field: err.param,
-          value: err.value,
-          message: err.msg,
-        })),
-    });
+    const formattedErrors = errors.array().map((err) => ({
+      field: err.path || err.param,
+      message: err.msg,
+    }));
+    return sendError(res, MESSAGES.VALIDATION_FAILED || 'Validation failed', 400, { errors: formattedErrors });
   }
   next();
 };
@@ -186,8 +183,11 @@ const validateFacultyCreate = [
     .optional({ checkFalsy: true })
     .trim()
     .if((value) => value && String(value).trim() !== '' && String(value).trim().toLowerCase() !== 'n/a')
-    .matches(/^[0-9\s\-\+\(\)]{7,15}$/)
-    .withMessage('Mobile number must be 7-15 characters (digits, spaces, hyphens, plus, parentheses)'),
+    .custom((value) => {
+      const stripped = String(value).replace(/\D/g, '');
+      if (stripped.length !== 10) throw new Error('Mobile number must be exactly 10 digits');
+      return true;
+    }),
 
   body('designation')
     .trim()
@@ -231,8 +231,11 @@ const validateFacultyUpdate = [
     .optional({ checkFalsy: true })
     .trim()
     .if((value) => value && String(value).trim() !== '' && String(value).trim().toLowerCase() !== 'n/a')
-    .matches(/^[0-9\s\-\+\(\)]{7,15}$/)
-    .withMessage('Mobile number must be 7-15 characters (digits, spaces, hyphens, plus, parentheses)'),
+    .custom((value) => {
+      const stripped = String(value).replace(/\D/g, '');
+      if (stripped.length !== 10) throw new Error('Mobile number must be exactly 10 digits');
+      return true;
+    }),
 
   body('designation')
     .optional({ checkFalsy: true })

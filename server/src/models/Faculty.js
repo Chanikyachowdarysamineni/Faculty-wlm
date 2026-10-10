@@ -51,4 +51,46 @@ facultySchema.index({ designation: 1 });
 facultySchema.index({ status: 1 });
 facultySchema.index({ name: 1 });
 
+// Clear faculty from allocations when soft-deleted
+facultySchema.pre('findOneAndUpdate', async function(next) {
+  const update = this.getUpdate();
+  if (update && update.$set && update.$set.isDeleted === true) {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate) {
+      // Find all allocations that have this faculty and clear the slots
+      const empId = docToUpdate.empId;
+      const Allocation = mongoose.model('CourseAllocation');
+      const activeAllocs = await Allocation.find({
+        isDeleted: false,
+        $or: [
+          { 'lectureSlots.empId': empId },
+          { 'tutorialSlots.empId': empId },
+          { 'practicalSlots.empId': empId }
+        ]
+      });
+
+      for (const a of activeAllocs) {
+        let modified = false;
+        ['lectureSlots', 'tutorialSlots', 'practicalSlots'].forEach(slotType => {
+          if (Array.isArray(a[slotType])) {
+            a[slotType].forEach(slot => {
+              if (slot.empId === empId) {
+                slot.empId = '';
+                slot.empName = '';
+                slot.faculty = null;
+                slot.hours = 0;
+                modified = true;
+              }
+            });
+          }
+        });
+        if (modified) {
+          await a.save();
+        }
+      }
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model('Faculty', facultySchema);

@@ -20,4 +20,19 @@ const sectionSchema = new mongoose.Schema(
 // Prevent duplicate active sections in the same year/department
 sectionSchema.index({ name: 1, year: 1, department: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
 
+// Cascade soft-delete to allocations if section is soft-deleted
+sectionSchema.pre('findOneAndUpdate', async function(next) {
+  const update = this.getUpdate();
+  if (update && update.$set && update.$set.isDeleted === true) {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate) {
+      await mongoose.model('CourseAllocation').updateMany(
+        { sectionRef: docToUpdate._id },
+        { $set: { isDeleted: true } }
+      );
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model('Section', sectionSchema);

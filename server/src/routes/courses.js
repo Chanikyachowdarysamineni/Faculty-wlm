@@ -188,7 +188,7 @@ router.post(
         'ODD'; // default to ODD if nothing resolved
 
       if (!resolvedAcademicYear) {
-        return res.status(400).json({ success: false, message: 'Academic year context is required. Please select an academic year.' });
+        return sendError(res, 'Academic year is required.', 400);
       }
 
       const doc = await Course.create({

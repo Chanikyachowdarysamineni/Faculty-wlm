@@ -22,4 +22,22 @@ const courseOfferingSchema = new mongoose.Schema(
 // We define a compound index, but depending on how offerings map to sections, we might allow multiple offerings or one per section.
 // courseOfferingSchema.index({ academicYearSemesterId: 1, courseId: 1, academicYearSectionId: 1 }, { unique: true });
 
+
+courseOfferingSchema.pre('findOneAndDelete', async function(next) {
+  const doc = await this.model.findOne(this.getQuery());
+  if (doc) {
+    try {
+      await mongoose.model('CourseSectionConfig').deleteMany({ courseOfferingId: doc._id });
+    } catch(e){}
+  }
+  next();
+});
+
+courseOfferingSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+  try {
+    await mongoose.model('CourseSectionConfig').deleteMany({ courseOfferingId: this._id });
+  } catch(e){}
+  next();
+});
+
 module.exports = mongoose.model('CourseOffering', courseOfferingSchema);

@@ -304,7 +304,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     const semId = req.getSemesterId();
 
     if (!yearName) {
-      return res.status(400).json({ success: false, message: 'Academic Year context missing.' });
+      return sendError(res, 'Validation failed', 400);
     }
 
     const allSlots = [
@@ -324,7 +324,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
 
     const sectionCfg = await getSectionsConfig(yearName, semType);
     if (sectionCfg[year] && !sectionCfg[year].includes(section)) {
-      return res.status(400).json({ success: false, message: `Invalid section '${section}' for year '${year}'.` });
+      return sendError(res, 'Validation failed', 400);
     }
 
     const course = await Course.findOne({ courseId: Number(courseId) }).lean();
@@ -371,7 +371,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types
     const lectureHasTa = enrichedLSlots.some((slot) => slot?.empId && isTADesignation(slot?.designation));
     if (lectureHasTa) {
-      return res.status(400).json({
+      return sendError(res, 'Validation Error', 400)({
         success: false,
         message: 'R1 (Main Faculty slot) cannot be assigned to TA. R1 is reserved for Main Faculty only.',
       });
@@ -379,14 +379,14 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
 
     // Validate R1 in T and P must not be TA designation
     if (enrichedTutorials[0]?.empId && isTADesignation(enrichedTutorials[0]?.designation)) {
-      return res.status(400).json({
+      return sendError(res, 'Validation Error', 400)({
         success: false,
         message: 'Tutorial R1 must be Main Faculty, not TA.',
       });
     }
 
     if (enrichedPracticals[0]?.empId && isTADesignation(enrichedPracticals[0]?.designation)) {
-      return res.status(400).json({
+      return sendError(res, 'Validation Error', 400)({
         success: false,
         message: 'Practical R1 must be Main Faculty, not TA.',
       });

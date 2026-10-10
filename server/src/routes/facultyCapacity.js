@@ -2,16 +2,14 @@
 
 const express = require('express');
 const router = express.Router();
+const { sendError, sendValidationError } = require('../utils/response');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const Faculty = require('../models/Faculty');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 
-// Helper to send errors
-const sendError = (res, message, status = 400) => {
-  return res.status(status).json({ success: false, message });
-};
+
 
 // 1. GET Faculty Capacity
 router.get('/:empId/capacity', requireAuth, async (req, res, next) => {
@@ -47,7 +45,7 @@ router.put(
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
+    if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
     const session = await mongoose.startSession();
     session.startTransaction();

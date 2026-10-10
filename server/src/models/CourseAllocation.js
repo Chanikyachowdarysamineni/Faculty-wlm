@@ -60,11 +60,13 @@ const courseAllocationSchema = new mongoose.Schema(
     practicalSlots: { type: [facultySlotSchema], default: () => [] },
 
     createdBy:      { type: String, default: '' },
+    isDeleted:      { type: Boolean, default: false },
   },
   { timestamps: true, collection: 'allocations' }
 );
 
-courseAllocationSchema.index({ courseId: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true });
+courseAllocationSchema.index({ courseId: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true, partialFilterExpression: { isDeleted: false, courseId: { $type: "number" } } });
+courseAllocationSchema.index({ course: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true, partialFilterExpression: { isDeleted: false, course: { $exists: true } } });
 courseAllocationSchema.index({ year: 1, section: 1, academicYear: 1, semester: 1 });
 courseAllocationSchema.index({ courseId: 1, year: 1, academicYear: 1, semester: 1 });
 courseAllocationSchema.index({ 'lectureSlot.empId': 1 });

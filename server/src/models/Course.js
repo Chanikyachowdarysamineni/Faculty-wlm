@@ -37,4 +37,19 @@ courseSchema.pre('save', function (next) {
 
 // Identical courses are allowed, so no unique index on subjectCode/courseType is needed
 
+// Cascade soft-delete to allocations if course is soft-deleted
+courseSchema.pre('findOneAndUpdate', async function(next) {
+  const update = this.getUpdate();
+  if (update && update.$set && update.$set.isDeleted === true) {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate) {
+      await mongoose.model('CourseAllocation').updateMany(
+        { course: docToUpdate._id },
+        { $set: { isDeleted: true } }
+      );
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model('Course', courseSchema);

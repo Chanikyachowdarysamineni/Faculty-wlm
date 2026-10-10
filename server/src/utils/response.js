@@ -30,18 +30,16 @@ const sendSuccess = (res, data = null, statusCode = 200, options = {}) => {
  * @param {string} message - Error message to display
  * @param {number} statusCode - HTTP status code (default: 400)
  * @param {object} options - Additional options (errors, metadata)
- * @example
- * sendError(res, 'Invalid input', 400);
- * sendError(res, 'Not found', 404, { errors: [...] });
  */
 const sendError = (res, message, statusCode = 400, options = {}) => {
   const response = {
     success: false,
     message,
-    timestamp: new Date().toISOString(),
   };
 
-  if (options.errors) {
+  // Always include errors array if present, otherwise omit or empty array
+  // The user requested: { success: false, message: "...", errors: [...] }
+  if (options.errors && Array.isArray(options.errors)) {
     response.errors = options.errors;
   }
 
@@ -157,7 +155,15 @@ const sendConflict = (res, message) => {
  * sendValidationError(res, [{field: 'email', message: 'Invalid email'}]);
  */
 const sendValidationError = (res, errors) => {
-  sendError(res, 'Validation failed', 422, { errors });
+  // Check if errors is already formatted by express-validator
+  let formattedErrors = errors;
+  if (Array.isArray(errors)) {
+    formattedErrors = errors.map(err => ({
+      field: err.field || err.path || err.param,
+      message: err.message || err.msg
+    }));
+  }
+  sendError(res, 'Validation failed', 422, { errors: formattedErrors });
 };
 
 /**
