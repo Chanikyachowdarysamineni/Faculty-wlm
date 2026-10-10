@@ -4,23 +4,15 @@
   "private": true,
   "homepage": "/csefaculty",
   "dependencies": {
-    "clsx": "^2.1.1",
     "compression": "^1.7.4",
     "core-js": "3.50.0",
-    "date-fns": "^4.1.0",
     "dompurify": "^3.4.16",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
-    "jsx-ast-utils": "^3.3.5",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "patch-package": "^8.0.1",
-    "postinstall-postinstall": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.6",
     "react-scripts": "5.0.1",
-    "recharts": "^3.8.0",
     "xlsx": "npm:@e965/xlsx@^0.20.0"
   },
   "overrides": {
@@ -63,10 +55,8 @@
     ]
   },
   "devDependencies": {
-    "@jest/core": "^27.5.1",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
-    "@testing-library/user-event": "^14.5.1",
     "cross-env": "^10.1.0",
     "http-proxy-middleware": "^2.0.10"
   }

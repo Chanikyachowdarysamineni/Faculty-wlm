@@ -5,6 +5,7 @@ import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import { useToast } from './Toast';
 import { useSharedData } from './DataContext';
+import ManageCourseTypesModal from './ManageCourseTypesModal';
 import './CoursesPage.css';
 
 // const PROGRAMS removed
@@ -13,7 +14,7 @@ import './CoursesPage.css';
 // YEAR_OPTIONS removed
 
 const emptyCourseForm = {
-  program: 'B.Tech', courseType: 'Mandatory', year: 'I',
+  program: 'B.Tech', courseType: '', year: 'I',
   subjectCode: '', subjectName: '', shortName: '',
   L: 0, T: 0, P: 0, C: 0,
   // 'Other' free-text companions
@@ -25,14 +26,14 @@ const emptyCourseForm = {
 const CoursesPage = ({ isAdmin = true }) => {
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { courses: contextCourses, setCourses: setContextCourses, systemConfig} = useSharedData();
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, setSystemConfig} = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEAR_OPTIONS = activeYearsRaw.length > 0 
     ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }] 
     : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
   
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
   const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'Other') : ['I', 'II', 'III', 'IV'];
@@ -59,6 +60,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   const [editCourse,      setEditCourse]      = useState(null);
   const [courseForm,      setCourseForm]      = useState(emptyCourseForm);
   const [deleteCourse,    setDeleteCourse]    = useState(null);
+  const [showManageTypes, setShowManageTypes] = useState(false);
 
   // ── Toast ──
   const { showToast } = useToast();
@@ -83,7 +85,20 @@ const CoursesPage = ({ isAdmin = true }) => {
     } finally {
       setLoadingCourses(false);
     }
-  }, [authHeaders, setContextCourses, showToast, selectedAcademicYear]);
+  }, [setContextCourses, showToast, selectedAcademicYear]);
+
+  // ── Re-fetch systemConfig to refresh COURSE_TYPES after modal changes ──
+  const refreshSystemConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/deva/config`, { headers: authJsonHeaders() });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSystemConfig(data.data);
+      }
+    } catch (err) {
+      console.error('Failed to refresh system config:', err);
+    }
+  }, [setSystemConfig]);
 
   // ── Derived lists ──
   const filteredCourses = useMemo(() => {
@@ -138,7 +153,8 @@ const CoursesPage = ({ isAdmin = true }) => {
 
     // ── Course CRUD handlers ──
   const openAddCourse = () => {
-    setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear });
+    const defaultType = COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '';
+    setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear, courseType: defaultType });
     setEditCourse(null);
     setShowCourseModal(true);
   };
@@ -333,13 +349,21 @@ const CoursesPage = ({ isAdmin = true }) => {
             </span>
           </div>
           {isAdmin && (
-          <button className="cp-btn cp-btn-add" onClick={openAddCourse}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Course
-          </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="cp-btn" onClick={() => setShowManageTypes(true)} style={{ background: '#f8f9fa', color: '#1a73e8', border: '1px solid #dadce0' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Manage Course Types
+              </button>
+              <button className="cp-btn cp-btn-add" onClick={openAddCourse}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Course
+              </button>
+            </div>
           )}
         </div>
 
@@ -523,6 +547,10 @@ const CoursesPage = ({ isAdmin = true }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {showManageTypes && (
+      <ManageCourseTypesModal onClose={() => { setShowManageTypes(false); refreshSystemConfig(); }} />
       )}
     </div>
   );

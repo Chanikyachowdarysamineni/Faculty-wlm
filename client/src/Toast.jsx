@@ -19,9 +19,26 @@ export const useToast = () => {
 const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
-  const showToast = useCallback(({ type = 'info', message, duration = 4000, action = null }) => {
+  const showToast = useCallback((args) => {
+    let type = 'info';
+    let message = '';
+    let duration = 4000;
+    let action = null;
+
+    let errors = [];
+
+    if (typeof args === 'string') {
+      message = args;
+    } else if (args && typeof args === 'object') {
+      type = args.type || 'info';
+      message = args.message || '';
+      duration = args.duration !== undefined ? args.duration : 4000;
+      action = args.action || null;
+      errors = args.errors || [];
+    }
+
     const id = Date.now() + Math.random();
-    const toast = { id, type, message, action };
+    const toast = { id, type, message, action, errors };
 
     setToasts((prev) => [...prev, toast]);
 
@@ -70,8 +87,17 @@ const ToastItem = ({ toast, onRemove }) => {
 
   return (
     <div className={`toast toast-${toast.type}`}>
-      <span className="toast-icon">{icons[toast.type]}</span>
-      <span className="toast-message">{toast.message}</span>
+      <div className="toast-icon">{icons[toast.type]}</div>
+      <div className="toast-content">
+        <div className="toast-message">{toast.message}</div>
+        {toast.errors && toast.errors.length > 0 && (
+          <ul className="toast-errors-list" style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '0.85rem' }}>
+            {toast.errors.map((err, idx) => (
+              <li key={idx}><strong>{err.field}:</strong> {err.message}</li>
+            ))}
+          </ul>
+        )}
+      </div>
       {toast.action && (
         <button
           className="toast-action"

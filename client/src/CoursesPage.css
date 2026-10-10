@@ -548,7 +548,10 @@
 }
 .cp-modal-x:hover { color: #374151; }
 
-.cp-modal-body { padding: 18px 22px; }
+.cp-modal-body { 
+  padding: 18px 22px; 
+  overflow-y: auto;
+}
 
 /* ── Form Grid ── */
 .cp-form-grid {

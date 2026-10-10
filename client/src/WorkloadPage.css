@@ -2039,3 +2039,33 @@
     font-size: 14px;
   }
 }
+
+/* Course Wise Workload Inputs */
+.wl-cw-input {
+  width: 60px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  text-align: center;
+  background-color: #ffffff;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  /* Hide arrows in Firefox */
+  -moz-appearance: textfield;
+}
+
+.wl-cw-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+/* Hide arrows in Chrome/Safari/Edge */
+.wl-cw-input::-webkit-outer-spin-button,
+.wl-cw-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+

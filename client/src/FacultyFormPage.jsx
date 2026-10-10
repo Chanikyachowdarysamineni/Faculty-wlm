@@ -4,6 +4,7 @@ import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import './FacultyFormPage.css';
+import { useToast } from './Toast';
 
 const FacultyFormPage = ({
   formEnabled, setFormEnabled,
@@ -12,6 +13,7 @@ const FacultyFormPage = ({
   isAdmin, currentUser,
 }) => {
   const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
+  const { showToast } = useToast();
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
   const YEARS_ORDER = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
@@ -208,13 +210,19 @@ const cancelEdit = () => {
         });
         const data = await res.json();
         if (!res.ok || !data?.success) { 
-          setApiError(data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') : (data?.message || 'Update failed.')); 
+          const msg = data?.message || 'Update failed.';
+          showToast({ type: 'error', message: msg, errors: data?.errors || [] });
+          if (data?.errors?.length) {
+            const errMap = {};
+            data.errors.forEach(e => { errMap[e.field] = e.message; });
+            setErrors(errMap);
+          }
           setSaving(false); 
           return; 
         }
         const updatedSubmission = data?.data;
         if (!updatedSubmission) {
-          setApiError('Server returned invalid submission data.');
+          showToast({ type: 'error', message: 'Server returned invalid submission data.' });
           setSaving(false);
           return;
         }
@@ -225,7 +233,9 @@ const cancelEdit = () => {
         setSubmitted(true);
         setPrefs(['', '', '', '', '']);
         setErrors({});
-      } catch { setApiError('Network error. Please try again.'); }
+      } catch (err) { 
+        showToast({ type: 'error', message: err.message || 'Network error. Please try again.' }); 
+      }
       setSaving(false);
       return;
     }
@@ -253,13 +263,19 @@ const cancelEdit = () => {
       });
       const data = await res.json();
       if (!res.ok || !data?.success) { 
-        setApiError(data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') : (data?.message || 'Submission failed.')); 
+        const msg = data?.message || 'Submission failed.';
+        showToast({ type: 'error', message: msg, errors: data?.errors || [] });
+        if (data?.errors?.length) {
+          const errMap = {};
+          data.errors.forEach(e => { errMap[e.field] = e.message; });
+          setErrors(errMap);
+        }
         setSaving(false); 
         return; 
       }
       const newSubmission = data?.data;
       if (!newSubmission) {
-        setApiError('Server returned invalid submission data.');
+        showToast({ type: 'error', message: 'Server returned invalid submission data.' });
         setSaving(false);
         return;
       }
@@ -269,7 +285,9 @@ const cancelEdit = () => {
       setEmpIdInput(initialEmpId);
       setPrefs(['', '', '', '', '']);
       setErrors({});
-    } catch { setApiError('Network error. Please try again.'); }
+    } catch (err) { 
+      showToast({ type: 'error', message: err.message || 'Network error. Please try again.' }); 
+    }
     setSaving(false);
   };
 
@@ -313,7 +331,7 @@ const cancelEdit = () => {
   // ── Export handlers ─────────────────────────────
   const handleExport = async (format) => {
     if (submissions.length === 0) {
-      alert('No submissions to export.');
+      showToast({ type: 'error', message: 'No submissions to export.' });
       return;
     }
     setExportLoading(true);
@@ -380,10 +398,18 @@ const cancelEdit = () => {
                 onClick={async () => {
                   const next = !editEnabled;
                   setEditEnabled(next);
-                  await fetch(`${API}/deva/settings/edit-status`, {
-                    method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ editEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
-                  }).catch(() => {});
+                  try {
+                    const res = await fetch(`${API}/deva/settings/edit-status`, {
+                      method: 'PUT', headers: authHeaders(),
+                      body: JSON.stringify({ editEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || 'Failed to update edit status');
+                    showToast({ type: 'success', message: 'Edit status updated successfully' });
+                  } catch (err) {
+                    setEditEnabled(!next); // rollback
+                    showToast({ type: 'error', message: err.message || 'Error updating edit status' });
+                  }
                 }}
                 title={editEnabled ? 'Prevent faculty from editing submitted preferences' : 'Allow faculty to edit submitted preferences'}
               >
@@ -394,10 +420,18 @@ const cancelEdit = () => {
                 onClick={async () => {
                   const next = !formEnabled;
                   setFormEnabled(next);
-                  await fetch(`${API}/deva/settings/form-status`, {
-                    method: 'PUT', headers: authHeaders(),
-                    body: JSON.stringify({ formEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
-                  }).catch(() => {});
+                  try {
+                    const res = await fetch(`${API}/deva/settings/form-status`, {
+                      method: 'PUT', headers: authHeaders(),
+                      body: JSON.stringify({ formEnabled: next, semester: selectedSemester, academicYear: selectedAcademicYear }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || 'Failed to update form status');
+                    showToast({ type: 'success', message: 'Form status updated successfully' });
+                  } catch (err) {
+                    setFormEnabled(!next); // rollback
+                    showToast({ type: 'error', message: err.message || 'Error updating form status' });
+                  }
                 }}
               >
                 {formEnabled ? '🔒 Disable Form' : '🔓 Enable Form'}
@@ -930,8 +964,8 @@ const cancelEdit = () => {
                                     });
                                     const data = await res.json();
                                     if (res.ok) onDeleteSubmission(s.id);
-                                    else alert(data.message || 'Delete failed.');
-                                  } catch { alert('Network error.'); }
+                                    else showToast({ type: 'error', message: data.message || 'Delete failed.' });
+                                  } catch (err) { showToast({ type: 'error', message: 'Failed to delete submission' }); }
                                 }}
                               >✕ Remove</button>
                             </td>

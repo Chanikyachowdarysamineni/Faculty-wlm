@@ -6,6 +6,8 @@ import './WorkloadPage.css';
 import { getDefaultCapacity } from './utils/designationUtils';
 import API from './config';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
+import { useToast } from './Toast';
+import { FieldError } from './components/FieldError';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 import {
@@ -76,7 +78,7 @@ const emptyForm = {
   empId: '', empName: '', designation: '', mobile: '', facultyRole: 'Main Faculty',
   taAllocationRow: 'R2',
   courseId: '', year: 'I', section: '1',
-  courseType: 'Mandatory',
+  courseType: '',
   manualL: '', manualT: '', manualP: '',
   capacity: '', // Max faculty workload capacity in hours
   // 'Other' free-text companions
@@ -92,7 +94,7 @@ const authHeader = () => authJsonHeaders();
 const WorkloadPage = ({ submissions }) => {
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig, setFaculty } = useSharedData();
 
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
   const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
@@ -100,8 +102,9 @@ const WorkloadPage = ({ submissions }) => {
     ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }]
     : [{ value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' }];
 
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value) : ['Mandatory', 'DE', 'Other'];
+  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
   const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value).length > 0 ? (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value) : ['Main Faculty', 'Supporting Faculty', 'TA'];
+  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
 
   const [workloads, setWorkloads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -112,10 +115,11 @@ const WorkloadPage = ({ submissions }) => {
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState('');
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [filterEmp, setFilterEmp] = useState('');
   const [activeYear, setActiveYear] = useState('All'); // year-tab filter
+  const [assignCourseProgram, setAssignCourseProgram] = useState('All');
   const [showForms, setShowForms] = useState(false);
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   // New: allocation data for selected course/year/section
@@ -151,7 +155,6 @@ const WorkloadPage = ({ submissions }) => {
   const [filteredCourseList, setFilteredCourseList] = useState([]);
 
 
-  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 2800); };
 
   // ── Fetch allocation for selected course/year/section ──
   useEffect(() => {
@@ -278,7 +281,7 @@ const WorkloadPage = ({ submissions }) => {
       setWorkloads([]);
       setFetchError('Could not load workload details from server.');
       console.error('❌ Error fetching workloads:', error);
-      showToast('⚠ Could not load workloads from server.');
+      showToast({ type: 'error', message: 'Could not load workloads from server.' });
     } finally {
       if (withLoader) setLoading(false);
     }
@@ -299,7 +302,10 @@ const WorkloadPage = ({ submissions }) => {
     return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid) || String(c.courseId) === String(cid))).filter(Boolean);
   }, [submission, courseList]);
   const selectedCourse = useMemo(() => courseList.find(c => String(c.id) === String(form.courseId)), [form.courseId, courseList]);
-  const sections = sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
+  
+  const isMTech = selectedCourse?.program === 'M.Tech';
+  const sectionConfigKey = isMTech ? `M.Tech_${form.year}` : form.year;
+  const sections = sectionsConfig[sectionConfigKey] || sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
 
   const allocationPreviewRows = useMemo(() => {
     if (!allocation) return [];
@@ -402,7 +408,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Course change: pre-fill course type, L/T/P, and AUTO-FETCH year from course ──
   const handleCourseChange = cid => {
     if (cid === '__other__') {
-      setForm(prev => ({ ...prev, courseId: '__other__', courseType: 'Mandatory', manualL: '', manualT: '', manualP: '' }));
+      setForm(prev => ({ ...prev, courseId: '__other__', courseType: COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '', manualL: '', manualT: '', manualP: '' }));
       return;
     }
 
@@ -411,9 +417,12 @@ const WorkloadPage = ({ submissions }) => {
 
     // CRITICAL: Extract year from selected course and auto-populate
     const courseYear = c?.year || 'I'; // Fallback to 'I' if no year found
+    
+    const isMTech = c?.program === 'M.Tech';
+    const configKey = isMTech ? `M.Tech_${courseYear}` : courseYear;
 
-    // Auto-select first available section for the determined year
-    const availableSections = sectionsConfig[courseYear] || YEAR_SECTIONS[courseYear] || ['1'];
+    // Auto-select first available section for the determined year and program
+    const availableSections = sectionsConfig[configKey] || sectionsConfig[courseYear] || YEAR_SECTIONS[courseYear] || ['1'];
     const autoSection = availableSections?.[0] || '1';
 
     setForm(prev => ({
@@ -526,7 +535,7 @@ const WorkloadPage = ({ submissions }) => {
       courseId: isOtherCrs ? '__other__' : String(w.courseId),
       courseType: isOtherCrs
         ? (COURSE_TYPES.includes(w.courseType) ? w.courseType : '__other__')
-        : (w.courseType || 'Mandatory'),
+        : (w.courseType || (COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '')),
       courseOther: isOtherCrs ? w.subjectName : '',
       courseTypeOther: isOtherCrs && !COURSE_TYPES.includes(w.courseType) ? (w.courseType || '') : '',
       year: w.year,
@@ -573,7 +582,7 @@ const WorkloadPage = ({ submissions }) => {
       // Validate that year is not empty before proceeding
       if (!normalizedYear || normalizedYear === '') {
         setErrors((prev) => ({ ...prev, year: 'Year must be populated. Please select a course or enter a year.' }));
-        showToast('⚠ Year is required. Please select a course or enter a year.');
+        showToast({ type: 'error', message: 'Year is required. Please select a course or enter a year.' });
         setSaving(false);
         return;
       }
@@ -597,7 +606,7 @@ const WorkloadPage = ({ submissions }) => {
             ...prev,
             section: 'Only one Department Elective can be assigned to this section for I/II/III years.'
           }));
-          showToast('⚠ Only one Department Elective can be assigned to this section for I/II/III years.');
+          showToast({ type: 'error', message: 'Only one Department Elective can be assigned to this section for I/II/III years.' });
           setSaving(false);
           return;
         }
@@ -616,7 +625,7 @@ const WorkloadPage = ({ submissions }) => {
             ...prev,
             facultyRole: 'Only one TA can be assigned for the same subject and section.'
           }));
-          showToast('⚠ TA is already assigned for this subject and section. Only one TA is allowed per section.');
+          showToast({ type: 'error', message: 'TA is already assigned for this subject and section. Only one TA is allowed per section.' });
           setSaving(false);
           return;
         }
@@ -707,7 +716,7 @@ const WorkloadPage = ({ submissions }) => {
           year: !payload.year ? 'Year required' : '',
           section: !payload.section ? 'Section required' : ''
         }));
-        showToast('⚠ Missing required fields: ' + (!payload.empId ? 'Employee, ' : '') + (!payload.year ? 'Year, ' : '') + (!payload.section ? 'Section' : ''));
+        showToast({ type: 'error', message: 'Missing required fields: ' + (!payload.empId ? 'Employee, ' : '') + (!payload.year ? 'Year, ' : '') + (!payload.section ? 'Section' : '') });
         setSaving(false);
         return;
       }
@@ -764,14 +773,25 @@ const WorkloadPage = ({ submissions }) => {
               facultyRole: existingWorkload.facultyRole,
               allocationRow: existingWorkload.allocationRow || ''
             });
-            showToast('✓ This workload exists. Opening for editing...');
+            showToast({ type: 'success', message: 'This workload exists. Opening for editing...' });
             setSaving(false);
             return;
           }
         }
 
-        const errorString = data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(', ') : (data?.message || 'Save failed.');
-        showToast(`⚠ ${errorString}`);
+        const msg = data?.message || 'Save failed.';
+        showToast({ type: 'error', message: msg, errors: data?.errors || [] });
+        if (data?.errors?.length) {
+          const errMap = {};
+          data.errors.forEach(e => { errMap[e.field] = e.message; });
+          setErrors(errMap);
+          setTimeout(() => {
+            const firstErrorField = document.querySelector('[aria-invalid="true"]');
+            if (firstErrorField) {
+              firstErrorField.focus();
+            }
+          }, 100);
+        }
         setSaving(false);
         return;
       }
@@ -791,7 +811,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     } catch (err) {
       console.error('❌ Network/Request Error:', err);
-      showToast(`⚠ Server unreachable or request failed: ${err.message}`);
+      showToast({ type: 'error', message: `Server unreachable or request failed: ${err.message}` });
     } finally {
       setSaving(false);
     }
@@ -800,7 +820,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Update Faculty Capacity: calls server API to update all workloads for a faculty ──
   const updateFacultyCapacity = async () => {
     if (!editCapacityTarget || !editCapacityValue || Number(editCapacityValue) <= 0) {
-      showToast('⚠ Enter a valid capacity hours value.');
+      showToast({ type: 'error', message: 'Enter a valid capacity hours value.' });
       return;
     }
 
@@ -816,13 +836,14 @@ const WorkloadPage = ({ submissions }) => {
         showToast(`⚠ ${data.message || 'Could not update capacity.'}`);
         return;
       }
+      setFaculty(prev => prev.map(f => String(f.empId) === String(editCapacityTarget) ? { ...f, capacity: newCapacity } : f));
       await fetchWorkloads();
       showToast(`✓ Capacity updated to ${newCapacity}h for all workloads.`);
       setEditCapacityTarget(null);
       setEditCapacityValue('');
     } catch (err) {
       console.error('Error updating capacity:', err);
-      showToast('⚠ Failed to update capacity.');
+      showToast({ type: 'error', message: 'Failed to update capacity.' });
     }
   };
 
@@ -837,7 +858,7 @@ const WorkloadPage = ({ submissions }) => {
       await fetchWorkloads();
       showToast('Workload entry removed.');
     } catch {
-      showToast('⚠ Delete failed. Please try again.');
+      showToast({ type: 'error', message: 'Delete failed. Please try again.' });
     } finally {
       setDeleteTarget(null);
     }
@@ -881,7 +902,7 @@ const WorkloadPage = ({ submissions }) => {
 
     // Per-faculty visibility toggle
     if (!empId) {
-      showToast('⚠ Invalid faculty.');
+      showToast({ type: 'error', message: 'Invalid faculty.' });
       return;
     }
 
@@ -928,6 +949,7 @@ const WorkloadPage = ({ submissions }) => {
     { header: 'Faculty Role', key: 'facultyRole' },
     { header: 'Department', key: 'department' },
     { header: 'Designation', key: 'designation' },
+    { header: 'Program', key: 'program' },
     { header: 'Subject Code', key: 'subjectCode' },
     { header: 'Subject Name', key: 'subjectName' },
     { header: 'Year', key: 'year' },
@@ -1263,7 +1285,7 @@ const WorkloadPage = ({ submissions }) => {
                   )}
                 </>
               )}
-              {errors.empId && <span className="wl-err">{errors.empId}</span>}
+              <FieldError error={errors.empId} id="err-empId" />
             </div>
             <div className="wl-fg">
               <label>Employee Name</label>
@@ -1292,7 +1314,7 @@ const WorkloadPage = ({ submissions }) => {
                   <input placeholder="Type mobile number…"
                     value={form.mobileOther}
                     onChange={e => setForm(p => ({ ...p, mobileOther: e.target.value }))} />
-                  {errors.mobile && <span className="wl-err">{errors.mobile}</span>}
+                  <FieldError error={errors.mobile} id="err-mobile" />
                 </>
               ) : (
                 <input value={facMember?.mobile || form.mobile || ''} readOnly className="wl-readonly" placeholder="—" />
@@ -1450,16 +1472,16 @@ const WorkloadPage = ({ submissions }) => {
                   <div className="wl-cap-value" style={{ color: '#0369a1', fontSize: '14px' }}>{selectedCourse.subjectCode}</div>
                 </div>
                 <div className="wl-cap-card">
+                  <div className="wl-cap-label">Program</div>
+                  <div className="wl-cap-value">{selectedCourse.program}</div>
+                </div>
+                <div className="wl-cap-card">
                   <div className="wl-cap-label">Year (Auto-fetched)</div>
                   <div className="wl-cap-value" style={{ color: '#16a34a', fontWeight: 600 }}>{form.year || 'Fetching...'}</div>
                 </div>
                 <div className="wl-cap-card">
                   <div className="wl-cap-label">Course Type</div>
                   <div className="wl-cap-value">{selectedCourse.courseType}</div>
-                </div>
-                <div className="wl-cap-card">
-                  <div className="wl-cap-label">Program</div>
-                  <div className="wl-cap-value">{selectedCourse.program}</div>
                 </div>
                 <div className="wl-cap-card">
                   <div className="wl-cap-label">Lecture Hours (L)</div>
@@ -1493,11 +1515,22 @@ const WorkloadPage = ({ submissions }) => {
               )}
             </div>
             <div className="wl-form-row">
+              <div className="wl-fg wl-fg-program">
+                <label>Program</label>
+                <select value={assignCourseProgram} onChange={e => setAssignCourseProgram(e.target.value)}>
+                  <option value="All">All Programs</option>
+                  {PROGRAMS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
               <div className="wl-fg wl-fg-course">
                 <label>Course to Assign *</label>
                 <select value={form.courseId} onChange={e => handleCourseChange(e.target.value)}>
                   <option value="">— Select a course —</option>
-                  {(prefCourses.length > 0 ? prefCourses : filteredCourseList.length > 0 ? filteredCourseList : courseList).map(c => (
+                  {(prefCourses.length > 0 ? prefCourses : filteredCourseList.length > 0 ? filteredCourseList : courseList)
+                    .filter(c => assignCourseProgram === 'All' || c.program === assignCourseProgram || (assignCourseProgram === 'B.Tech' && !c.program))
+                    .map(c => (
                     <option key={c.id} value={c.id}>
                       [{c.subjectCode}] {c.subjectName} ({c.shortName})
                     </option>
@@ -1521,7 +1554,7 @@ const WorkloadPage = ({ submissions }) => {
                     value={form.courseOther}
                     onChange={e => setForm(p => ({ ...p, courseOther: e.target.value }))} />
                 )}
-                {errors.courseId && <span className="wl-err">{errors.courseId}</span>}
+                <FieldError error={errors.courseId} id="err-courseId" />
               </div>
               <div className="wl-fg">
                 <label>Year *</label>
@@ -1534,26 +1567,38 @@ const WorkloadPage = ({ submissions }) => {
                       value={form.yearOther}
                       onChange={e => setForm(p => ({ ...p, yearOther: e.target.value }))}
                     />
-                    {errors.year && <span className="wl-err">{errors.year}</span>}
+                    <FieldError error={errors.year} id="err-year" />
                   </>
                 ) : (
                   // Manual year selection dropdown
                   <>
                     <select
                       value={form.year}
-                      onChange={e => setForm(p => ({
-                        ...p,
-                        year: e.target.value,
-                        section: e.target.value !== '__other__'
-                          ? ((sectionsConfig[e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
-                          : p.section,
-                        courseId: '',
-                        manualL: '',
-                        manualT: '',
-                        manualP: ''
-                      }))}
+                      onChange={e => {
+                        const program = selectedCourse?.program || assignCourseProgram;
+                        const isMTechProg = program === 'M.Tech';
+                        setForm(p => ({
+                          ...p,
+                          year: e.target.value,
+                          section: e.target.value !== '__other__'
+                            ? ((sectionsConfig[isMTechProg ? `M.Tech_${e.target.value}` : e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
+                            : p.section,
+                          courseId: '',
+                          manualL: '',
+                          manualT: '',
+                          manualP: ''
+                        }));
+                      }}
                     >
-                      {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {YEAR_OPTIONS.filter(o => {
+                        if (o.value === '__other__') return true;
+                        // Dynamically filter years based on program
+                        const program = selectedCourse?.program || assignCourseProgram;
+                        if (program === 'M.Tech') {
+                          return o.value === 'I' || o.value === 'II';
+                        }
+                        return true;
+                      }).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     {form.courseId && form.courseId !== '__other__' && selectedCourse && (
                       <span className="wl-fsec-hint wl-fsec-info" style={{ marginTop: '4px' }}>
@@ -1562,7 +1607,7 @@ const WorkloadPage = ({ submissions }) => {
                     )}
                   </>
                 )}
-                {errors.year && <span className="wl-err">{errors.year}</span>}
+                <FieldError error={errors.year} id="err-year" />
               </div>
               {form.courseId === '__other__' && (
                 <div className="wl-fg">
@@ -1579,7 +1624,7 @@ const WorkloadPage = ({ submissions }) => {
                       onChange={e => setForm(p => ({ ...p, courseTypeOther: e.target.value }))}
                     />
                   )}
-                  {errors.courseType && <span className="wl-err">{errors.courseType}</span>}
+                  <FieldError error={errors.courseType} id="err-courseType" />
                 </div>
               )}
               <div className="wl-fg">
@@ -1604,7 +1649,7 @@ const WorkloadPage = ({ submissions }) => {
                     onChange={e => setForm(p => ({ ...p, sectionOther: e.target.value }))}
                   />
                 )}
-                {errors.section && <span className="wl-err">{errors.section}</span>}
+                <FieldError error={errors.section} id="err-section" />
               </div>
             </div>
           </>
@@ -1831,6 +1876,7 @@ const WorkloadPage = ({ submissions }) => {
                           <th>Subject Code</th>
                           <th>Subject Name</th>
                           <th>Role</th>
+                          <th>Program</th>
                           <th>Year</th>
                           <th>Sec</th>
                           <th className="wl-th-num" title="Fixed Lecture">📌 L</th>
@@ -1871,6 +1917,7 @@ const WorkloadPage = ({ submissions }) => {
                                     <td className="wl-td-code">{w.subjectCode}</td>
                                     <td className="wl-td-sname">{w.subjectName}</td>
                                     <td>{w.facultyRole || 'Main Faculty'}{w.facultyRole === 'TA' && w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
+                                    <td><span className="wl-badge-prog">{w.program || 'B.Tech'}</span></td>
                                     <td><span className="wl-year-pill">{w.year}</span></td>
                                     <td><span className="wl-sec-pill">{w.section}</span></td>
                                     <td className="wl-td-num wl-td-fixed">{w.fixedL}</td>
@@ -2155,7 +2202,6 @@ const WorkloadPage = ({ submissions }) => {
         </div>
       )}
 
-      {toast && <div className="wl-toast">{toast}</div>}
     </div>
   );
 };

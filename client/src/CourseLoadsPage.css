@@ -1,0 +1,211 @@
+.course-loads-page {
+  padding: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8fafc;
+}
+
+.clp-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.clp-topbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.clp-topbar h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.clp-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-weight: 500;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-right: 16px;
+  transition: all 0.2s;
+}
+
+.clp-back-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.clp-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.clp-filter-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+}
+
+.clp-filter-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+
+.clp-filter-group select,
+.clp-filter-group input {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #1e293b;
+  background-color: #fff;
+  outline: none;
+}
+
+.clp-filter-group select:focus,
+.clp-filter-group input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.clp-search-group {
+  flex-grow: 1;
+  max-width: 300px;
+}
+
+.clp-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.clp-loading,
+.clp-error,
+.clp-empty {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+.clp-error {
+  color: #ef4444;
+}
+
+.clp-programs {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.clp-program-section {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+}
+
+.clp-program-title {
+  margin: 0 0 20px 0;
+  font-size: 1.25rem;
+  color: #0f172a;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.clp-year-section {
+  margin-bottom: 24px;
+}
+
+.clp-year-section:last-child {
+  margin-bottom: 0;
+}
+
+.clp-year-title {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  color: #334155;
+  font-weight: 600;
+}
+
+.clp-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.clp-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.clp-table th {
+  background-color: #f8fafc;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.clp-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+.clp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.clp-code {
+  font-family: monospace;
+  font-weight: 600;
+  color: #0f172a !important;
+}
+
+.clp-name {
+  font-weight: 500;
+}
+
+.clp-list {
+  font-family: monospace;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.clp-allocated {
+  color: #059669 !important;
+  background-color: rgba(16, 185, 129, 0.05);
+}
+
+.clp-not-allocated {
+  color: #dc2626 !important;
+  background-color: rgba(239, 68, 68, 0.05);
+}

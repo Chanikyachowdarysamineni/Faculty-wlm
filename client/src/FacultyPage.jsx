@@ -9,6 +9,8 @@ import DesignationManagementModal from './components/DesignationManagementModal'
 
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import { getDefaultCapacity } from './utils/designationUtils';
+import { useApiForm } from './utils/useApiForm';
+import { ErrorMessage, FormGroup } from './components/FormElements';
 import './FacultyPage.css';
 
 const EMPTY_FORM = { empId: '', name: '', designation: '', mobile: '', email: '', capacity: '', joiningDate: '', relievingDate: '' };
@@ -29,9 +31,36 @@ const FacultyPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // null = add, obj = edit
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [toast, setToast] = useState('');
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2500);
+  };
+
+  const { values: form, errors, isSubmitting, handleChange, handleSubmit, resetForm, registerField } = useApiForm({
+    initialValues: EMPTY_FORM,
+    showToast: (t) => showToast(t.message),
+    onSubmit: async (values) => {
+      const payload = { ...values, semester: selectedSemester };
+      if (!payload.capacity) payload.capacity = getDefaultCapacity(payload.designation.trim());
+      return fetch(
+        editTarget ? `${API}/deva/faculty/${encodeURIComponent(editTarget.empId)}` : `${API}/deva/faculty`,
+        {
+          method: editTarget ? 'PUT' : 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        }
+      );
+    },
+    onSuccess: (data, res) => {
+      refetchFaculty();
+      showToast(editTarget ? 'Faculty updated successfully.' : 'Faculty added successfully.');
+      setShowModal(false);
+      resetForm(EMPTY_FORM);
+      setEditTarget(null);
+    }
+  });
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [isDragMode, setIsDragMode] = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragSrcIdx = useRef(null);
@@ -268,10 +297,7 @@ const FacultyPage = () => {
   }, [list, search]);
 
   // ── Toast helper ───────────────────────────────────────
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  };
+  // ── Toast helper (Moved to top) ──
 
 
   const fetchDeleted = async () => {
@@ -374,71 +400,18 @@ const FacultyPage = () => {
   // ── Open Add modal ─────────────────────────────────────
   const openAdd = () => {
     setEditTarget(null);
-    setForm({ ...EMPTY_FORM });
+    resetForm(EMPTY_FORM);
     setShowModal(true);
   };
 
   // ── Open Edit modal ────────────────────────────────────
   const openEdit = (f) => {
     setEditTarget(f);
-    setForm({ ...f });
+    resetForm({ ...f });
     setShowModal(true);
   };
 
-  // ── Save (Add / Edit) ──────────────────────────────────
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!form.empId.trim() || !form.name.trim()) return;
-    const payload = {
-      empId: form.empId.trim(),
-      name: form.name.trim(),
-      designation: form.designation.trim(),
-      mobile: form.mobile || '',
-      email: form.email || '',
-      department: form.department || 'CSE',
-      capacity: Number(form.capacity) || getDefaultCapacity(form.designation.trim()),
-      semester: undefined, joiningDate: form.joiningDate || null, relievingDate: form.relievingDate || null
-    };
-    try {
-      setSyncing(true);
-
-      const res = await fetch(
-        editTarget ? `${API}/deva/faculty/${encodeURIComponent(editTarget.empId)}` : `${API}/deva/faculty`,
-        {
-          method: editTarget ? 'PUT' : 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify(payload)
-        }
-      );
-      const data = await res.json();
-
-      if (!res.ok || !data?.success) {
-        console.error('[FacultyPage] Save failed:', { status: res.status, message: data?.message });
-        const errMsg = data?.errors?.length 
-          ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') 
-          : (data?.message || 'Could not save faculty record.');
-        showToast(errMsg);
-        return;
-      }
-      const serverFaculty = data?.data;
-      if (!serverFaculty || !serverFaculty.empId) {
-        console.error('[FacultyPage] Invalid response data:', serverFaculty);
-        showToast('Server returned invalid faculty data.');
-        return;
-      }
-      // After successful save, refetch all data to ensure consistency
-      await refetchFaculty();
-      showToast(editTarget ? 'Faculty updated successfully.' : 'Faculty added successfully.');
-      setShowModal(false);
-      setForm(EMPTY_FORM);
-      setEditTarget(null);
-    } catch (err) {
-      console.error('[FacultyPage] Error saving faculty:', err.message, err);
-      showToast('Network error while saving faculty record.');
-    } finally {
-      setSyncing(false);
-    }
-  };
+  // handleSave is now handled by useApiForm's handleSubmit
 
   // ── Delete ─────────────────────────────────────────────
   const handleDelete = async () => {
@@ -672,6 +645,9 @@ const FacultyPage = () => {
               <th>Emp ID</th>
               <th>Name of the Faculty</th>
               <th>Designation</th>
+              <th>Mobile</th>
+              <th>Email</th>
+              <th>Joining Date</th>
               <th>Department</th>
               <th title="Lecture Hours">L</th>
               <th title="Tutorial Hours">T</th>
@@ -686,7 +662,7 @@ const FacultyPage = () => {
           </thead>
           <tbody>
             {(restoreMode ? deletedList : (isDragMode ? mergedList : filtered)).length === 0 ? (
-              <tr><td colSpan={isDragMode ? 13 : 14} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
+              <tr><td colSpan={isDragMode ? 16 : 17} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
             ) : (
               (isDragMode ? mergedList : filtered).map((f, i) => (
                 <tr
@@ -715,6 +691,9 @@ const FacultyPage = () => {
                       {f.designation}
                     </span>
                   </td>
+                  <td>{f.mobile || 'N/A'}</td>
+                  <td>{f.email || 'N/A'}</td>
+                  <td>{f.joiningDate ? new Date(f.joiningDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</td>
                   <td>{f.department || 'CSE'}</td>
                   <td>{f.lectureHours}</td>
                   <td>{f.tutorialHours}</td>
@@ -773,19 +752,22 @@ const FacultyPage = () => {
               <h3>{editTarget ? 'Edit Faculty' : 'Add Faculty'}</h3>
               <button className="fp-modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
-            <form className="fp-modal-form" onSubmit={handleSave}>
+            <form className="fp-modal-form" onSubmit={handleSubmit}>
+              {errors._form && <ErrorMessage error={errors._form} />}
               <div className="fp-form-grid">
-                <div className="fp-form-group">
+                <FormGroup className="fp-form-group">
                   <label>Employee ID *</label>
-                  <input minLength={3} maxLength={20} pattern="[a-zA-Z0-9_\\-]+" value={form.empId} onChange={e => setForm({ ...form, empId: e.target.value })}
+                  <input name="empId" minLength={3} maxLength={20} pattern="[a-zA-Z0-9_\\-]+" value={form.empId} onChange={handleChange} ref={registerField('empId')} aria-invalid={!!errors.empId}
                     placeholder="e.g. 1234" required disabled={!isAdmin && !!editTarget} />
-                </div>
-                <div className="fp-form-group fp-form-full">
+                  <ErrorMessage error={errors.empId} />
+                </FormGroup>
+                <FormGroup className="fp-form-group fp-form-full">
                   <label>Name of Faculty *</label>
-                  <input minLength={3} maxLength={100} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                  <input name="name" minLength={3} maxLength={100} value={form.name} onChange={handleChange} ref={registerField('name')} aria-invalid={!!errors.name}
                     placeholder="e.g. Dr. John Smith" required />
-                </div>
-                <div className="fp-form-group fp-form-full">
+                  <ErrorMessage error={errors.name} />
+                </FormGroup>
+                <FormGroup className="fp-form-group fp-form-full">
                   <label style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Designation *</span>
                     {isAdmin && (
@@ -798,42 +780,48 @@ const FacultyPage = () => {
                       </button>
                     )}
                   </label>
-                  <select value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })}
+                  <select name="designation" value={form.designation} onChange={handleChange} ref={registerField('designation')} aria-invalid={!!errors.designation}
                     required>
                     <option value="">Select Designation</option>
                     {designations.map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
-                </div>
-                <div className="fp-form-group">
+                  <ErrorMessage error={errors.designation} />
+                </FormGroup>
+                <FormGroup className="fp-form-group">
                   <label>Mobile No</label>
-                  <input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })}
+                  <input name="mobile" type="tel" pattern="[0-9]{10}" maxLength="10" title="Must be exactly 10 digits" value={form.mobile} onChange={handleChange} ref={registerField('mobile')} aria-invalid={!!errors.mobile}
                     placeholder="e.g. 9876543210" />
-                </div>
-                <div className="fp-form-group">
+                  <ErrorMessage error={errors.mobile} />
+                </FormGroup>
+                <FormGroup className="fp-form-group">
                   <label>Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  <input name="email" type="email" value={form.email} onChange={handleChange} ref={registerField('email')} aria-invalid={!!errors.email}
                     placeholder="e.g. john@example.com" />
-                </div>
-                <div className="fp-form-group">
+                  <ErrorMessage error={errors.email} />
+                </FormGroup>
+                <FormGroup className="fp-form-group">
                   <label>Capacity *</label>
-                  <input type="number" min="1" max="60" value={form.capacity || ''} onChange={e => setForm({ ...form, capacity: e.target.value })}
+                  <input name="capacity" type="number" min="1" max="60" value={form.capacity || ''} onChange={handleChange} ref={registerField('capacity')} aria-invalid={!!errors.capacity}
                     placeholder="e.g. 18" required />
-                </div>
-                <div className="fp-form-group">
+                  <ErrorMessage error={errors.capacity} />
+                </FormGroup>
+                <FormGroup className="fp-form-group">
                   <label>Joining Date</label>
-                  <input type="date" value={form.joiningDate ? form.joiningDate.substring(0, 10) : ''} onChange={e => setForm({ ...form, joiningDate: e.target.value })} />
-                </div>
-                <div className="fp-form-group">
+                  <input name="joiningDate" type="date" value={form.joiningDate ? form.joiningDate.substring(0, 10) : ''} onChange={handleChange} ref={registerField('joiningDate')} aria-invalid={!!errors.joiningDate} />
+                  <ErrorMessage error={errors.joiningDate} />
+                </FormGroup>
+                <FormGroup className="fp-form-group">
                   <label>Relieving Date</label>
-                  <input type="date" value={form.relievingDate ? form.relievingDate.substring(0, 10) : ''} onChange={e => setForm({ ...form, relievingDate: e.target.value })} />
-                </div>
+                  <input name="relievingDate" type="date" value={form.relievingDate ? form.relievingDate.substring(0, 10) : ''} onChange={handleChange} ref={registerField('relievingDate')} aria-invalid={!!errors.relievingDate} />
+                  <ErrorMessage error={errors.relievingDate} />
+                </FormGroup>
 
               </div>
               <div className="fp-modal-actions">
                 <button type="button" className="fp-btn fp-btn-cancel" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="fp-btn fp-btn-add">{editTarget ? 'Update' : 'Add Faculty'}</button>
+                <button type="submit" className="fp-btn fp-btn-add" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : (editTarget ? 'Update' : 'Add Faculty')}</button>
               </div>
             </form>
           </div>

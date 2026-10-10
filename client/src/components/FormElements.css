@@ -1,0 +1,24 @@
+.ff-field-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ff-field-error svg {
+  flex-shrink: 0;
+}
+
+/* Add generic aria-invalid styles that can be applied to any input globally */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: #dc2626 !important;
+  background-color: #fef2f2 !important;
+}
+
+.ff-form-group {
+  margin-bottom: 1rem;
+}

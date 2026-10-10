@@ -11,6 +11,8 @@ import LoadingIndicator from './LoadingIndicator';
 const LoginPageComponent = lazy(() => import('./LoginPage'));
 const Dashboard = lazy(() => import('./Dashboard'));
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const CourseWiseWorkloadPage = lazy(() => import('./CourseWiseWorkloadPage'));
+const CourseLoadsPage = lazy(() => import('./CourseLoadsPage'));
 
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
@@ -59,6 +61,22 @@ const AdminDashboardWrapper = () => {
   );
 };
 
+const CourseWiseWorkloadPageWrapper = () => {
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading course wise workload..." />}>
+      <CourseWiseWorkloadPage />
+    </Suspense>
+  );
+};
+
+const CourseLoadsPageWrapper = () => {
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading course loads..." />}>
+      <CourseLoadsPage />
+    </Suspense>
+  );
+};
+
 export const publicRoutes = [
   { path: '/login', element: <LoginPageWrapper />, title: 'Login' },
   { path: '/', element: <Navigate to="/login" replace />, title: 'Home' },
@@ -67,7 +85,9 @@ export const publicRoutes = [
 export const protectedRoutes = [
   { path: '/', element: <ProtectedRoute><DashboardWrapper /></ProtectedRoute>, title: 'Dashboard' },
   { path: '/dashboard', element: <ProtectedRoute><DashboardWrapper /></ProtectedRoute>, title: 'Dashboard' },
-  { path: '/admin-dashboard', element: <ProtectedRoute roles={['admin']}><AdminDashboardWrapper /></ProtectedRoute>, title: 'Admin Dashboard' }
+  { path: '/admin-dashboard', element: <ProtectedRoute roles={['admin']}><AdminDashboardWrapper /></ProtectedRoute>, title: 'Admin Dashboard' },
+  { path: '/course-wise-workload', element: <ProtectedRoute><CourseWiseWorkloadPageWrapper /></ProtectedRoute>, title: 'Course Wise Workload Details' },
+  { path: '/course-loads', element: <ProtectedRoute><CourseLoadsPageWrapper /></ProtectedRoute>, title: 'Course Loads' }
 ];
 
 export const allRoutes = [...publicRoutes, ...protectedRoutes];

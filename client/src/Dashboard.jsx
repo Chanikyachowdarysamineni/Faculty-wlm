@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
-import FacultyPage          from './FacultyPage';
+import FacultyPage from './FacultyPage';
 import CoursesPage from './CoursesPage';
 import SectionManagementPage from './SectionManagementPage';
 import WorkloadPage from './WorkloadPage';
@@ -196,6 +197,7 @@ const toPct = (value) => Math.max(0, Math.min(100, value));
 const AUTO_REFRESH_MS = 60000;
 
 const Dashboard = ({ user, onLogout }) => {
+  const navigate = useNavigate();
   const publicUrl = process.env.PUBLIC_URL || '';
   const [activeNav, setActiveNav] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -219,7 +221,7 @@ const Dashboard = ({ user, onLogout }) => {
   const handleDelSubmission = id => setSubmissions(prev => prev.filter(s => s.id !== id));
   const handleUpdateSubmission = sub => setSubmissions(prev => prev.map(s => s.id === sub.id ? sub : s));
 
-  
+
 
 
   const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true);
@@ -241,7 +243,7 @@ const Dashboard = ({ user, onLogout }) => {
     return headers;
   }, []);
 
-  const { 
+  const {
     setFaculty, setCourses, setAllocations, setSectionsConfig: setSharedSectionsConfig, setSystemConfig,
     setAcademicYears
   } = useSharedData();
@@ -260,6 +262,12 @@ const Dashboard = ({ user, onLogout }) => {
     overloaded: [],
     pending: [],
     perfect: [],
+  });
+  const [dashboardCards, setDashboardCards] = useState({
+    loading: false,
+    courses: { total: 0, assigned: 0, notAssigned: 0, due: 0 },
+    sectionsByYear: [],
+    hours: { L: { total: 0, assigned: 0, pending: 0 }, T: { total: 0, assigned: 0, pending: 0 }, P: { total: 0, assigned: 0, pending: 0 } }
   });
   const [dashboardLastSyncedAt, setDashboardLastSyncedAt] = useState(null);
   const [submissionsLastSyncedAt, setSubmissionsLastSyncedAt] = useState(null);
@@ -897,6 +905,33 @@ const Dashboard = ({ user, onLogout }) => {
           ),
           color: '#16a34a', bg: '#dcfce7',
         },
+        {
+          label: 'Course Wise Workload Details',
+          value: 'View',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+          ),
+          color: '#8b5cf6', bg: '#ede9fe',
+          onClick: () => { navigate('/course-wise-workload'); },
+        },
+        {
+          label: 'Course Loads',
+          value: 'View',
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="9" y1="21" x2="9" y2="9" />
+            </svg>
+          ),
+          color: '#ec4899', bg: '#fce7f3',
+          onClick: () => { navigate('/course-loads'); },
+        },
       ];
 
       return { summaryStats, analyticsStats };
@@ -947,7 +982,6 @@ const Dashboard = ({ user, onLogout }) => {
         <div className="rp-blob rp-blob-3" />
 
         <div className="rp-container">
-      <GlobalPeriodSelector />
           {/* Brand header */}
           <div className="rp-brand">
             <img src={`${publicUrl}/logo.webp`} alt="Logo" className="rp-brand-logo" />
@@ -1065,10 +1099,10 @@ const Dashboard = ({ user, onLogout }) => {
         </div>
 
         <div className="dash-topbar-right">
-          
+
           <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
-            <select 
-              value={selectedAcademicYearId} 
+            <select
+              value={selectedAcademicYearId}
               onChange={(e) => changeAcademicPeriod(e.target.value, selectedSemester)}
               style={{ background: 'transparent', color: '#fff', border: 'none', outline: 'none', cursor: 'pointer', padding: '6px 10px', fontSize: '14px', fontWeight: '500' }}
             >
@@ -1079,7 +1113,7 @@ const Dashboard = ({ user, onLogout }) => {
           </div>
 
           <div className="dash-semester-toggle" style={{ display: 'flex', alignItems: 'center', marginRight: '16px', background: 'rgba(255,255,255,0.1)', padding: '2px', borderRadius: '8px' }}>
-            {(academicYears.find(y => String(y.id || y._id) === String(selectedAcademicYearId))?.semesters || ['ODD','EVEN']).map(sem => {
+            {(academicYears.find(y => String(y.id || y._id) === String(selectedAcademicYearId))?.semesters || ['ODD', 'EVEN']).map(sem => {
               const semType = typeof sem === 'string' ? sem : sem.semesterType;
               return (
                 <button
@@ -1190,13 +1224,13 @@ const Dashboard = ({ user, onLogout }) => {
                           activeNav === 'profile' ? (
                             <ProfilePage user={user} submissions={submissions} onLogout={onLogout} dashMode={dashMode} />
                           ) : activeNav === 'admin-management' && isAdmin ? (
-                              <AdminManagement user={user} />
-                            ) : activeNav === 'designations' && isAdmin ? (
-                              <div style={{ background: '#fff', color: '#1e293b', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', maxWidth: '800px', margin: '0 auto' }}>
-                                <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Manage Designations</h2>
-                                <DesignationManagementModal onClose={() => {}} isStandalone={true} />
-                              </div>
-                            ) : activeNav === 'academic-years' && isAdmin ? (
+                            <AdminManagement user={user} />
+                          ) : activeNav === 'designations' && isAdmin ? (
+                            <div style={{ background: '#fff', color: '#1e293b', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', maxWidth: '800px', margin: '0 auto' }}>
+                              <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Manage Designations</h2>
+                              <DesignationManagementModal onClose={() => { }} isStandalone={true} />
+                            </div>
+                          ) : activeNav === 'academic-years' && isAdmin ? (
                             <AcademicYearManagementPage />
                           ) :
 
@@ -1292,6 +1326,10 @@ const Dashboard = ({ user, onLogout }) => {
                                           border: expandedCard === s.label ? `2px solid ${s.color}` : '1px solid transparent',
                                         }}
                                         onClick={() => {
+                                          if (s.onClick) {
+                                            s.onClick();
+                                            return;
+                                          }
                                           if (['Overloaded Faculty', 'Pending Faculty', 'Perfectly Assigned'].includes(s.label)) {
                                             setExpandedCard(expandedCard === s.label ? null : s.label);
                                           }

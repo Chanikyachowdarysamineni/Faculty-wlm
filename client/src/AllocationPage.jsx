@@ -12,6 +12,7 @@ import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import API from './config';
 import './AllocationPage.css';
+import { useToast } from './Toast';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import { fetchAllPages, fetchJsonWithRetry, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
@@ -70,7 +71,8 @@ const CellPicker = ({
   facultyList = [],
   mainFacultyMap = {},
   taWorkloadMap = {},
-  workloads = []
+  workloads = [],
+  yearKey = ''
 }) => {
   const [open,   setOpen]   = useState(false);
   const [search, setSearch] = useState('');
@@ -84,7 +86,8 @@ const CellPicker = ({
     String(w.section) === String(section) &&
     w.allocationStatus !== 'CANCELLED'
   );
-  const isR1Locked = rowIdx === 0 && isMainAssigned;
+  const isFirstYear = yearKey === 'I Year';
+  const isR1Locked = rowIdx === 0 && (isMainAssigned || isFirstYear);
 
   // RULE 2: TA-driven slots are locked (R2-R4 auto-assigned from workload)
   const taLockKey = `${courseId}__${section}__${type}__${rowIdx}`;
@@ -151,7 +154,10 @@ const CellPicker = ({
   };
 
   const getLockBadge = () => {
-    if (isR1Locked) return { icon: '🔒', title: 'R1 is locked from Workload Page (Main Faculty).' };
+    if (isR1Locked) {
+      if (isFirstYear) return { icon: '🔒', title: 'Main Faculty (R1) is locked for First Year.' };
+      return { icon: '🔒', title: 'R1 is locked from Workload Page (Main Faculty).' };
+    }
     if (isTALocked) return { icon: '🔒', title: 'This TA slot is locked from Workload Page assignment.' };
     return null;
   };
@@ -241,8 +247,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [unsaved,       setUnsaved]       = useState(false);
-  const [toast,         setToast]         = useState('');
-  const [apiError,      setApiError]      = useState('');
+  const { showToast } = useToast();
   const [lastSyncedAt,  setLastSyncedAt]  = useState(null);
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   const [facultyList, setFacultyList] = useState([]);
@@ -290,7 +295,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       return { success: true };
     } catch (error) {
       setWorkloads([]);
-      return { success: false, message: 'Failed to load workloads.' };
+      return { success: false, message: error.message || 'Failed to load workloads.' };
     } finally {
       setWorkloadsLoading(false);
     }
@@ -314,7 +319,6 @@ const AllocationPage = ({ isAdmin = true }) => {
     }
   }, [yearKey, selectedSemester]);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const loadSectionsConfig = useCallback(async () => {
     try {
@@ -415,7 +419,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       setAllocations(allocArray);
       return { success: true };
     } catch (error) {
-      return { success: false, message: 'Could not load allocations.' };
+      return { success: false, message: error.message || 'Could not load allocations.' };
     } finally {
       if (withLoader) setLoading(false);
     }
@@ -423,7 +427,6 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const refreshAllocationReadData = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
-    setApiError('');
 
     const [allocRes, workloadRes, mainFacultyRes] = await Promise.all([
       fetchAllocations({ withLoader: false }),
@@ -433,7 +436,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
     const failed = [allocRes, workloadRes, mainFacultyRes].find((result) => !result?.success);
     if (failed) {
-      setApiError(failed.message || 'Failed to refresh allocation data.');
+      showToast({ type: 'error', message: failed.message || 'Failed to refresh allocation data.' });
     } else {
       markSynced();
     }
@@ -690,7 +693,7 @@ const AllocationPage = ({ isAdmin = true }) => {
       return { success: true };
     } catch (e) {
       console.error('Error persisting allocation:', e);
-      return { success: false, message: 'Could not persist allocation.' };
+      return { success: false, message: e.message || 'Could not persist allocation.' };
     }
   }, [yearCourses, yearKey, toSlot]);
 
@@ -703,11 +706,10 @@ const AllocationPage = ({ isAdmin = true }) => {
     persistTimersRef.current[key] = setTimeout(async () => {
       const result = await persistAllocationForCombo(courseId, section, sourceMap);
       if (!result.success) {
-        setApiError(result.message || 'Could not auto-save allocation.');
+        showToast({ type: 'error', message: result.message || 'Could not auto-save allocation.' });
         setUnsaved(true);
         return;
       }
-      setApiError('');
       setUnsaved(false);
       markSynced();
     }, 350);
@@ -971,12 +973,6 @@ const AllocationPage = ({ isAdmin = true }) => {
         </div>
       </div>
 
-      {apiError && (
-        <div className="ap-error-banner">
-          <span>⚠️ {apiError}</span>
-          <button className="ap-error-retry" onClick={() => refreshAllocationReadData({ withLoader: true })}>Retry</button>
-        </div>
-      )}
 
       {/* -- Program tabs -- */}
       <div className="ap-prog-tabs">
@@ -1079,6 +1075,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                             <div className="ap-course-code">{course.subjectCode}</div>
                             <div className="ap-course-name">{course.subjectName}</div>
                             <div className="ap-course-meta">
+                              <span className="ap-prog-badge" style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', marginRight: '4px', border: '1px solid #c7d2fe' }}>{course.program || 'B.Tech'}</span>
                               <span className="ap-credit-badge">C:{course.C}</span>
                               {course.L > 0 && <span className="ap-hrs-badge ap-hrs-L">L{course.L}</span>}
                               {course.T > 0 && <span className="ap-hrs-badge ap-hrs-T">T{course.T}</span>}
@@ -1146,6 +1143,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                                 mainFacultyMap={mainFacultyMap}
                                 taWorkloadMap={taWorkloadMap}
                                 workloads={workloads}
+                                yearKey={yearKey}
                                 onSelect={(eid) => setFacultyAlloc(courseIdVal, section, type, rowIdx, eid)}
                               />
                             </td>
@@ -1173,7 +1171,6 @@ const AllocationPage = ({ isAdmin = true }) => {
 
       {saving && <div className="ap-saving-indicator">Saving...</div>}
       {workloadsLoading && <div className="ap-saving-indicator">Syncing workloads...</div>}
-      {toast  && <div className="ap-toast">{toast}</div>}
     </div>
   );
 };
