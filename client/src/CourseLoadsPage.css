@@ -186,26 +186,149 @@
 
 .clp-code {
   font-family: monospace;
-  font-weight: 600;
-  color: #0f172a !important;
+  font-weight: 700;
+  color: #6d28d9 !important;
 }
 
 .clp-name {
-  font-weight: 500;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .clp-list {
-  font-family: monospace;
-  word-break: break-all;
+  font-family: inherit;
   white-space: normal;
 }
 
-.clp-allocated {
-  color: #059669 !important;
-  background-color: rgba(16, 185, 129, 0.05);
+/* ════════════════════════════════════════════════
+   HIGH-CONTRAST BADGES & TEXT FOR COURSE LOADS
+════════════════════════════════════════════════ */
+.clp-badge-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 320px;
 }
 
-.clp-not-allocated {
-  color: #dc2626 !important;
-  background-color: rgba(239, 68, 68, 0.05);
+.clp-sec-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+
+.clp-sec-pill-allocated {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+  border: 1px solid #6ee7b7 !important;
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.12);
+}
+
+.clp-sec-pill-not-allocated {
+  background-color: #fef2f2 !important;
+  color: #991b1b !important;
+  border: 1px solid #fca5a5 !important;
+  box-shadow: 0 1px 2px rgba(239, 68, 68, 0.12);
+}
+
+.clp-sec-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin-left: 2px;
+}
+
+.clp-all-allocated-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #f0fdf4 !important;
+  color: #166534 !important;
+  border: 1px solid #86efac !important;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.clp-empty-text {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.clp-sem-pill {
+  display: inline-block;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clp-type-pill {
+  display: inline-block;
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* ════════════════════════════════════════════════
+   SCROLLBAR FOR MOUSE EVENTS (X & Y)
+════════════════════════════════════════════════ */
+.clp-content,
+.clp-table-scroll-container,
+.wl-table-container {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #f1f5f9;
+}
+
+.clp-content::-webkit-scrollbar,
+.clp-table-scroll-container::-webkit-scrollbar,
+.wl-table-container::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.clp-content::-webkit-scrollbar-track,
+.clp-table-scroll-container::-webkit-scrollbar-track,
+.wl-table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.clp-content::-webkit-scrollbar-thumb,
+.clp-table-scroll-container::-webkit-scrollbar-thumb,
+.wl-table-container::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.clp-content::-webkit-scrollbar-thumb:hover,
+.clp-table-scroll-container::-webkit-scrollbar-thumb:hover,
+.wl-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #475569;
+}
+
+.clp-content::-webkit-scrollbar-thumb:active,
+.clp-table-scroll-container::-webkit-scrollbar-thumb:active,
+.wl-table-container::-webkit-scrollbar-thumb:active {
+  background-color: #0f172a;
 }

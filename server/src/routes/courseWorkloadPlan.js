@@ -6,17 +6,110 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const requireAcademicPeriod = require('../middleware/academicPeriod');
 const CourseWorkloadPlan = require('../models/CourseWorkloadPlan');
 const CourseOffering = require('../models/CourseOffering');
+const Course = require('../models/Course');
+const AcademicYear = require('../models/AcademicYear');
+const AcademicYearSemester = require('../models/AcademicYearSemester');
+
+// Helper to resolve academic period from context, query, headers, body, or fallback to current DB active
+const resolvePeriod = async (req) => {
+  let semId = req.getSemesterId ? req.getSemesterId() : null;
+  let semType = req.academicPeriod?.academicYearSemester?.semesterType;
+  let academicYearId = req.academicPeriod?.academicYear?._id;
+  let academicYearName = req.academicPeriod?.academicYear?.name;
+
+  if (semId && semType && academicYearId) {
+    return { semId, semType, academicYearId, academicYearName: academicYearName || req.academicPeriod?.academicYear?.name };
+  }
+
+  // Resolve from query, body, or headers
+  const ayId = req.query.academicYearId || req.body?.academicYearId || req.headers['x-academic-year-id'];
+  const ayName = req.query.academicYear || req.body?.academicYear || req.headers['x-academic-year'];
+  const semName = req.query.semester || req.body?.semester || req.headers['x-semester'];
+
+  let ayDoc = null;
+  if (ayId && mongoose.Types.ObjectId.isValid(ayId)) {
+    ayDoc = await AcademicYear.findById(ayId).lean();
+  }
+  if (!ayDoc && ayName) {
+    ayDoc = await AcademicYear.findOne({ name: ayName }).lean();
+  }
+  if (!ayDoc) {
+    ayDoc = await AcademicYear.findOne({ isCurrent: true }).lean() || await AcademicYear.findOne({ status: 'ACTIVE' }).lean();
+  }
+
+  if (ayDoc) {
+    academicYearId = ayDoc._id;
+    academicYearName = ayDoc.name;
+    const targetSem = semName ? String(semName).toUpperCase() : 'ODD';
+    let semDoc = await AcademicYearSemester.findOne({
+      academicYearId: ayDoc._id,
+      semesterType: targetSem
+    }).lean();
+
+    if (!semDoc) {
+      semDoc = await AcademicYearSemester.findOne({
+        academicYearId: ayDoc._id,
+        status: 'ACTIVE'
+      }).lean() || await AcademicYearSemester.findOne({
+        academicYearId: ayDoc._id
+      }).lean();
+    }
+
+    if (semDoc) {
+      semId = semDoc._id;
+      semType = semDoc.semesterType;
+    }
+  }
+
+  return { semId, semType, academicYearId, academicYearName };
+};
 
 // GET /api/course-workload-plan
 // Fetch all workload plans for the active semester, outer joined with CourseOfferings
 router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semId = req.getSemesterId();
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType;
-    const academicYearId = req.academicPeriod?.academicYear?._id;
+    const { semId, semType, academicYearId, academicYearName } = await resolvePeriod(req);
     
     if (!semId || !semType || !academicYearId) {
       return res.json({ success: true, data: [] });
+    }
+
+    // Auto-sync: Ensure all active courses for this academic period have a CourseOffering
+    if (academicYearName && semType) {
+      try {
+        const activeCourses = await Course.find({
+          academicYear: academicYearName,
+          semester: new RegExp(`^${semType}$`, 'i'),
+          isDeleted: { $ne: true }
+        }).lean();
+
+        const existingOfferings = await CourseOffering.find({
+          academicYearSemesterId: semId
+        }).select('courseId').lean();
+
+        const existingCourseIds = new Set(existingOfferings.map(o => o.courseId.toString()));
+        const missingOfferings = [];
+
+        for (const ac of activeCourses) {
+          if (!existingCourseIds.has(ac._id.toString())) {
+            missingOfferings.push({
+              academicYearSemesterId: semId,
+              courseId: ac._id,
+              credits: ac.C || 0,
+              L: ac.L || 0,
+              T: ac.T || 0,
+              P: ac.P || 0,
+              status: 'Active'
+            });
+          }
+        }
+
+        if (missingOfferings.length > 0) {
+          await CourseOffering.insertMany(missingOfferings);
+        }
+      } catch (syncErr) {
+        console.warn('Course offering sync error:', syncErr.message);
+      }
     }
 
     // Get all active course offerings for this semester
@@ -91,13 +184,12 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
 // Upsert a workload plan
 router.put('/:courseOfferingId', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType;
-    const academicYearId = req.academicPeriod?.academicYear?._id;
+    const { semType, academicYearId } = await resolvePeriod(req);
     const { courseOfferingId } = req.params;
     const { tpBatches, noOfSections, studentStrength } = req.body;
 
     if (!semType || !academicYearId) {
-      return sendError(res, 'Validation failed', 400);
+      return sendError(res, 'Validation failed: Academic period could not be resolved.', 400);
     }
 
     const plan = await CourseWorkloadPlan.findOneAndUpdate(
@@ -123,16 +215,15 @@ router.put('/:courseOfferingId', requireAuth, requireAdmin, requireAcademicPerio
 // Upsert multiple workload plans
 router.put('/bulk/update', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType;
-    const academicYearId = req.academicPeriod?.academicYear?._id;
+    const { semType, academicYearId } = await resolvePeriod(req);
     const { items } = req.body;
 
     if (!semType || !academicYearId) {
-      return sendError(res, 'Validation failed', 400);
+      return sendError(res, 'Validation failed: Academic period could not be resolved.', 400);
     }
     
     if (!Array.isArray(items)) {
-      return sendError(res, 'Validation failed', 400);
+      return sendError(res, 'Validation failed: items must be an array.', 400);
     }
 
     const bulkOps = items.map(item => ({
@@ -163,5 +254,6 @@ router.put('/bulk/update', requireAuth, requireAdmin, requireAcademicPeriod, asy
     next(err);
   }
 });
+
 
 module.exports = router;

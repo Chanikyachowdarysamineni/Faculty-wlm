@@ -1,12 +1,7 @@
 import API, { isSectionsEndpointLikelyUnsupported } from '../config';
 import { fetchJsonWithRetry } from './apiFetchAll';
 
-export const DEFAULT_SECTIONS = {
-  I: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  II: Array.from({ length: 22 }, (_, i) => String(i + 1)),
-  III: Array.from({ length: 19 }, (_, i) => String(i + 1)),
-  IV: Array.from({ length: 9 }, (_, i) => String(i + 1))
-};
+export const DEFAULT_SECTIONS = {};
 
 const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('wlm_token') || ''}`,
@@ -24,7 +19,7 @@ export const fetchSectionsConfig = async (academicYear, semester) => {
       sectionsEndpointUnavailable = false;
       unavailableSince = null;
     } else {
-      return DEFAULT_SECTIONS;
+      return {};
     }
   }
 
@@ -32,18 +27,18 @@ export const fetchSectionsConfig = async (academicYear, semester) => {
   if (academicYear) qs.append('academicYear', academicYear);
   if (semester) qs.append('semester', semester);
   const qsString = qs.toString() ? `?${qs.toString()}` : '';
-  
+
   const result = await fetchJsonWithRetry(`${API}/deva/settings/sections${qsString}`, { headers: authHeader() });
   const data = result.data || {};
   if (result.status === 404) {
     sectionsEndpointUnavailable = true;
     unavailableSince = Date.now();
-    return DEFAULT_SECTIONS;
+    return {};
   }
   if (!result.success || !data.success) {
     throw new Error(result.message || data.message || 'Failed to fetch sections');
   }
-  return data.data || DEFAULT_SECTIONS;
+  return data.data || {};
 };
 
 export const addSectionConfig = async (year, section, academicYear, semester) => {
@@ -51,7 +46,7 @@ export const addSectionConfig = async (year, section, academicYear, semester) =>
   if (academicYear) qs.append('academicYear', academicYear);
   if (semester) qs.append('semester', semester);
   const qsString = qs.toString() ? `?${qs.toString()}` : '';
-  
+
   const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(year)}${qsString}`, {
     method: 'POST', headers: authHeader(), body: JSON.stringify({ section, academicYear, semester }),
   });

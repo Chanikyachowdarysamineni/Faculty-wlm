@@ -234,38 +234,89 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
-  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
-  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
+  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = useMemo(() => {
+    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  }, [configPrograms, distinctCoursePrograms]);
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
-  const [activeProgram, setActiveProgram] = useState('B.Tech');
-  const [activeYear,    setActiveYear]    = useState('I');
-  const [sections,      setSections]      = useState([...DEFAULT_SECTIONS['I']]);
+  const [activeProgram, setActiveProgram] = useState('');
+  const [activeYear,    setActiveYear]    = useState('');
+
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
+  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
+  const YEARS = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
+
+  const displayYears = useMemo(() => {
+    const inProg = Array.from(new Set((contextCourses || []).filter(c => c.program === activeProgram).map(c => c.year).filter(Boolean)));
+    return Array.from(new Set([...YEARS, ...inProg])).sort((a, b) => {
+      const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+      return (romanOrder[a] || 99) - (romanOrder[b] || 99);
+    });
+  }, [activeProgram, contextCourses, YEARS]);
+
+  useEffect(() => {
+    if (PROGRAMS.length > 0 && (!activeProgram || !PROGRAMS.includes(activeProgram))) {
+      setActiveProgram(PROGRAMS[0]);
+    }
+  }, [PROGRAMS, activeProgram]);
+
+  useEffect(() => {
+    if (displayYears.length > 0 && (!activeYear || !displayYears.includes(activeYear))) {
+      setActiveYear(displayYears[0]);
+    }
+  }, [displayYears, activeYear]);
+
+  const [sections,      setSections]      = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [unsaved,       setUnsaved]       = useState(false);
   const { showToast } = useToast();
   const [lastSyncedAt,  setLastSyncedAt]  = useState(null);
-  const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
+  const [sectionsConfig, setSectionsConfig] = useState({});
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
   const persistTimersRef = useRef({});
 
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty) {
+    if (contextFaculty && contextFaculty.length > 0) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses) {
+    if (contextCourses && contextCourses.length > 0) {
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);
 
+  // Fallback: Fetch courses and faculty directly if shared context is not populated
+  useEffect(() => {
+    const fetchMasterIfNeeded = async () => {
+      if (!contextCourses || contextCourses.length === 0) {
+        try {
+          const res = await fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
+          if (res?.success && Array.isArray(res.data)) {
+            setCourseList(res.data);
+          }
+        } catch (e) {}
+      }
+      if (!contextFaculty || contextFaculty.length === 0) {
+        try {
+          const res = await fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
+          if (res?.success && Array.isArray(res.data)) {
+            setFacultyList(res.data);
+          }
+        } catch (e) {}
+      }
+    };
+    fetchMasterIfNeeded();
+  }, [contextCourses, contextFaculty, selectedSemester, selectedAcademicYear]);
+
   // yearKey must be defined before any hook that uses it
-  const yearKey = activeProgram === 'B.Tech' ? activeYear : `${activeProgram}_${activeYear}`;
+  const effectiveProg = activeProgram || PROGRAMS[0] || 'B.Tech';
+  const effectiveYear = activeYear || displayYears[0] || 'I';
+  const yearKey = effectiveProg === (PROGRAMS[0] || 'B.Tech') ? effectiveYear : `${effectiveProg}_${effectiveYear}`;
 
   const markSynced = useCallback(() => setLastSyncedAt(new Date()), []);
 
@@ -323,17 +374,27 @@ const AllocationPage = ({ isAdmin = true }) => {
   const loadSectionsConfig = useCallback(async () => {
     try {
       const cfg = await fetchSectionsConfig(selectedAcademicYear, selectedSemester);
-      setSectionsConfig(cfg);
+      setSectionsConfig(cfg || {});
     } catch {
-      setSectionsConfig(DEFAULT_SECTIONS);
+      setSectionsConfig({});
     }
   }, [selectedAcademicYear, selectedSemester]);
 
   useEffect(() => { loadSectionsConfig(); }, [loadSectionsConfig]);
 
-  const yearCourses = useMemo(() =>
-    courseList.filter(c => c.program === activeProgram && c.year === activeYear),
-  [activeProgram, activeYear, courseList]);
+  const yearCourses = useMemo(() => {
+    const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+    const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+    const curProg = activeProgram || PROGRAMS[0] || 'B.Tech';
+    const curYear = activeYear || displayYears[0] || 'I';
+    return courseList.filter(c => {
+      const progMatch = c.program === curProg || (!c.program && curProg === (PROGRAMS[0] || 'B.Tech'));
+      const yearMatch = c.year === curYear || 
+                        romanToNum[c.year] === curYear || 
+                        numToRoman[c.year] === curYear;
+      return progMatch && yearMatch;
+    });
+  }, [activeProgram, activeYear, courseList, PROGRAMS, displayYears]);
 
   // Maps `courseId__section__T__rowIdx` / `__P__rowIdx` -> empId for TA workloads with allocationRow
   const taWorkloadMap = useMemo(() => {
@@ -423,7 +484,7 @@ const AllocationPage = ({ isAdmin = true }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [yearKey, selectedSemester]);
+  }, [yearKey, selectedSemester, selectedAcademicYear]);
 
   const refreshAllocationReadData = useCallback(async ({ withLoader = true } = {}) => {
     if (withLoader) setLoading(true);
@@ -580,8 +641,20 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   // -- Reset sections when year/program changes ------------------------------
   useEffect(() => {
-    setSections([...(sectionsConfig[yearKey] || DEFAULT_SECTIONS[yearKey] || ['1'])]);
-  }, [yearKey, sectionsConfig]);
+    const candidateKeys = [
+      yearKey,
+      `${activeProgram}_${activeYear}`,
+      activeYear
+    ];
+    let found = [];
+    for (const k of candidateKeys) {
+      if (Array.isArray(sectionsConfig[k]) && sectionsConfig[k].length > 0) {
+        found = sectionsConfig[k];
+        break;
+      }
+    }
+    setSections([...found]);
+  }, [yearKey, sectionsConfig, activeProgram, activeYear]);
 
   useEffect(() => () => {
     Object.values(persistTimersRef.current).forEach((id) => clearTimeout(id));
@@ -988,19 +1061,17 @@ const AllocationPage = ({ isAdmin = true }) => {
       </div>
 
       {/* -- Year tabs -- */}
-      {true && (
-        <div className="ap-year-tabs">
-          {(activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS).map(y => (
-            <button
-              key={y}
-              className={`ap-year-tab${activeYear === y ? ' active' : ''}`}
-              onClick={() => setActiveYear(y)}
-            >
-              {y} Year
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="ap-year-tabs">
+        {displayYears.map(y => (
+          <button
+            key={y}
+            className={`ap-year-tab${activeYear === y ? ' active' : ''}`}
+            onClick={() => setActiveYear(y)}
+          >
+            {y} Year
+          </button>
+        ))}
+      </div>
 
 
       {/* -- Legend -- */}
@@ -1075,7 +1146,7 @@ const AllocationPage = ({ isAdmin = true }) => {
                             <div className="ap-course-code">{course.subjectCode}</div>
                             <div className="ap-course-name">{course.subjectName}</div>
                             <div className="ap-course-meta">
-                              <span className="ap-prog-badge" style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', marginRight: '4px', border: '1px solid #c7d2fe' }}>{course.program || 'B.Tech'}</span>
+                              <span className="ap-prog-badge" style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', marginRight: '4px', border: '1px solid #c7d2fe' }}>{course.program || (PROGRAMS[0] || 'B.Tech')}</span>
                               <span className="ap-credit-badge">C:{course.C}</span>
                               {course.L > 0 && <span className="ap-hrs-badge ap-hrs-L">L{course.L}</span>}
                               {course.T > 0 && <span className="ap-hrs-badge ap-hrs-T">T{course.T}</span>}

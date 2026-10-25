@@ -521,6 +521,9 @@
   background: #fff;
   border-radius: 16px;
   width: 100%; max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 24px 64px rgba(0,0,0,.22);
   animation: cpSlideUp .2s ease;
   overflow: hidden;
@@ -537,6 +540,7 @@
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 22px 14px;
   border-bottom: 1px solid #f0f4f8;
+  flex-shrink: 0;
 }
 .cp-modal-head h3 { font-size: 15.5px; font-weight: 700; color: #1a202c; margin: 0; }
 
@@ -550,7 +554,27 @@
 
 .cp-modal-body { 
   padding: 18px 22px; 
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.cp-modal-body::-webkit-scrollbar {
+  width: 9px;
+}
+.cp-modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.cp-modal-body::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 4px;
+}
+.cp-modal-body::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
 }
 
 /* ── Form Grid ── */

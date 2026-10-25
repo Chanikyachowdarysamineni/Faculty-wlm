@@ -2069,3 +2069,60 @@
   margin: 0;
 }
 
+/* ════════════════════════════════════════════════
+   SCROLLBAR FOR MOUSE EVENTS & FORMS
+════════════════════════════════════════════════ */
+.cww-scroll-container,
+.wlf-table-scroll-wrap,
+.wl-table-container,
+.wl-table-wrap,
+.wl-form-card {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #f1f5f9;
+}
+
+.cww-scroll-container::-webkit-scrollbar,
+.wlf-table-scroll-wrap::-webkit-scrollbar,
+.wl-table-container::-webkit-scrollbar,
+.wl-table-wrap::-webkit-scrollbar,
+.wl-form-card::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.cww-scroll-container::-webkit-scrollbar-track,
+.wlf-table-scroll-wrap::-webkit-scrollbar-track,
+.wl-table-container::-webkit-scrollbar-track,
+.wl-table-wrap::-webkit-scrollbar-track,
+.wl-form-card::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.cww-scroll-container::-webkit-scrollbar-thumb,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb,
+.wl-table-container::-webkit-scrollbar-thumb,
+.wl-table-wrap::-webkit-scrollbar-thumb,
+.wl-form-card::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.cww-scroll-container::-webkit-scrollbar-thumb:hover,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb:hover,
+.wl-table-container::-webkit-scrollbar-thumb:hover,
+.wl-table-wrap::-webkit-scrollbar-thumb:hover,
+.wl-form-card::-webkit-scrollbar-thumb:hover {
+  background-color: #475569;
+}
+
+.cww-scroll-container::-webkit-scrollbar-thumb:active,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb:active,
+.wl-table-container::-webkit-scrollbar-thumb:active,
+.wl-table-wrap::-webkit-scrollbar-thumb:active,
+.wl-form-card::-webkit-scrollbar-thumb:active {
+  background-color: #0f172a;
+}
+

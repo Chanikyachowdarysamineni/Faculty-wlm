@@ -420,10 +420,11 @@ const Dashboard = ({ user, onLogout }) => {
 
     setDashboardData(prev => ({ ...prev, loading: true, error: '' }));
     try {
-      const [fReq, aReq, cReq] = await Promise.allSettled([
+      const [fReq, aReq, cReq, configReq] = await Promise.allSettled([
         fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
         fetchAllPages('/deva/allocations', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
         fetchAllPages('/deva/courses', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers }),
+        fetchJsonWithRetry(`${API}/deva/config`, { headers })
       ]);
 
       const nextData = {};
@@ -455,6 +456,10 @@ const Dashboard = ({ user, onLogout }) => {
         errors.push(
           (cReq.status === 'fulfilled' && cReq.value?.message) || 'Courses data refresh failed.'
         );
+      }
+
+      if (configReq.status === 'fulfilled' && configReq.value?.success) {
+        setSystemConfig(configReq.value.data || {});
       }
 
       setDashboardData(prev => ({
@@ -490,14 +495,14 @@ const Dashboard = ({ user, onLogout }) => {
       }));
       setDashboardSyncError('Could not refresh dashboard data. Showing latest available data.');
     }
-  }, [isAdmin, authHeaders, selectedSemester, selectedAcademicYear, setFaculty, setAllocations, setCourses]);
+  }, [isAdmin, authHeaders, selectedSemester, selectedAcademicYear, setFaculty, setAllocations, setCourses, setSystemConfig]);
 
   useEffect(() => {
-    if (!isAdmin || activeNav !== 'dashboard') return;
+    if (!isAdmin) return;
     refreshDashboardData();
     const id = setInterval(refreshDashboardData, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [isAdmin, activeNav, refreshDashboardData]);
+  }, [isAdmin, refreshDashboardData]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -571,18 +576,13 @@ const Dashboard = ({ user, onLogout }) => {
     } catch {
       setDashboardSyncError('Could not refresh dashboard data. Showing latest available data.');
     }
-  }, [user?.id, authHeaders, selectedSemester, setFaculty, setCourses, setSystemConfig]);
+  }, [user?.id, authHeaders, selectedSemester, selectedAcademicYear, setFaculty, setCourses, setSystemConfig]);
 
   useEffect(() => {
-    refreshMasterData();
-  }, [refreshMasterData]);
-
-  useEffect(() => {
-    if (activeNav !== 'dashboard' || isAdmin) return;
     refreshMasterData();
     const id = setInterval(refreshMasterData, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [activeNav, isAdmin, refreshMasterData]);
+  }, [refreshMasterData]);
 
   const fetchSections = useCallback(async () => {
     if (!isAdmin) return;

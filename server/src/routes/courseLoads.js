@@ -26,34 +26,93 @@ router.get('/filters', requireAuth, async (req, res) => {
     // 2. Get Semester Types from DB
     const semesterTypes = await AcademicYearSemester.distinct('semesterType');
     
-    // 3. Get Programs and Years per program dynamically from actual active course offerings
-    const activeOfferings = await CourseOffering.find({ status: 'Active' }).lean();
-    const courseIds = activeOfferings.map(o => o.courseId);
+    // 3. Get Programs and Years per program
+    // A. Distinct programs from Course collection
+    const distinctCoursePrograms = await Course.distinct('program', { isDeleted: { $ne: true } });
     
-    const courses = await Course.find({ _id: { $in: courseIds }, isDeleted: { $ne: true } }).lean();
-    
-    const yearsPerProgram = {};
-    for (const c of courses) {
-      if (!c.program || !c.year) continue;
-      if (!yearsPerProgram[c.program]) yearsPerProgram[c.program] = new Set();
-      yearsPerProgram[c.program].add(c.year);
+    // B. Configured programs & years from SystemConfig
+    let configPrograms = [];
+    let configYears = [];
+    try {
+      const SystemConfig = require('../models/SystemConfig');
+      const sysConfig = await SystemConfig.findOne({ singletonFlag: 'config' }).lean();
+      configPrograms = (sysConfig?.programs || []).filter(p => p.isActive).map(p => p.value);
+      configYears = (sysConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
+    } catch (e) {
+      // ignore
     }
-    
-    const programs = Object.keys(yearsPerProgram).sort();
+
+    // Combine all discovered programs dynamically
+    const allProgramsSet = new Set([...configPrograms, ...distinctCoursePrograms.filter(Boolean)]);
+    if (allProgramsSet.size === 0) {
+      allProgramsSet.add('B.Tech');
+      allProgramsSet.add('M.Tech');
+    }
+    const programs = Array.from(allProgramsSet).sort();
+
+    // Query courses to collect actual years used per program
+    const courses = await Course.find({ isDeleted: { $ne: true } }).select('program year').lean();
+    const yearsPerProgramMap = {};
+
+    for (const p of programs) {
+      yearsPerProgramMap[p] = new Set();
+    }
+
+    const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, '1': 1, '2': 2, '3': 3, '4': 4 };
+    const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': 'I', 'II': 'II', 'III': 'III', 'IV': 'IV' };
+
+    for (const c of courses) {
+      const prog = c.program || programs[0];
+      if (!c.year) continue;
+      if (!yearsPerProgramMap[prog]) yearsPerProgramMap[prog] = new Set();
+      const canonicalYr = numToRoman[c.year] || String(c.year);
+      if (canonicalYr !== 'M.Tech' && canonicalYr !== 'Other') {
+        yearsPerProgramMap[prog].add(canonicalYr);
+      }
+    }
+
+    // For any program without courses yet, seed standard years per program
+    for (const p of programs) {
+      if (yearsPerProgramMap[p].size === 0) {
+        if (p === 'M.Tech') {
+          // M.Tech only has 2 years (I and II)
+          yearsPerProgramMap[p] = new Set(['I', 'II']);
+        } else if (p === 'B.Tech') {
+          // B.Tech has 4 years (I, II, III, IV)
+          yearsPerProgramMap[p] = new Set(['I', 'II', 'III', 'IV']);
+        } else {
+          if (configYears.length > 0) {
+            configYears.forEach(y => {
+              const rom = numToRoman[y] || String(y);
+              if (rom !== 'M.Tech' && rom !== 'Other') yearsPerProgramMap[p].add(rom);
+            });
+          } else {
+            ['I', 'II', 'III', 'IV'].forEach(y => yearsPerProgramMap[p].add(y));
+          }
+        }
+      }
+    }
+
     const finalYearsPerProgram = {};
     for (const p of programs) {
-      finalYearsPerProgram[p] = Array.from(yearsPerProgram[p]).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+      finalYearsPerProgram[p] = Array.from(yearsPerProgramMap[p] || [])
+        .sort((a, b) => (romanOrder[a] || 99) - (romanOrder[b] || 99));
     }
+
+    const allYearsSet = new Set();
+    Object.values(finalYearsPerProgram).forEach(list => list.forEach(y => allYearsSet.add(y)));
+    const allYears = Array.from(allYearsSet).sort((a, b) => (romanOrder[a] || 99) - (romanOrder[b] || 99));
 
     return sendSuccess(res, {
       academicYears,
       semesterTypes,
       programs,
-      yearsPerProgram: finalYearsPerProgram
+      yearsPerProgram: finalYearsPerProgram,
+      allYears
     });
   } catch (error) {
     console.error('Error fetching course loads filters:', error);
-    return sendError(res, 500, 'Failed to fetch filters');
+    return sendError(res, 'Failed to fetch filters', 500);
   }
 });
 
@@ -70,26 +129,78 @@ router.get('/', requireAuth, async (req, res) => {
     const { academicYear, semesterType, program, year, search } = req.query;
 
     if (!academicYear || !semesterType) {
-      return sendError(res, 400, 'academicYear and semesterType are required parameters');
+      return sendError(res, 'academicYear and semesterType are required parameters', 400);
     }
 
     // 1. Resolve AcademicYear and Semester
     const ayDoc = await AcademicYear.findOne({ name: academicYear }).lean();
     if (!ayDoc) return sendSuccess(res, []);
     
-    const semDoc = await AcademicYearSemester.findOne({ academicYearId: ayDoc._id, semesterType }).lean();
+    const semTypeNorm = (semesterType || '').toUpperCase();
+    const semDoc = await AcademicYearSemester.findOne({
+      academicYearId: ayDoc._id,
+      $or: [
+        { semesterType: semTypeNorm },
+        { semesterType: new RegExp(`^${semesterType}$`, 'i') }
+      ]
+    }).lean();
     if (!semDoc) return sendSuccess(res, []);
 
-    // 2. Fetch the Section Universe from SystemConfig (single source of truth for table columns)
+    // 2. Fetch the Section Universe directly from database Setting
     const Setting = require('../models/Setting');
-    let configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semesterType}` }).lean();
+    let configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semTypeNorm}` }).lean();
+    if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semesterType}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: 'sections_config' }).lean();
-    const sectionsConfig = configDoc && configDoc.value ? JSON.parse(configDoc.value) : {};
+    
+    let sectionsConfig = {};
+    if (configDoc && configDoc.value) {
+      try {
+        sectionsConfig = JSON.parse(configDoc.value);
+      } catch (e) {
+        sectionsConfig = {};
+      }
+    }
 
-    // 3. Start from CourseOffering with Aggregation to ensure one row per offered course
+    // 3. Auto-sync: Ensure all active courses for this academic period have a CourseOffering
+    try {
+      const activeCourses = await Course.find({
+        academicYear,
+        semester: new RegExp(`^${semesterType}$`, 'i'),
+        isDeleted: { $ne: true }
+      }).lean();
+
+      const existingOfferings = await CourseOffering.find({
+        academicYearSemesterId: semDoc._id
+      }).select('courseId').lean();
+
+      const existingCourseIds = new Set(existingOfferings.map(o => o.courseId.toString()));
+      const missingOfferings = [];
+
+      for (const ac of activeCourses) {
+        if (!existingCourseIds.has(ac._id.toString())) {
+          missingOfferings.push({
+            academicYearSemesterId: semDoc._id,
+            courseId: ac._id,
+            credits: ac.C || 0,
+            L: ac.L || 0,
+            T: ac.T || 0,
+            P: ac.P || 0,
+            status: 'Active'
+          });
+        }
+      }
+
+      if (missingOfferings.length > 0) {
+        await CourseOffering.insertMany(missingOfferings);
+      }
+    } catch (syncErr) {
+      console.warn('Course offering sync error in courseLoads:', syncErr.message);
+    }
+
+    // 4. Start from CourseOffering with Aggregation to ensure one row per offered course
     const pipeline = [
-      { $match: { academicYearSemesterId: semDoc._id, status: 'Active' } },
+      { $match: { academicYearSemesterId: semDoc._id, status: { $ne: 'Cancelled' } } },
       {
         $lookup: {
           from: 'courses',
@@ -102,8 +213,19 @@ router.get('/', requireAuth, async (req, res) => {
       { $match: { 'course.isDeleted': { $ne: true } } }
     ];
 
-    if (program) pipeline.push({ $match: { 'course.program': program } });
-    if (year) pipeline.push({ $match: { 'course.year': year } });
+    if (program) {
+      pipeline.push({ $match: { 'course.program': new RegExp(`^${program}$`, 'i') } });
+    }
+    if (year) {
+      const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+      const yrVariants = Array.from(new Set([
+        String(year),
+        romanToNum[year],
+        numToRoman[year]
+      ].filter(Boolean)));
+      pipeline.push({ $match: { 'course.year': { $in: yrVariants } } });
+    }
     if (search) {
       pipeline.push({
         $match: {
@@ -175,17 +297,43 @@ router.get('/', requireAuth, async (req, res) => {
       const yr = c.year || 'Other';
 
       // Scope key for universe
-      const yearKey = prog === 'M.Tech' ? `M.Tech_${yr}` : yr;
-      const universe = sectionsConfig[yearKey] || [];
+      const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+      const yrNum = romanToNum[yr] || yr;
+      const yrRoman = numToRoman[yr] || yr;
 
-      // Filter allocated to only include those in the universe, sorting naturally
-      const allocated = row.allocatedSections
-        .filter(s => universe.includes(s))
+      // Check all potential keys in sectionsConfig for this program and year
+      const candidateKeys = [
+        `${prog}_${yrNum}`,
+        `${prog}_${yrRoman}`,
+        `${prog}_${yr}`,
+        yrNum,
+        yrRoman,
+        yr
+      ];
+
+      let universe = [];
+      for (const k of candidateKeys) {
+        if (Array.isArray(sectionsConfig[k]) && sectionsConfig[k].length > 0) {
+          universe = sectionsConfig[k];
+          break;
+        }
+      }
+
+      // If no configured sections found, universe will be populated from allocated sections below
+
+      // Clean and preserve all actually allocated sections
+      const allocated = (row.allocatedSections || [])
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      // The full universe should include all configured sections plus any allocated sections
+      const fullUniverse = Array.from(new Set([...universe, ...allocated]))
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
       // Not Allocated = Universe minus Allocated
       const allocatedSet = new Set(allocated);
-      const notAllocated = universe
+      const notAllocated = fullUniverse
         .filter(s => !allocatedSet.has(s))
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
@@ -193,8 +341,14 @@ router.get('/', requireAuth, async (req, res) => {
       if (!groupedData[prog][yr]) groupedData[prog][yr] = [];
 
       groupedData[prog][yr].push({
-        courseCode: c.subjectCode,
-        courseName: c.subjectName,
+        courseCode: c.subjectCode || c.courseCode || '',
+        courseName: c.subjectName || c.courseName || '',
+        shortName: c.shortName || '',
+        courseType: c.courseType || '',
+        L: c.L || 0,
+        T: c.T || 0,
+        P: c.P || 0,
+        C: c.C || 0,
         allocatedSections: allocated,
         notAllocatedSections: notAllocated
       });
@@ -205,12 +359,13 @@ router.get('/', requireAuth, async (req, res) => {
     const sortedPrograms = Object.keys(groupedData).sort();
     
     for (const prog of sortedPrograms) {
-      const yearsObj = groupedData[prog];
-      const sortedYears = Object.keys(yearsObj).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const yearsObj = groupedData[prog] || {};
+      const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, '1': 1, '2': 2, '3': 3, '4': 4 };
+      const sortedYears = Object.keys(yearsObj).sort((a, b) => (romanOrder[a] || 99) - (romanOrder[b] || 99));
       
       const yearsArr = [];
       for (const yr of sortedYears) {
-        const coursesList = yearsObj[yr].sort((a, b) => a.courseCode.localeCompare(b.courseCode));
+        const coursesList = (yearsObj[yr] || []).sort((a, b) => a.courseCode.localeCompare(b.courseCode));
         yearsArr.push({
           year: yr,
           courses: coursesList
@@ -226,7 +381,7 @@ router.get('/', requireAuth, async (req, res) => {
     return sendSuccess(res, finalResult);
   } catch (error) {
     console.error('Error fetching course loads:', error);
-    return sendError(res, 500, 'Failed to fetch course loads');
+    return sendError(res, 'Failed to fetch course loads', 500);
   }
 });
 

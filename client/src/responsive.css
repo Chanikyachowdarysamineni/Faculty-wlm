@@ -955,3 +955,147 @@ canvas {
     padding: 24px;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   UNIVERSAL MOUSE SCROLLBAR STYLES FOR ALL FORMS AND TABLES
+════════════════════════════════════════════════════════════════════════ */
+html,
+body,
+.wl-table-container,
+.cww-scroll-container,
+.clp-table-scroll-container,
+.clp-content,
+.wlf-table-scroll-wrap,
+.cp-modal-body,
+.fp-modal-form,
+.wl-form-card,
+.dash-table-card,
+.wl-table-wrap,
+.cp-table-wrap,
+.fp-table-wrap,
+.ff-table-wrap,
+.ap-grid-wrap,
+.mwl-table-wrap,
+.efp-table-wrap,
+form,
+.form-container,
+.modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #f1f5f9;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.wl-table-container::-webkit-scrollbar,
+.cww-scroll-container::-webkit-scrollbar,
+.clp-table-scroll-container::-webkit-scrollbar,
+.clp-content::-webkit-scrollbar,
+.wlf-table-scroll-wrap::-webkit-scrollbar,
+.cp-modal-body::-webkit-scrollbar,
+.fp-modal-form::-webkit-scrollbar,
+.wl-form-card::-webkit-scrollbar,
+.dash-table-card::-webkit-scrollbar,
+.wl-table-wrap::-webkit-scrollbar,
+.cp-table-wrap::-webkit-scrollbar,
+.fp-table-wrap::-webkit-scrollbar,
+.ff-table-wrap::-webkit-scrollbar,
+.ap-grid-wrap::-webkit-scrollbar,
+.mwl-table-wrap::-webkit-scrollbar,
+.efp-table-wrap::-webkit-scrollbar,
+form::-webkit-scrollbar,
+.form-container::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.wl-table-container::-webkit-scrollbar-track,
+.cww-scroll-container::-webkit-scrollbar-track,
+.clp-table-scroll-container::-webkit-scrollbar-track,
+.clp-content::-webkit-scrollbar-track,
+.wlf-table-scroll-wrap::-webkit-scrollbar-track,
+.cp-modal-body::-webkit-scrollbar-track,
+.fp-modal-form::-webkit-scrollbar-track,
+.wl-form-card::-webkit-scrollbar-track,
+.dash-table-card::-webkit-scrollbar-track,
+.wl-table-wrap::-webkit-scrollbar-track,
+.cp-table-wrap::-webkit-scrollbar-track,
+.fp-table-wrap::-webkit-scrollbar-track,
+.ff-table-wrap::-webkit-scrollbar-track,
+.ap-grid-wrap::-webkit-scrollbar-track,
+.mwl-table-wrap::-webkit-scrollbar-track,
+.efp-table-wrap::-webkit-scrollbar-track,
+form::-webkit-scrollbar-track,
+.form-container::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.wl-table-container::-webkit-scrollbar-thumb,
+.cww-scroll-container::-webkit-scrollbar-thumb,
+.clp-table-scroll-container::-webkit-scrollbar-thumb,
+.clp-content::-webkit-scrollbar-thumb,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb,
+.cp-modal-body::-webkit-scrollbar-thumb,
+.fp-modal-form::-webkit-scrollbar-thumb,
+.wl-form-card::-webkit-scrollbar-thumb,
+.dash-table-card::-webkit-scrollbar-thumb,
+.wl-table-wrap::-webkit-scrollbar-thumb,
+.cp-table-wrap::-webkit-scrollbar-thumb,
+.fp-table-wrap::-webkit-scrollbar-thumb,
+.ff-table-wrap::-webkit-scrollbar-thumb,
+.ap-grid-wrap::-webkit-scrollbar-thumb,
+.mwl-table-wrap::-webkit-scrollbar-thumb,
+.efp-table-wrap::-webkit-scrollbar-thumb,
+form::-webkit-scrollbar-thumb,
+.form-container::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.wl-table-container::-webkit-scrollbar-thumb:hover,
+.cww-scroll-container::-webkit-scrollbar-thumb:hover,
+.clp-table-scroll-container::-webkit-scrollbar-thumb:hover,
+.clp-content::-webkit-scrollbar-thumb:hover,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb:hover,
+.cp-modal-body::-webkit-scrollbar-thumb:hover,
+.fp-modal-form::-webkit-scrollbar-thumb:hover,
+.wl-form-card::-webkit-scrollbar-thumb:hover,
+.dash-table-card::-webkit-scrollbar-thumb:hover,
+.wl-table-wrap::-webkit-scrollbar-thumb:hover,
+.cp-table-wrap::-webkit-scrollbar-thumb:hover,
+.fp-table-wrap::-webkit-scrollbar-thumb:hover,
+.ff-table-wrap::-webkit-scrollbar-thumb:hover,
+.ap-grid-wrap::-webkit-scrollbar-thumb:hover,
+.mwl-table-wrap::-webkit-scrollbar-thumb:hover,
+.efp-table-wrap::-webkit-scrollbar-thumb:hover,
+form::-webkit-scrollbar-thumb:hover,
+.form-container::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background-color: #475569;
+}
+
+.wl-table-container::-webkit-scrollbar-thumb:active,
+.cww-scroll-container::-webkit-scrollbar-thumb:active,
+.clp-table-scroll-container::-webkit-scrollbar-thumb:active,
+.clp-content::-webkit-scrollbar-thumb:active,
+.wlf-table-scroll-wrap::-webkit-scrollbar-thumb:active,
+.cp-modal-body::-webkit-scrollbar-thumb:active,
+.fp-modal-form::-webkit-scrollbar-thumb:active,
+.wl-form-card::-webkit-scrollbar-thumb:active,
+.dash-table-card::-webkit-scrollbar-thumb:active,
+.wl-table-wrap::-webkit-scrollbar-thumb:active,
+.cp-table-wrap::-webkit-scrollbar-thumb:active,
+.fp-table-wrap::-webkit-scrollbar-thumb:active,
+.ff-table-wrap::-webkit-scrollbar-thumb:active,
+.ap-grid-wrap::-webkit-scrollbar-thumb:active,
+.mwl-table-wrap::-webkit-scrollbar-thumb:active,
+.efp-table-wrap::-webkit-scrollbar-thumb:active,
+form::-webkit-scrollbar-thumb:active,
+.form-container::-webkit-scrollbar-thumb:active,
+.modal-body::-webkit-scrollbar-thumb:active {
+  background-color: #1e293b;
+}

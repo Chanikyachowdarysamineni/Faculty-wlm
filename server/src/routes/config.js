@@ -23,7 +23,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 // Admin only: Overwrite the configuration lists
 router.put('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const { years, courseTypes, facultyRoles, designations, departments } = req.body;
+    const { years, courseTypes, facultyRoles, designations, departments, programs } = req.body;
     
     // Construct update payload (only update provided arrays)
     const update = {};
@@ -32,6 +32,7 @@ router.put('/', requireAuth, requireAdmin, async (req, res, next) => {
     if (Array.isArray(facultyRoles)) update.facultyRoles = facultyRoles;
     if (Array.isArray(designations)) update.designations = designations;
     if (Array.isArray(departments)) update.departments = departments;
+    if (Array.isArray(programs)) update.programs = programs;
 
     if (Object.keys(update).length === 0) {
       return sendError(res, 'No valid configuration lists provided.', 400);

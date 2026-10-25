@@ -45,24 +45,15 @@ const normalizeSections = (raw) => {
 };
 
 const getSectionsConfig = async (academicYear, semester) => {
-  if (!academicYear || !semester) return DEFAULT_SECTIONS;
-  const key = `sections_config_${academicYear}_${semester}`;
-  let doc = await Setting.findOne({ key }).lean();
-  
-  if (!doc?.value) {
-    const fallbackKey = `sections_config_${academicYear}`;
-    doc = await Setting.findOne({ key: fallbackKey }).lean();
+  let doc = null;
+  if (academicYear && semester) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
   }
-
+  if (!doc?.value && academicYear) {
+    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  }
   if (!doc?.value) {
-    const fallbackDoc = await Setting.findOne({ key: 'sections_config' }).lean();
-    if (fallbackDoc?.value) {
-      // Legacy support: if there's a global config but no year config, use global config for the current year.
-      const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
-      if (currentYear && currentYear.name === academicYear) {
-        doc = fallbackDoc;
-      }
-    }
+    doc = await Setting.findOne({ key: 'sections_config' }).lean();
   }
 
   if (!doc?.value) return DEFAULT_SECTIONS;

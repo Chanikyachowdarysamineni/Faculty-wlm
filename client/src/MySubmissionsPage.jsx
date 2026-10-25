@@ -14,7 +14,10 @@ const MySubmissionsPage = ({
   const { faculty: contextFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
   
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
-  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
+  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = useMemo(() => {
+    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  }, [configPrograms, distinctCoursePrograms]);
   
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
@@ -293,7 +296,7 @@ const MySubmissionsPage = ({
                         <option value="">— Select a course —</option>
                         {PROGRAMS.map(prog => (
                           <optgroup key={prog} label={`── ${prog} ──`}>
-                            {courseList.filter(c2 => c2.program === prog || (prog === 'B.Tech' && !c2.program)).map(c2 => (
+                            {courseList.filter(c2 => c2.program === prog || (!c2.program && prog === PROGRAMS[0])).map(c2 => (
                               <option
                                 key={c2.id}
                                 value={c2.id}

@@ -96,15 +96,24 @@ const WorkloadPage = ({ submissions }) => {
 
   const { faculty: contextFaculty, courses: contextCourses, systemConfig, setFaculty } = useSharedData();
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
-  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
-  const YEAR_OPTIONS = activeYearsRaw.length > 0
-    ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }]
-    : [{ value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' }];
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech').map(y => y.value);
+  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(y => y && y !== 'M.Tech')));
+  const allKnownYears = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears]));
+  const YEARS = allKnownYears.filter(y => y !== 'Other' && y !== 'M.Tech');
+  const YEAR_OPTIONS = allKnownYears.length > 0
+    ? [...allKnownYears.filter(y => y !== 'M.Tech').map(y => ({ value: y, label: `${y} Year` })), { value: '__other__', label: 'Others' }]
+    : [{ value: '__other__', label: 'Others' }];
 
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
-  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value).length > 0 ? (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value) : ['Main Faculty', 'Supporting Faculty', 'TA'];
-  const PROGRAMS = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value).length > 0 ? (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value) : ['B.Tech', 'M.Tech'];
+  const activeCourseTypes = (systemConfig?.courseTypes || [])
+    .filter(c => c && c.isActive !== false)
+    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+    .filter(Boolean);
+  const distinctCourseTypes = Array.from(new Set((contextCourses || []).map(c => c.courseType).filter(Boolean)));
+  const COURSE_TYPES = Array.from(new Set([...activeCourseTypes, ...distinctCourseTypes])).filter(Boolean);
+  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value);
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
 
   const [workloads, setWorkloads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -302,10 +311,15 @@ const WorkloadPage = ({ submissions }) => {
     return submission.prefs.map(cid => courseList.find(c => String(c.id) === String(cid) || String(c.courseId) === String(cid))).filter(Boolean);
   }, [submission, courseList]);
   const selectedCourse = useMemo(() => courseList.find(c => String(c.id) === String(form.courseId)), [form.courseId, courseList]);
-  
+
   const isMTech = selectedCourse?.program === 'M.Tech';
   const sectionConfigKey = isMTech ? `M.Tech_${form.year}` : form.year;
-  const sections = sectionsConfig[sectionConfigKey] || sectionsConfig[form.year] || YEAR_SECTIONS[form.year] || ['1'];
+  const sections = (sectionsConfig && (
+    sectionsConfig[sectionConfigKey] || 
+    sectionsConfig[form.year] || 
+    sectionsConfig[`B.Tech_${form.year}`] ||
+    sectionsConfig['I']
+  )) || ['1'];
 
   const allocationPreviewRows = useMemo(() => {
     if (!allocation) return [];
@@ -417,12 +431,12 @@ const WorkloadPage = ({ submissions }) => {
 
     // CRITICAL: Extract year from selected course and auto-populate
     const courseYear = c?.year || 'I'; // Fallback to 'I' if no year found
-    
+
     const isMTech = c?.program === 'M.Tech';
     const configKey = isMTech ? `M.Tech_${courseYear}` : courseYear;
 
     // Auto-select first available section for the determined year and program
-    const availableSections = sectionsConfig[configKey] || sectionsConfig[courseYear] || YEAR_SECTIONS[courseYear] || ['1'];
+    const availableSections = sectionsConfig[configKey] || sectionsConfig[courseYear] || ['1'];
     const autoSection = availableSections?.[0] || '1';
 
     setForm(prev => ({
@@ -467,9 +481,9 @@ const WorkloadPage = ({ submissions }) => {
     if (!window.confirm(`Delete section '${form.section}' for ${targetYear}?`)) return;
     const data = await deleteSectionConfig(targetYear, form.section, selectedAcademicYear);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not delete section.'}`);
-    const refreshed = await fetchSectionsConfig(selectedAcademicYear, selectedSemester).catch(() => DEFAULT_SECTIONS);
+    const refreshed = await fetchSectionsConfig(selectedAcademicYear, selectedSemester).catch(() => ({}));
     setSectionsConfig(refreshed);
-    const nextList = refreshed[targetYear] || YEAR_SECTIONS[targetYear] || ['1'];
+    const nextList = refreshed[targetYear] || ['1'];
     setForm(p => ({ ...p, section: nextList[0] || '1' }));
     showToast('Section deleted.');
   };
@@ -1529,12 +1543,12 @@ const WorkloadPage = ({ submissions }) => {
                 <select value={form.courseId} onChange={e => handleCourseChange(e.target.value)}>
                   <option value="">— Select a course —</option>
                   {(prefCourses.length > 0 ? prefCourses : filteredCourseList.length > 0 ? filteredCourseList : courseList)
-                    .filter(c => assignCourseProgram === 'All' || c.program === assignCourseProgram || (assignCourseProgram === 'B.Tech' && !c.program))
+                    .filter(c => assignCourseProgram === 'All' || c.program === assignCourseProgram || (!c.program && assignCourseProgram === (PROGRAMS[0] || 'B.Tech')))
                     .map(c => (
-                    <option key={c.id} value={c.id}>
-                      [{c.subjectCode}] {c.subjectName} ({c.shortName})
-                    </option>
-                  ))}
+                      <option key={c.id} value={c.id}>
+                        [{c.subjectCode}] {c.subjectName} ({c.shortName})
+                      </option>
+                    ))}
                   <option value="__other__">Other…</option>
                 </select>
                 {/* Show preference status */}
@@ -1581,7 +1595,7 @@ const WorkloadPage = ({ submissions }) => {
                           ...p,
                           year: e.target.value,
                           section: e.target.value !== '__other__'
-                            ? ((sectionsConfig[isMTechProg ? `M.Tech_${e.target.value}` : e.target.value] || YEAR_SECTIONS[e.target.value])?.[0] || '1')
+                            ? ((sectionsConfig[isMTechProg ? `M.Tech_${e.target.value}` : e.target.value] || sectionsConfig[e.target.value])?.[0] || '1')
                             : p.section,
                           courseId: '',
                           manualL: '',
@@ -1917,7 +1931,7 @@ const WorkloadPage = ({ submissions }) => {
                                     <td className="wl-td-code">{w.subjectCode}</td>
                                     <td className="wl-td-sname">{w.subjectName}</td>
                                     <td>{w.facultyRole || 'Main Faculty'}{w.facultyRole === 'TA' && w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
-                                    <td><span className="wl-badge-prog">{w.program || 'B.Tech'}</span></td>
+                                    <td><span className="wl-badge-prog">{w.program || (PROGRAMS[0] || 'B.Tech')}</span></td>
                                     <td><span className="wl-year-pill">{w.year}</span></td>
                                     <td><span className="wl-sec-pill">{w.section}</span></td>
                                     <td className="wl-td-num wl-td-fixed">{w.fixedL}</td>
@@ -2063,54 +2077,56 @@ const WorkloadPage = ({ submissions }) => {
                     </div>
                   </div>
 
-                  {/* Course table */}
-                  <table className="wlf-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '15%' }}>Name of the Faculty</th>
-                        <th style={{ width: '3%' }}>#</th>
-                        <th style={{ width: '11%' }}>Subject Code</th>
-                        <th style={{ width: '25%', textAlign: 'left' }}>Subject Name</th>
-                        <th style={{ width: '10%' }}>Role</th>
-                        <th style={{ width: '7%' }}>Year</th>
-                        <th style={{ width: '6%' }}>Sec</th>
-                        <th style={{ width: '6%' }}>L</th>
-                        <th style={{ width: '6%' }}>T</th>
-                        <th style={{ width: '6%' }}>P</th>
-                        <th style={{ width: '6%' }}>C</th>
-                        <th style={{ width: '8%' }}>Total Hrs</th>
-                        <th style={{ width: '9%' }}>Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {fac.rows.map((r, idx) => (
-                        <tr key={r.id}>
-                          <td style={{ fontWeight: 500 }}>{fac.empName}</td>
-                          <td>{idx + 1}</td>
-                          <td>{r.subjectCode}</td>
-                          <td className="wlf-td-left">{r.subjectName}</td>
-                          <td>{r.facultyRole || 'Main Faculty'}</td>
-                          <td>{r.year}</td>
-                          <td>{r.section}</td>
-                          <td>{r.manualL || 0}</td>
-                          <td>{r.manualT || 0}</td>
-                          <td>{r.manualP || 0}</td>
-                          <td>{r.C}</td>
-                          <td><strong>{(r.manualL || 0) + (r.manualT || 0) + (r.manualP || 0)}</strong></td>
+                  {/* Course table scroll container for mouse events */}
+                  <div className="wlf-table-scroll-wrap" style={{ overflowX: 'auto', width: '100%', marginBottom: '14px' }}>
+                    <table className="wlf-table" style={{ minWidth: '950px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: '15%' }}>Name of the Faculty</th>
+                          <th style={{ width: '3%' }}>#</th>
+                          <th style={{ width: '11%' }}>Subject Code</th>
+                          <th style={{ width: '25%', textAlign: 'left' }}>Subject Name</th>
+                          <th style={{ width: '10%' }}>Role</th>
+                          <th style={{ width: '7%' }}>Year</th>
+                          <th style={{ width: '6%' }}>Sec</th>
+                          <th style={{ width: '6%' }}>L</th>
+                          <th style={{ width: '6%' }}>T</th>
+                          <th style={{ width: '6%' }}>P</th>
+                          <th style={{ width: '6%' }}>C</th>
+                          <th style={{ width: '8%' }}>Total Hrs</th>
+                          <th style={{ width: '9%' }}>Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fac.rows.map((r, idx) => (
+                          <tr key={r.id}>
+                            <td style={{ fontWeight: 500 }}>{fac.empName}</td>
+                            <td>{idx + 1}</td>
+                            <td>{r.subjectCode}</td>
+                            <td className="wlf-td-left">{r.subjectName}</td>
+                            <td>{r.facultyRole || 'Main Faculty'}</td>
+                            <td>{r.year}</td>
+                            <td>{r.section}</td>
+                            <td>{r.manualL || 0}</td>
+                            <td>{r.manualT || 0}</td>
+                            <td>{r.manualP || 0}</td>
+                            <td>{r.C}</td>
+                            <td><strong>{(r.manualL || 0) + (r.manualT || 0) + (r.manualP || 0)}</strong></td>
+                            <td></td>
+                          </tr>
+                        ))}
+                        <tr className="wlf-total-row">
+                          <td colSpan={7} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
+                          <td>{totalL}</td>
+                          <td>{totalT}</td>
+                          <td>{totalP}</td>
+                          <td></td>
+                          <td><strong>{totalHrs}</strong></td>
                           <td></td>
                         </tr>
-                      ))}
-                      <tr className="wlf-total-row">
-                        <td colSpan={7} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
-                        <td>{totalL}</td>
-                        <td>{totalT}</td>
-                        <td>{totalP}</td>
-                        <td></td>
-                        <td><strong>{totalHrs}</strong></td>
-                        <td></td>
-                      </tr>
-                    </tbody>
-                  </table>
+                      </tbody>
+                    </table>
+                  </div>
 
                   {/* Summary & signature */}
                   <div className="wlf-summary-bar">

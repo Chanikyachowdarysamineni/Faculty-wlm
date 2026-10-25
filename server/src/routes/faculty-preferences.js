@@ -171,7 +171,7 @@ router.get(
       // Transform to client format
       const transformedCourses = courses.map((course) => ({
         id: String(course.courseId || 0),
-        program: String(course.program || '').trim() || 'B.Tech',
+        program: String(course.program || '').trim(),
         courseType: String(course.courseType || '').trim(),
         year: String(course.year || '').trim(),
         subjectCode: String(course.subjectCode || '').trim(),

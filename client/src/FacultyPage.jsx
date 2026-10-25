@@ -105,16 +105,18 @@ const FacultyPage = () => {
     } finally {
       setSyncing(false);
     }
-  }, [authHeaders, deduplicateList, setFaculty, selectedSemester]);
+  }, [authHeaders, deduplicateList, setFaculty, selectedSemester, selectedAcademicYear]);
 
-  // Sync shared context data to local state and deduplicate
+  // Sync shared context data to local state and deduplicate, or fetch from server
   useEffect(() => {
-    if (contextFaculty) {
+    if (contextFaculty && contextFaculty.length > 0) {
       const deduplicated = deduplicateList(contextFaculty);
       setList(deduplicated);
       setLoading(false);
+    } else {
+      refetchFaculty();
     }
-  }, [contextFaculty, deduplicateList]);
+  }, [contextFaculty, deduplicateList, refetchFaculty, selectedSemester, selectedAcademicYear]);
 
   // Fetch designations
   useEffect(() => {

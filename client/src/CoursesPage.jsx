@@ -14,7 +14,7 @@ import './CoursesPage.css';
 // YEAR_OPTIONS removed
 
 const emptyCourseForm = {
-  program: 'B.Tech', courseType: '', year: 'I',
+  program: '', courseType: '', year: '',
   subjectCode: '', subjectName: '', shortName: '',
   L: 0, T: 0, P: 0, C: 0,
   // 'Other' free-text companions
@@ -26,21 +26,11 @@ const emptyCourseForm = {
 const CoursesPage = ({ isAdmin = true }) => {
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, setSystemConfig} = useSharedData();
+  const { courses: contextCourses, setCourses: setContextCourses, systemConfig, setSystemConfig } = useSharedData();
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive).map(y => y.value);
-  const YEAR_OPTIONS = activeYearsRaw.length > 0 
-    ? [...systemConfig.years.filter(y => y.isActive).map(y => ({ value: y.value, label: `${y.value} Year` })), { value: '__other__', label: 'Others' }] 
-    : [ { value: 'I', label: 'I Year' }, { value: 'II', label: 'II Year' }, { value: 'III', label: 'III Year' }, { value: 'IV', label: 'IV Year' }, { value: '__other__', label: 'Others' } ];
-  
-  const COURSE_TYPES = (systemConfig?.courseTypes || []).filter(c => c.isActive).map(c => c.value);
-  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
-  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
-  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw.filter(y => y !== 'Other') : ['I', 'II', 'III', 'IV'];
-  
   // ── Data state ──
-  const [courseList, setCourseList]   = useState([]);
-  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [courseList, setCourseList] = useState(contextCourses || []);
+  const [loadingCourses, setLoadingCourses] = useState(!contextCourses);
 
   // Sync shared context data to local state
   useEffect(() => {
@@ -50,23 +40,75 @@ const CoursesPage = ({ isAdmin = true }) => {
     }
   }, [contextCourses]);
 
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech').map(y => y.value);
+  const distinctCourseYears = Array.from(new Set((courseList || []).map(c => c.year).filter(y => y && y !== 'M.Tech')));
+  const allKnownYears = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears]));
+
+  const YEAR_OPTIONS = allKnownYears.length > 0
+    ? [...allKnownYears.filter(y => y !== 'M.Tech').map(y => ({ value: y, label: `${y} Year` })), { value: '__other__', label: 'Others' }]
+    : [{ value: '__other__', label: 'Others' }];
+
+  const activeCourseTypes = (systemConfig?.courseTypes || [])
+    .filter(c => c && c.isActive !== false)
+    .map(c => typeof c === 'string' ? c : (c.value || c.name || c.label))
+    .filter(Boolean);
+  const distinctCourseTypes = Array.from(new Set((courseList || []).map(c => c.courseType).filter(Boolean)));
+  const COURSE_TYPES = Array.from(new Set([...activeCourseTypes, ...distinctCourseTypes])).filter(Boolean);
+
+  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const distinctCoursePrograms = Array.from(new Set((courseList || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = useMemo(() => {
+    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  }, [configPrograms, distinctCoursePrograms]);
+  const YEARS = allKnownYears.filter(y => y !== 'Other' && y !== 'M.Tech');
+
   // ── Filters ──
-  const [activeProgram, setActiveProgram] = useState('B.Tech');
-  const [activeYear,    setActiveYear]    = useState('I');   // B.Tech year tab
-  const [search,        setSearch]        = useState('');
+  const [activeProgram, setActiveProgram] = useState('');
+  const [activeYear, setActiveYear] = useState('');
+  const [search, setSearch] = useState('');
+
+  // Keep activeProgram valid if PROGRAMS update
+  useEffect(() => {
+    if (PROGRAMS.length > 0 && (!activeProgram || !PROGRAMS.includes(activeProgram))) {
+      setActiveProgram(PROGRAMS[0]);
+    }
+  }, [PROGRAMS, activeProgram]);
+
+  // Dynamic years available for the active program
+  const programYears = useMemo(() => {
+    const progEffective = activeProgram || PROGRAMS[0] || 'B.Tech';
+    const coursesYears = courseList
+      .filter(c => c.program === progEffective || (!c.program && progEffective === (PROGRAMS[0] || 'B.Tech')))
+      .map(c => c.year)
+      .filter(y => y && y !== 'M.Tech');
+    const distinctInProg = Array.from(new Set(coursesYears));
+
+    let baseYears = progEffective === 'M.Tech' ? ['I', 'II'] : ['I', 'II', 'III', 'IV'];
+    const combined = Array.from(new Set([...baseYears, ...distinctInProg])).filter(Boolean);
+    const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+    return combined.sort((a, b) => (romanOrder[a] || 99) - (romanOrder[b] || 99));
+  }, [courseList, activeProgram, PROGRAMS]);
+
+  // Keep activeYear valid if programYears update
+  useEffect(() => {
+    if (programYears.length > 0 && !programYears.includes(activeYear)) {
+      setActiveYear(programYears[0]);
+    }
+  }, [programYears, activeYear]);
 
   // ── Course modal ──
   const [showCourseModal, setShowCourseModal] = useState(false);
-  const [editCourse,      setEditCourse]      = useState(null);
-  const [courseForm,      setCourseForm]      = useState(emptyCourseForm);
-  const [deleteCourse,    setDeleteCourse]    = useState(null);
+  const [editCourse, setEditCourse] = useState(null);
+  const [courseForm, setCourseForm] = useState(emptyCourseForm);
+  const [deleteCourse, setDeleteCourse] = useState(null);
   const [showManageTypes, setShowManageTypes] = useState(false);
 
   // ── Toast ──
   const { showToast } = useToast();
 
   const authHeaders = () => ({
-    ...authJsonHeaders()});
+    ...authJsonHeaders()
+  });
 
   // ── Fetch courses from API ──
   const fetchCourses = useCallback(async () => {
@@ -85,32 +127,68 @@ const CoursesPage = ({ isAdmin = true }) => {
     } finally {
       setLoadingCourses(false);
     }
-  }, [setContextCourses, showToast, selectedAcademicYear]);
+  }, [setContextCourses, showToast, selectedSemester, selectedAcademicYear]);
 
-  // ── Re-fetch systemConfig to refresh COURSE_TYPES after modal changes ──
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
+
+  // ── Re-fetch systemConfig to refresh COURSE_TYPES after modal changes or on mount ──
   const refreshSystemConfig = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/deva/config`, { headers: authJsonHeaders() });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSystemConfig(data.data);
+      const [resConfig, resTypes] = await Promise.allSettled([
+        fetch(`${API}/deva/config`, { headers: authJsonHeaders() }),
+        fetch(`${API}/deva/course-types/active`, { headers: authJsonHeaders() })
+      ]);
+      let updated = null;
+      if (resConfig.status === 'fulfilled' && resConfig.value.ok) {
+        const data = await resConfig.value.json();
+        if (data.success && data.data) {
+          updated = data.data;
+        }
+      }
+      if (resTypes.status === 'fulfilled' && resTypes.value.ok) {
+        const tData = await resTypes.value.json();
+        if (tData.success && Array.isArray(tData.data) && tData.data.length > 0) {
+          const mappedTypes = tData.data.map(t => ({
+            value: t.name || t.id || t.value,
+            label: t.label || t.name || t.value,
+            isActive: t.isActive !== false
+          }));
+          updated = { ...(updated || {}), courseTypes: mappedTypes };
+        }
+      }
+      if (updated) {
+        setSystemConfig(prev => ({ ...(prev || {}), ...updated }));
       }
     } catch (err) {
       console.error('Failed to refresh system config:', err);
     }
   }, [setSystemConfig]);
 
+  useEffect(() => {
+    refreshSystemConfig();
+  }, [refreshSystemConfig]);
+
   // ── Derived lists ──
   const filteredCourses = useMemo(() => {
     const q = search.toLowerCase();
-    return courseList.filter(c =>
-      c.program === activeProgram &&
-      c.year === activeYear &&
-      (!q || c.subjectCode.toLowerCase().includes(q) ||
-             c.subjectName.toLowerCase().includes(q) ||
-             c.shortName.toLowerCase().includes(q))
-    );
-  }, [courseList, activeProgram, activeYear, search]);
+    const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+    const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+    const progEffective = activeProgram || PROGRAMS[0] || 'B.Tech';
+    const yearEffective = activeYear || programYears[0] || 'I';
+    return courseList.filter(c => {
+      const progMatch = c.program === progEffective || (!c.program && progEffective === (PROGRAMS[0] || 'B.Tech'));
+      const yearMatch = c.year === yearEffective ||
+        romanToNum[c.year] === yearEffective ||
+        numToRoman[c.year] === yearEffective;
+      const searchMatch = !q ||
+        (c.subjectCode && c.subjectCode.toLowerCase().includes(q)) ||
+        (c.subjectName && c.subjectName.toLowerCase().includes(q)) ||
+        (c.shortName && c.shortName.toLowerCase().includes(q));
+      return progMatch && yearMatch && searchMatch;
+    });
+  }, [courseList, activeProgram, activeYear, search, PROGRAMS, programYears]);
 
   // Filter to show only B.Tech by default (remove M.Tech display)
   const displayCourses = useMemo(() => {
@@ -122,15 +200,15 @@ const CoursesPage = ({ isAdmin = true }) => {
   // ── Export handler ──
   const handleExport = (format) => {
     const columns = [
-      { header: 'S.No.',       key: 'sno' },
+      { header: 'S.No.', key: 'sno' },
       { header: 'Course Code', key: 'subjectCode' },
       { header: 'Course Name', key: 'subjectName' },
-      { header: 'Short Name',  key: 'shortName' },
+      { header: 'Short Name', key: 'shortName' },
       { header: 'Course Type', key: 'courseType' },
-      { header: 'L',           key: 'L' },
-      { header: 'T',           key: 'T' },
-      { header: 'P',           key: 'P' },
-      { header: 'C',           key: 'C' },
+      { header: 'L', key: 'L' },
+      { header: 'T', key: 'T' },
+      { header: 'P', key: 'P' },
+      { header: 'C', key: 'C' },
     ];
     const rows = filteredCourses.map((c, i) => ({
       sno: i + 1,
@@ -151,7 +229,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     }
   };
 
-    // ── Course CRUD handlers ──
+  // ── Course CRUD handlers ──
   const openAddCourse = () => {
     const defaultType = COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '';
     setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear, courseType: defaultType });
@@ -160,7 +238,7 @@ const CoursesPage = ({ isAdmin = true }) => {
   };
 
   const openEditCourse = (c) => {
-    setCourseForm({ 
+    setCourseForm({
       ...c,
       allowedSectionsText: Array.isArray(c.allowedSections) ? c.allowedSections.join(', ') : ''
     });
@@ -183,9 +261,9 @@ const CoursesPage = ({ isAdmin = true }) => {
       showToast('Please type Year / Department.'); return;
     }
     // Resolve 'Other' free-text values
-    const resolvedProgram    = f.program     === '__other__' ? f.programOther.trim()    || 'Other' : f.program;
-    const resolvedCourseType = f.courseType  === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
-    const resolvedYear       = f.year        === '__other__' ? f.yearOther.trim()       || 'Other' : f.year;
+    const resolvedProgram = f.program === '__other__' ? f.programOther.trim() || 'Other' : f.program;
+    const resolvedCourseType = f.courseType === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
+    const resolvedYear = f.year === '__other__' ? f.yearOther.trim() || 'Other' : f.year;
     const payload = {
       program: resolvedProgram,
       courseType: resolvedCourseType,
@@ -197,9 +275,10 @@ const CoursesPage = ({ isAdmin = true }) => {
       T: +f.T,
       P: +f.P,
       C: +f.C,
-      allowedSections: f.allowedSectionsText 
-        ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean) 
-        : []};
+      allowedSections: f.allowedSectionsText
+        ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean)
+        : []
+    };
     try {
       // Build URL with academic period query params so the server middleware can resolve context
       const qp = new URLSearchParams();
@@ -212,7 +291,8 @@ const CoursesPage = ({ isAdmin = true }) => {
         {
           method: editCourse ? 'PUT' : 'POST',
           headers: authHeaders(),
-          body: JSON.stringify(payload)}
+          body: JSON.stringify(payload)
+        }
       );
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -220,7 +300,7 @@ const CoursesPage = ({ isAdmin = true }) => {
         showToast(errMsg);
         return;
       }
-      
+
       // Refresh the course list from server to ensure consistency
       await fetchCourses();
       showToast(editCourse ? 'Course updated successfully.' : 'Course added successfully.');
@@ -237,13 +317,14 @@ const CoursesPage = ({ isAdmin = true }) => {
     try {
       const res = await fetch(`${API}/deva/courses/${deleteCourse.id}`, {
         method: 'DELETE',
-        headers: authHeaders()});
+        headers: authHeaders()
+      });
       const data = await res.json();
       if (!res.ok || !data.success) {
         showToast(data.message || 'Could not delete course.');
         return;
       }
-      
+
       // Refresh the course list from server
       await fetchCourses();
       showToast('Course deleted successfully.');
@@ -279,7 +360,7 @@ const CoursesPage = ({ isAdmin = true }) => {
             <svg className="cp-search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
               strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               className="cp-search"
@@ -290,50 +371,51 @@ const CoursesPage = ({ isAdmin = true }) => {
             {search && <button className="cp-search-clear" onClick={() => setSearch('')}>✕</button>}
           </div>
           {isAdmin && (
-          <div className="cp-export-buttons">
-              <button className="cp-btn cp-export-csv" onClick={() => handleExport('csv')} title="Export filtered courses as CSV" style={{marginRight: '5px'}}>CSV</button>
+            <div className="cp-export-buttons">
+              <button className="cp-btn cp-export-csv" onClick={() => handleExport('csv')} title="Export filtered courses as CSV" style={{ marginRight: '5px' }}>CSV</button>
               <button className="cp-btn cp-export-excel" onClick={() => handleExport('excel')} title="Export filtered courses as Excel">Excel</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Program tabs ── B.Tech only */}
+      {/* ── Program tabs ── */}
       <div className="cp-program-tabs">
         {PROGRAMS.map(p => (
           <button
             key={p}
             className={`cp-prog-tab${activeProgram === p ? ' active' : ''}`}
-            onClick={() => { setActiveProgram(p); setActiveYear('I'); setSearch(''); }}
+            onClick={() => { setActiveProgram(p); setSearch(''); }}
           >
             {p}
             <span className="cp-prog-count">
-              {courseList.filter(c => c.program === p).length}
+              {courseList.filter(c => c.program === p || (!c.program && p === PROGRAMS[0])).length}
             </span>
           </button>
         ))}
       </div>
 
-      {/* ── B.Tech year tabs ── */}
-      {true && (
-        <div className="cp-year-tabs">
-          {(activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS).map(y => {
-            const cnt = displayCourses.filter(
-              c => c.program === activeProgram && c.year === y
-            ).length;
-            return (
-              <button
-                key={y}
-                className={`cp-year-tab${activeYear === y ? ' active' : ''}`}
-                onClick={() => { setActiveYear(y); setSearch(''); }}
-              >
-                <span className="cp-year-tab-label">{y} Year</span>
-                {cnt > 0 && <span className="cp-year-tab-badge">{cnt}</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* ── Program year tabs ── */}
+      <div className="cp-year-tabs">
+        {programYears.map(y => {
+          const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+          const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+          const cnt = courseList.filter(
+            c => (c.program === activeProgram || (!c.program && activeProgram === PROGRAMS[0])) &&
+              (c.year === y || romanToNum[c.year] === y || numToRoman[c.year] === y)
+          ).length;
+          return (
+            <button
+              key={y}
+              className={`cp-year-tab${activeYear === y ? ' active' : ''}`}
+              onClick={() => { setActiveYear(y); setSearch(''); }}
+            >
+              <span className="cp-year-tab-label">{y} Year</span>
+              {cnt > 0 && <span className="cp-year-tab-badge">{cnt}</span>}
+            </button>
+          );
+        })}
+      </div>
 
       {/* ════════════════════════════════════════
           SECTION 1 — Fixed Curriculum
@@ -359,7 +441,7 @@ const CoursesPage = ({ isAdmin = true }) => {
               <button className="cp-btn cp-btn-add" onClick={openAddCourse}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                   fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 Add Course
               </button>
@@ -398,12 +480,12 @@ const CoursesPage = ({ isAdmin = true }) => {
                   <td className="cp-td-num">{c.P}</td>
                   <td className="cp-td-num cp-td-c">{c.C}</td>
                   {isAdmin && (
-                  <td>
-                    <div className="cp-actions">
-                      <button className="cp-action cp-edit-btn" onClick={() => openEditCourse(c)}>✎ Edit</button>
-                      <button className="cp-action cp-del-btn"  onClick={() => setDeleteCourse(c)}>✕ Del</button>
-                    </div>
-                  </td>
+                    <td>
+                      <div className="cp-actions">
+                        <button className="cp-action cp-edit-btn" onClick={() => openEditCourse(c)}>✎ Edit</button>
+                        <button className="cp-action cp-del-btn" onClick={() => setDeleteCourse(c)}>✕ Del</button>
+                      </div>
+                    </td>
                   )}
                 </tr>
               ))}
@@ -444,9 +526,12 @@ const CoursesPage = ({ isAdmin = true }) => {
                 {/* Course Type */}
                 <div className="cp-fg">
                   <label>Course Type</label>
-                  <select value={courseForm.courseType}
+                  <select value={courseForm.courseType || COURSE_TYPES[0] || ''}
                     onChange={e => setCourseForm(p => ({ ...p, courseType: e.target.value }))}>
-                    {COURSE_TYPES.map(t => <option key={t}>{t}</option>)}
+                    {Array.from(new Set([
+                      ...COURSE_TYPES,
+                      ...(courseForm.courseType && courseForm.courseType !== '__other__' ? [courseForm.courseType] : [])
+                    ])).map(t => <option key={t} value={t}>{t}</option>)}
                     <option value="__other__">Other…</option>
                   </select>
                   {courseForm.courseType === '__other__' && (
@@ -459,23 +544,27 @@ const CoursesPage = ({ isAdmin = true }) => {
                   )}
                 </div>
                 {/* Year */}
-                {(courseForm.program === 'B.Tech' || courseForm.program === 'M.Tech' || courseForm.program === '__other__') && (
-                  <div className="cp-fg">
-                    <label>Year</label>
-                    <select value={courseForm.year}
-                      onChange={e => setCourseForm(p => ({ ...p, year: e.target.value }))}>
-                      {YEAR_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
-                    {courseForm.year === '__other__' && (
-                      <input
-                        className="cp-other-input"
-                        placeholder="Type Year / Department…"
-                        value={courseForm.yearOther}
-                        onChange={e => setCourseForm(p => ({ ...p, yearOther: e.target.value }))}
-                      />
-                    )}
-                  </div>
-                )}
+                <div className="cp-fg">
+                  <label>Year</label>
+                  <select value={courseForm.year}
+                    onChange={e => setCourseForm(p => ({ ...p, year: e.target.value }))}>
+                    {YEAR_OPTIONS.filter(opt => {
+                      if (opt.value === '__other__') return true;
+                      if (courseForm.program === 'M.Tech') {
+                        return opt.value === 'I' || opt.value === 'II';
+                      }
+                      return opt.value !== 'M.Tech';
+                    }).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                  {courseForm.year === '__other__' && (
+                    <input
+                      className="cp-other-input"
+                      placeholder="Type Year / Department…"
+                      value={courseForm.yearOther}
+                      onChange={e => setCourseForm(p => ({ ...p, yearOther: e.target.value }))}
+                    />
+                  )}
+                </div>
                 {/* Subject Code */}
                 <div className="cp-fg">
                   <label>Subject Code *</label>
@@ -550,7 +639,7 @@ const CoursesPage = ({ isAdmin = true }) => {
       )}
 
       {showManageTypes && (
-      <ManageCourseTypesModal onClose={() => { setShowManageTypes(false); refreshSystemConfig(); }} />
+        <ManageCourseTypesModal onClose={() => { setShowManageTypes(false); refreshSystemConfig(); }} />
       )}
     </div>
   );

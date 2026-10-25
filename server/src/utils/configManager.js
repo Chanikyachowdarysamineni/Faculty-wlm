@@ -15,7 +15,6 @@ const DEFAULT_CONFIG = {
     { value: 'II', label: 'II Year', isActive: true },
     { value: 'III', label: 'III Year', isActive: true },
     { value: 'IV', label: 'IV Year', isActive: true },
-    { value: 'M.Tech', label: 'M.Tech', isActive: true },
     { value: 'Other', label: 'Other', isActive: true }
   ],
   courseTypes: [

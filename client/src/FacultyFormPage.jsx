@@ -15,9 +15,13 @@ const FacultyFormPage = ({
   const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
   const { showToast } = useToast();
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
-  const YEARS_ORDER = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
+  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
+  const YEARS_ORDER = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
-  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
+  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = useMemo(() => {
+    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  }, [configPrograms, distinctCoursePrograms]);
   
   // Auto-fill empId for logged-in faculty
   const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
@@ -713,7 +717,12 @@ const cancelEdit = () => {
                     {PROGRAMS.map(prog => (
                       <React.Fragment key={prog}>
                         {YEARS_ORDER.map(yr => {
-                          const yrCourses = courseList.filter(c => (c.program === prog || (prog === 'B.Tech' && !c.program)) && c.year === yr);
+                          const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+                          const numToRoman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV' };
+                          const yrCourses = courseList.filter(c => 
+                            (c.program === prog || (!c.program && prog === PROGRAMS[0])) && 
+                            (c.year === yr || romanToNum[c.year] === yr || numToRoman[c.year] === yr)
+                          );
                           if (!yrCourses.length) return null;
                           return (
                             <optgroup key={`${prog}-${yr}`} label={`── ${prog} ${yr} Year ──`}>

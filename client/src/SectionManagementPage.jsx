@@ -7,7 +7,7 @@
  * ─ Sync section data across all pages (Allocation, Workload, etc.)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './SectionManagementPage.css';
 import {
   DEFAULT_SECTIONS,
@@ -23,8 +23,8 @@ import { useAcademicPeriod } from './AcademicPeriodContext';
 
 const SectionManagementPage = () => {
   const { selectedAcademicYear, selectedSemester } = useAcademicPeriod();
-  const [activeYear, setActiveYear] = useState('I');
-  const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
+  const [activeYear, setActiveYear] = useState('');
+  const [sectionsConfig, setSectionsConfig] = useState({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
@@ -32,26 +32,53 @@ const SectionManagementPage = () => {
   const [editingSection, setEditingSection] = useState(null);
   const [editingValue, setEditingValue] = useState('');
 
-  const { setSectionsConfig: setSharedSectionsConfig, systemConfig } = useSharedData();
+  const { setSectionsConfig: setSharedSectionsConfig, systemConfig, courses: contextCourses } = useSharedData();
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
-  const PROGRAMS = configPrograms.length > 0 ? Array.from(new Set([...configPrograms, 'M.Tech'])) : ['B.Tech', 'M.Tech'];
-  const [activeProgram, setActiveProgram] = useState('B.Tech');
+  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+  const PROGRAMS = useMemo(() => {
+    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  }, [configPrograms, distinctCoursePrograms]);
+
+  const [activeProgram, setActiveProgram] = useState('');
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
-  const YEARS = activeYearsRaw.length > 0 ? activeYearsRaw : ['I', 'II', 'III', 'IV'];
-  const displayYears = activeProgram === 'M.Tech' ? ['I', 'II'] : YEARS;
-  const yearKey = activeProgram === 'B.Tech' ? activeYear : `${activeProgram}_${activeYear}`;
+  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
+  const YEARS = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
+
+  const displayYears = useMemo(() => {
+    const inProg = Array.from(new Set((contextCourses || []).filter(c => c.program === activeProgram).map(c => c.year).filter(Boolean)));
+    return Array.from(new Set([...YEARS, ...inProg])).sort((a, b) => {
+      const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+      return (romanOrder[a] || 99) - (romanOrder[b] || 99);
+    });
+  }, [activeProgram, contextCourses, YEARS]);
+
+  const effProgram = activeProgram || PROGRAMS[0] || 'B.Tech';
+  const effYear = activeYear || displayYears[0] || 'I';
+  const yearKey = effProgram === (PROGRAMS[0] || 'B.Tech') ? effYear : `${effProgram}_${effYear}`;
+
+  useEffect(() => {
+    if (PROGRAMS.length > 0 && !PROGRAMS.includes(activeProgram)) {
+      setActiveProgram(PROGRAMS[0]);
+    }
+  }, [PROGRAMS, activeProgram]);
+
+  useEffect(() => {
+    if (displayYears.length > 0 && !displayYears.includes(activeYear)) {
+      setActiveYear(displayYears[0]);
+    }
+  }, [displayYears, activeYear]);
 
   const loadSectionsConfig = useCallback(async () => {
     setLoading(true);
     try {
       const cfg = await fetchSectionsConfig(selectedAcademicYear, selectedSemester);
-      setSectionsConfig(cfg);
-      setSharedSectionsConfig(cfg);
+      setSectionsConfig(cfg || {});
+      setSharedSectionsConfig(cfg || {});
       setMessage('');
     } catch (err) {
       console.error('Error loading sections:', err);
-      setSectionsConfig(DEFAULT_SECTIONS);
-      setMessage('Failed to load section configuration. Using defaults.');
+      setSectionsConfig({});
+      setMessage('Failed to load section configuration.');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -204,9 +231,15 @@ const SectionManagementPage = () => {
             </span>
           </div>
           {Object.entries(sectionsConfig)
-            .filter(([k]) => activeProgram === 'B.Tech' ? !k.includes('_') : k.startsWith(activeProgram))
+            .filter(([k]) => {
+              if (activeProgram === (PROGRAMS[0] || 'B.Tech')) {
+                return !k.includes('_') || k.startsWith(`${activeProgram}_`);
+              }
+              return k.startsWith(`${activeProgram}_`);
+            })
             .map(([k, secs]) => {
-              const displayLabel = activeProgram === 'B.Tech' ? `${k} Year` : `${k.split('_')[1]} Year`;
+              const yrPart = k.includes('_') ? k.split('_')[1] : k;
+              const displayLabel = `${yrPart} Year`;
               return (
                 <div key={k} className="smp-stat-item">
                   <span className="smp-stat-label">{displayLabel}</span>

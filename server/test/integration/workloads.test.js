@@ -34,6 +34,9 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
+  if (!mongoServer || (mongoose.connection && mongoose.connection.host && mongoose.connection.host.includes('mongodb.net'))) {
+    return;
+  }
   await Workload.deleteMany({});
   await Course.deleteMany({});
 });
