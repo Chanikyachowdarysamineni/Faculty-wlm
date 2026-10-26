@@ -15,9 +15,9 @@ const AcademicYearSemester = require('../models/AcademicYearSemester');
  */
 const requireAcademicPeriod = async (req, res, next) => {
   try {
-    const yearId = req.query.academicYearId || req.body.academicYearId;
-    const yearName = req.query.academicYear || req.body.academicYear;
-    const semType = req.query.semester || req.body.semester;
+    const yearId = req.query.academicYearId || req.body?.academicYearId || req.headers['x-academic-year-id'];
+    const yearName = req.query.academicYear || req.body?.academicYear || req.headers['x-academic-year'];
+    const semType = req.query.semester || req.body?.semester || req.headers['x-semester'];
 
     // If nothing is provided, pass through without scoping
     if (!yearId && !yearName) {
@@ -62,7 +62,22 @@ const requireAcademicPeriod = async (req, res, next) => {
       }).lean();
     }
 
-    req.academicPeriod = { academicYear, academicYearSemester };
+    const { getSemesterPeriodDates } = require('../utils/academicPeriodUtils');
+    const periodDates = getSemesterPeriodDates({
+      academicYear,
+      semesterType: semType || academicYearSemester?.semesterType,
+      academicYearSemester
+    });
+
+    req.academicPeriod = {
+      academicYear,
+      academicYearSemester,
+      periodStart: periodDates.periodStart,
+      periodEnd: periodDates.periodEnd,
+      semester: periodDates.semester
+    };
+
+    req.getPeriodDates = () => periodDates;
 
     // Helper: safely get semester ObjectId or null
     req.getSemesterId = () => academicYearSemester?._id || null;

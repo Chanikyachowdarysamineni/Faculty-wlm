@@ -46,11 +46,21 @@ const normalizeSections = (raw) => {
 
 const getSectionsConfig = async (academicYear, semester) => {
   let doc = null;
-  if (academicYear && semester) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  const sem = String(semester || '').toUpperCase().trim();
+  const yr = String(academicYear || '').trim();
+
+  if (yr && sem) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  if (!doc?.value && academicYear) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  // By default, Even Semester should display existing Odd Semester section names as initial values
+  if (!doc?.value && yr && sem === 'EVEN') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
+  }
+  if (!doc?.value && yr && sem === 'ODD') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
+  }
+  if (!doc?.value && yr) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
   if (!doc?.value) {
     doc = await Setting.findOne({ key: 'sections_config' }).lean();
@@ -117,6 +127,11 @@ router.put(
         { academicYearId: yearDoc._id, semesterType: semester },
         { $set: { formEnabled: Boolean(formEnabled) } },
         { upsert: true, new: true }
+      );
+      await Setting.findOneAndUpdate(
+        { key: 'form_enabled' },
+        { value: String(Boolean(formEnabled)) },
+        { upsert: true }
       );
       sendSuccess(res, { formEnabled: Boolean(formEnabled) }, 200);
     } catch (err) { next(err); }
@@ -272,6 +287,11 @@ router.put(
         { academicYearId: yearDoc._id, semesterType: semester },
         { $set: { editEnabled: Boolean(editEnabled) } },
         { upsert: true, new: true }
+      );
+      await Setting.findOneAndUpdate(
+        { key: 'edit_enabled' },
+        { value: String(Boolean(editEnabled)) },
+        { upsert: true }
       );
       sendSuccess(res, { editEnabled: Boolean(editEnabled) }, 200);
     } catch (err) { next(err); }

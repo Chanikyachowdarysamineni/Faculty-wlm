@@ -9,6 +9,8 @@ const jwt = require('jsonwebtoken');
 let mongoServer;
 let adminToken;
 
+jest.setTimeout(120000);
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const uri = mongoServer.getUri();
@@ -26,11 +28,13 @@ beforeAll(async () => {
     process.env.JWT_SECRET || 'test-secret', 
     { expiresIn: '1h', algorithm: 'HS256' }
   );
-});
+}, 120000);
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 });
 
 afterEach(async () => {

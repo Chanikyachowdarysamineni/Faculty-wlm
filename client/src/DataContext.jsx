@@ -32,6 +32,18 @@ export const DataProvider = ({ children }) => {
     setSelectedSemesterState(semester);
   }, []);
 
+  // Sync with AcademicPeriodContext events
+  React.useEffect(() => {
+    const handlePeriodChange = (e) => {
+      if (e?.detail) {
+        if (e.detail.yearName) setSelectedAcademicYearState(e.detail.yearName);
+        if (e.detail.semester) setSelectedSemesterState(e.detail.semester);
+      }
+    };
+    window.addEventListener('academicPeriodChanged', handlePeriodChange);
+    return () => window.removeEventListener('academicPeriodChanged', handlePeriodChange);
+  }, []);
+
   const value = {
     faculty,
     setFaculty,

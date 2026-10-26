@@ -428,6 +428,32 @@ process.on('uncaughtException', (err) => {
 
   console.log('✅  App initialized successfully.');
 
+  try {
+    const AcademicYear = require('./models/AcademicYear');
+    const AcademicYearSemester = require('./models/AcademicYearSemester');
+    const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+    if (currentYear) {
+      const activeSem = await AcademicYearSemester.findOne({
+        academicYearId: currentYear._id,
+        $or: [{ status: 'ACTIVE' }, { semesterType: 'EVEN' }]
+      }).lean();
+      if (activeSem) {
+        await Setting.findOneAndUpdate(
+          { key: 'form_enabled' },
+          { value: String(activeSem.formEnabled !== false) },
+          { upsert: true }
+        );
+        await Setting.findOneAndUpdate(
+          { key: 'edit_enabled' },
+          { value: String(activeSem.editEnabled !== false) },
+          { upsert: true }
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn('Failed to sync form_enabled / edit_enabled setting on startup', { error: err.message });
+  }
+
   await Setting.findOneAndUpdate(
     { key: 'form_enabled' },
     { $setOnInsert: { key: 'form_enabled', value: 'true' } },
@@ -443,20 +469,22 @@ process.on('uncaughtException', (err) => {
   // Server runs on HTTP (Nginx handles SSL termination in production)
   const server = http.createServer(app);
 
-  server.listen(PORT, () => {
-    console.log(`\n✅  WLM Server running on http://localhost:${PORT}`);
-    console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
-    console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
-    console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
-    console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
-    console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
-    console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
-    console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
-    console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
+  if (process.env.NODE_ENV !== 'test') {
+    server.listen(PORT, () => {
+      console.log(`\n✅  WLM Server running on http://localhost:${PORT}`);
+      console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
+      console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
+      console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
+      console.log(`   Submissions: GET  http://localhost:${PORT}/deva/submissions`);
+      console.log(`   Workloads:   GET  http://localhost:${PORT}/deva/workloads`);
+      console.log(`   Stats:       GET  http://localhost:${PORT}/deva/stats`);
+      console.log(`   Health:      GET  http://localhost:${PORT}/deva/health`);
+      console.log(`   WebSocket:   WS   ws://localhost:${PORT}/ws\n`);
 
-    // Initialize WebSocket server
-    WebSocketHandler.initialize(server);
-  });
+      // Initialize WebSocket server
+      WebSocketHandler.initialize(server);
+    });
+  }
 
   // Render's load balancer holds connections for 75 s+; Node defaults to 5 s,
   // which makes Render send requests on already-closed sockets → ERR_CONNECTION_CLOSED.

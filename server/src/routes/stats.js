@@ -18,6 +18,8 @@ const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware
 const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { getFacultyWorkloadSummary, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+const { TA_DESIGNATIONS, matchTaDesignation, getDefaultCapacity } = require('../utils/designationUtils');
+const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
 
 const router = express.Router();
 
@@ -28,11 +30,21 @@ const DEFAULT_SECTIONS = {
 
 const getSectionsConfig = async (academicYear, semester) => {
   let doc = null;
-  if (academicYear && semester) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  const sem = String(semester || '').toUpperCase().trim();
+  const yr = String(academicYear || '').trim();
+
+  if (yr && sem) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  if (!doc && academicYear) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  // By default, Even Semester should display existing Odd Semester section names as initial values
+  if (!doc?.value && yr && sem === 'EVEN') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
+  }
+  if (!doc?.value && yr && sem === 'ODD') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
+  }
+  if (!doc && yr) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
   if (!doc) {
     doc = await Setting.findOne({ key: 'sections_config' }).lean();
@@ -255,29 +267,13 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const semStart = req.academicPeriod?.academicYear?.startDate;
-    const semEnd = req.academicPeriod?.academicYear?.endDate;
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
     const hiddenIds = ADMIN_EMPLOYEE_IDS;
     const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
-    if (semEnd) {
-      facultyMatch.$or = [
-        { joiningDate: { $lte: new Date(semEnd) } },
-        { joiningDate: null },
-        { joiningDate: { $exists: false } }
-      ];
-    }
-    if (semStart) {
-      const startCond = [
-        { relievingDate: { $gte: new Date(semStart) } },
-        { relievingDate: null },
-        { relievingDate: { $exists: false } }
-      ];
-      if (facultyMatch.$or) {
-        facultyMatch.$and = [ { $or: facultyMatch.$or }, { $or: startCond } ];
-        delete facultyMatch.$or;
-      } else {
-        facultyMatch.$or = startCond;
-      }
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      facultyMatch.$and = dateClauses;
     }
 
     const baseCourseFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
@@ -378,29 +374,13 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
     const FacultyCapacity = require('../models/FacultyCapacity');
     const capacityFilter = semesterId ? req.getPeriodFilter() : {};
 
-    const semStart = req.academicPeriod?.academicYear?.startDate;
-    const semEnd = req.academicPeriod?.academicYear?.endDate;
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
     const hiddenIds = ADMIN_EMPLOYEE_IDS;
     const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
-    if (semEnd) {
-      facultyMatch.$or = [
-        { joiningDate: { $lte: new Date(semEnd) } },
-        { joiningDate: null },
-        { joiningDate: { $exists: false } }
-      ];
-    }
-    if (semStart) {
-      const startCond = [
-        { relievingDate: { $gte: new Date(semStart) } },
-        { relievingDate: null },
-        { relievingDate: { $exists: false } }
-      ];
-      if (facultyMatch.$or) {
-        facultyMatch.$and = [ { $or: facultyMatch.$or }, { $or: startCond } ];
-        delete facultyMatch.$or;
-      } else {
-        facultyMatch.$or = startCond;
-      }
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      facultyMatch.$and = dateClauses;
     }
 
     const [facultyList, capacityList, workloadAgg] = await Promise.all([
@@ -474,7 +454,7 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
         overloaded.push(facultyStat);
       } else if (assignedHours < capacity) {
         pending.push(facultyStat);
-      } else if (capacity > 0 && assignedHours === capacity) {
+      } else {
         perfect.push(facultyStat);
       }
     });
@@ -483,12 +463,44 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
     pending.sort((a, b) => b.assignedHours - a.assignedHours);
     perfect.sort((a, b) => b.assignedHours - a.assignedHours);
 
+    // Designation-specific counts, workload, and capacity for the 5 TA designations
+    const taDesignationStats = TA_DESIGNATIONS.map((designationName) => {
+      const matchingFaculty = facultyList.filter(f => matchTaDesignation(f.designation) === designationName);
+      let totalCapacity = 0;
+      let totalAllocated = 0;
+      const list = matchingFaculty.map(f => {
+        const wData = workloadMap.get(f.empId) || { assignedHours: 0, courseCount: 0 };
+        const defaultCap = getDefaultCapacity(f.designation);
+        const cap = capacityMap.get(f.empId) || Number(f.capacity || defaultCap);
+        totalCapacity += cap;
+        totalAllocated += (wData.assignedHours || 0);
+        return {
+          empId: f.empId,
+          name: f.name,
+          designation: f.designation,
+          capacity: cap,
+          assignedHours: wData.assignedHours || 0,
+          remainingCapacity: cap - (wData.assignedHours || 0),
+          courseCount: wData.courseCount || 0,
+        };
+      });
+      return {
+        designation: designationName,
+        count: matchingFaculty.length,
+        totalCapacity,
+        totalAllocated,
+        remainingCapacity: totalCapacity - totalAllocated,
+        faculty: list,
+      };
+    });
+
     res.json({
       success: true,
       data: {
         overloaded,
         pending,
-        perfect
+        perfect,
+        taDesignationStats,
       }
     });
   } catch (err) {
@@ -504,9 +516,9 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
 router.get('/overloaded-faculty', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const semester = req.query.semester;
-    const semStart = req.academicPeriod?.academicYear?.startDate;
-    const semEnd = req.academicPeriod?.academicYear?.endDate;
-    const report = await getFacultyWorkloadReport(null, semester, semStart, semEnd);
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+    const report = await getFacultyWorkloadReport(null, semester, periodStart, periodEnd);
     const overloadedFaculty = report.filter(f => f.isOverAllocated);
 
     res.json({

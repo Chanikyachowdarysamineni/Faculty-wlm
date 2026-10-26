@@ -27,7 +27,8 @@ otpTokenSchema.statics.createOtp = async function (empId, ttlMinutes = 10) {
   // Invalidate any existing OTPs for this user
   await this.deleteMany({ empId });
 
-  const raw = String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+  // Cryptographically secure 6-digit OTP generation (CWE-338 fix)
+  const raw = String(crypto.randomInt(100000, 1000000));
   const otpHash  = this.hashOtp(raw);
   const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
   await this.create({ empId, otpHash, expiresAt });

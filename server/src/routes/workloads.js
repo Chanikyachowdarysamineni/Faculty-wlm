@@ -31,6 +31,8 @@ const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, 
 const { normalizeCourseTypeKey } = require('../utils/courseUtils');
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { recalculateCapacity } = require('../utils/capacityUtils');
+const { isTADesignation } = require('../utils/designationUtils');
+const { reconcileAllAllocationsToWorkload } = require('../utils/allocationWorkloadSync');
 const wsHandler = require('../websocket');
 
 const router = express.Router();
@@ -107,11 +109,21 @@ const DEFAULT_SECTIONS = {
 
 const getSectionsConfig = async (academicYear, semester) => {
   let doc = null;
-  if (academicYear && semester) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  const sem = String(semester || '').toUpperCase().trim();
+  const yr = String(academicYear || '').trim();
+
+  if (yr && sem) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  if (!doc && academicYear) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  // By default, Even Semester should display existing Odd Semester section names as initial values
+  if (!doc?.value && yr && sem === 'EVEN') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
+  }
+  if (!doc?.value && yr && sem === 'ODD') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
+  }
+  if (!doc && yr) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
   if (!doc) {
     doc = await Setting.findOne({ key: 'sections_config' }).lean();
@@ -159,6 +171,8 @@ const toClient = (doc) => ({
   manualP:     Number(doc.manualP || 0),
   isVisible:   doc.isVisible === true,
   allocationRow: doc.allocationRow ?? null,
+  semester:    doc.semester || '',
+  academicYear: doc.academicYear || '',
   assignedAt:  doc.createdAt?.toISOString() || null,
 });
 
@@ -351,6 +365,11 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
+    // Automatically reconcile allocations from CourseAllocation into Workload (throttled)
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester;
+    const yearName = req.academicPeriod?.academicYear?.name || req.query.academicYear;
+    await reconcileAllAllocationsToWorkload({ semester: semType, academicYear: yearName });
+
     const { page, limit, skip } = parsePagination(req.query);
     // L-1/M-4: Always exclude soft-deleted workloads
     const filter = { 
@@ -365,19 +384,30 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
     if (req.query.year) filter.year = normalizeYear(req.query.year);
     if (req.query.section) filter.section = String(req.query.section).trim();
     if (req.query.courseId) filter.courseId = Number(req.query.courseId);
-    Object.assign(filter, req.getPeriodFilter());
+
     // Faculty users can only see workloads where isVisible === true
     if (isFacultyOnly) {
       filter.isVisible = true;
     }
+
+    const periodFilter = req.getPeriodFilter();
+    const andClauses = [];
+    if (periodFilter && Object.keys(periodFilter).length > 0) {
+      andClauses.push(periodFilter);
+    }
     if (req.query.search) {
       const q = String(req.query.search).trim().replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
-      filter.$or = [
-        { empId:       { $regex: q, $options: 'i' } },
-        { empName:     { $regex: q, $options: 'i' } },
-        { subjectCode: { $regex: q, $options: 'i' } },
-        { subjectName: { $regex: q, $options: 'i' } },
-      ];
+      andClauses.push({
+        $or: [
+          { empId:       { $regex: q, $options: 'i' } },
+          { empName:     { $regex: q, $options: 'i' } },
+          { subjectCode: { $regex: q, $options: 'i' } },
+          { subjectName: { $regex: q, $options: 'i' } },
+        ]
+      });
+    }
+    if (andClauses.length > 0) {
+      filter.$and = andClauses;
     }
     
     // CRITICAL: Always use find() to get ALL matching records, never findOne()
@@ -385,7 +415,7 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
     const [total, docs] = await Promise.all([
       Workload.countDocuments(filter),
       Workload.find(filter)
-        .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow allocationStatus createdAt')
+        .select('faculty course sectionRef empId empName facultyRole designation mobile department courseId courseType subjectCode subjectName shortName program year section fixedL fixedT fixedP C manualL manualT manualP isVisible allocationRow allocationStatus semester academicYear createdAt')
         .sort({ year: 1, section: 1, subjectCode: 1, createdAt: -1, _id: 1 })
         .skip(skip)
         .limit(limit)
@@ -419,7 +449,11 @@ router.get('/export/csv', requireAuth, requireAdmin, requireAcademicPeriod, asyn
     const docs = await Workload.find(filter).sort({ empId: 1, createdAt: 1 }).lean();
     const headers = ['#','Emp ID','Name','Faculty Role','Designation','Subject Code','Subject Name','Short',
       'Year','Section','Fixed L','Fixed T','Fixed P','C','Manual L','Manual T','Manual P','Assigned At'];
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const esc = (v) => {
+      let s = String(v ?? '');
+      if (/^[=+@\-\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
     const csv = [
       headers.map(esc).join(','),
       ...docs.map((w, i) => [
@@ -1012,14 +1046,18 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         return sendNotFound(res, 'Employee not found.');
       }
       
-      if (member && req.academicPeriod?.academicYear) {
-        const yearStart = req.academicPeriod.academicYear.startDate;
-        const yearEnd = req.academicPeriod.academicYear.endDate;
-        if (yearEnd && member.joiningDate && new Date(member.joiningDate) > new Date(yearEnd)) {
-          return sendError(res, 'Faculty joined after this academic year ends.', 400);
+      if (member) {
+        const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+        const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+        if (periodEnd && member.joiningDate && new Date(member.joiningDate) > new Date(periodEnd)) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, 'Faculty joined after this semester ends and cannot be allocated.', 400);
         }
-        if (yearStart && member.relievingDate && new Date(member.relievingDate) < new Date(yearStart)) {
-          return sendError(res, 'Faculty was relieved before this academic year starts.', 400);
+        if (periodStart && member.relievingDate && new Date(member.relievingDate) < new Date(periodStart)) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, 'Faculty was relieved before this semester starts and cannot be allocated.', 400);
         }
       }
       const effectiveMember = member || {
@@ -1029,6 +1067,13 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         department: 'CSE',
         designation: designationOverride || 'Other',
       };
+
+      // TA designations can ONLY be allocated as TA (R2, R3, R4)
+      if (isTADesignation(effectiveMember.designation) && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendError(res, `${effectiveMember.designation} can only be allocated as TA (R2, R3, R4), not as ${normalizedFacultyRole}.`, 400);
+      }
 
       const course = courseId > 0 ? await Course.findOne({ courseId: Number(courseId) }).session(session).lean() : null;
       if (!course && !courseNameOverride) {
@@ -1339,6 +1384,13 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
     if (!effectiveMember.name) {
       logger.warn('Employee not found in workload update', { empId: nextEmpId, userId: req.user.id });
       return sendNotFound(res, 'Employee not found.');
+    }
+
+    // TA designations can ONLY be allocated as TA (R2, R3, R4)
+    if (isTADesignation(effectiveMember.designation) && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendError(res, `${effectiveMember.designation} can only be allocated as TA (R2, R3, R4), not as ${normalizedFacultyRole}.`, 400);
     }
 
     const course = await Course.findOne({ courseId: nextCourseId }).session(session).lean();

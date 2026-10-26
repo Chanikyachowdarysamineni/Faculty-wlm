@@ -24,6 +24,7 @@ const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: ad
 const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { isTADesignation } = require('../utils/designationUtils');
+const { syncAllocationDocToWorkload, removeWorkloadsForAllocation } = require('../utils/allocationWorkloadSync');
 
 const router = express.Router();
 
@@ -45,11 +46,21 @@ const normalizeYear = (year) => {
 
 const getSectionsConfig = async (academicYear, semester) => {
   let doc = null;
-  if (academicYear && semester) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}_${semester}` }).lean();
+  const sem = String(semester || '').toUpperCase().trim();
+  const yr = String(academicYear || '').trim();
+
+  if (yr && sem) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  if (!doc && academicYear) {
-    doc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
+  // By default, Even Semester should display existing Odd Semester section names as initial values
+  if (!doc?.value && yr && sem === 'EVEN') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
+  }
+  if (!doc?.value && yr && sem === 'ODD') {
+    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
+  }
+  if (!doc && yr) {
+    doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
   if (!doc) {
     doc = await Setting.findOne({ key: 'sections_config' }).lean();
@@ -255,7 +266,11 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, requireAcade
     Object.assign(filter, req.getPeriodFilter());
     const docs = await CourseAllocation.find(filter).sort({ courseId: 1, year: 1, section: 1 }).lean();
 
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const esc = (v) => {
+      let s = String(v ?? '');
+      if (/^[=+@\-\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
     const headers = ['Course ID','Subject Code','Subject Name','Year','Section',
       'Type','Slot','Emp ID','Faculty Name','Designation','Hours'];
     const rows = [];
@@ -345,6 +360,18 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
         err.status = 404;
         throw err;
       }
+      const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+      const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+      if (periodEnd && f.joiningDate && new Date(f.joiningDate) > new Date(periodEnd)) {
+        const err = new Error(`Faculty ${f.name} (${f.empId}) joined after this semester ends and cannot be allocated.`);
+        err.status = 400;
+        throw err;
+      }
+      if (periodStart && f.relievingDate && new Date(f.relievingDate) < new Date(periodStart)) {
+        const err = new Error(`Faculty ${f.name} (${f.empId}) was relieved before this semester starts and cannot be allocated.`);
+        err.status = 400;
+        throw err;
+      }
       return { empId: f.empId, empName: f.name, designation: f.designation, hours: slot.hours ?? 0 };
     };
 
@@ -368,28 +395,19 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
 
     const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section, semester: targetSemester }).lean();
 
-    // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types
+    // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types (L, T, P)
     const lectureHasTa = enrichedLSlots.some((slot) => slot?.empId && isTADesignation(slot?.designation));
     if (lectureHasTa) {
-      return sendError(res, 'Validation Error', 400)({
-        success: false,
-        message: 'R1 (Main Faculty slot) cannot be assigned to TA. R1 is reserved for Main Faculty only.',
-      });
+      return sendError(res, 'R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations. R1 is reserved for Main Faculty only.', 400);
     }
 
     // Validate R1 in T and P must not be TA designation
     if (enrichedTutorials[0]?.empId && isTADesignation(enrichedTutorials[0]?.designation)) {
-      return sendError(res, 'Validation Error', 400)({
-        success: false,
-        message: 'Tutorial R1 must be Main Faculty, not TA.',
-      });
+      return sendError(res, 'Tutorial R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations.', 400);
     }
 
     if (enrichedPracticals[0]?.empId && isTADesignation(enrichedPracticals[0]?.designation)) {
-      return sendError(res, 'Validation Error', 400)({
-        success: false,
-        message: 'Practical R1 must be Main Faculty, not TA.',
-      });
+      return sendError(res, 'Practical R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations.', 400);
     }
 
     // ENHANCEMENT 1: AUTO-FILL - If L.R1 is set, auto-populate T.R1 and P.R1
@@ -496,6 +514,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
       { upsert: true, new: true, session }
     ).lean();
 
+    // Bi-directionally sync allocation to Workload collection (R1 Main Faculty and R2, R3, R4 TAs)
+    await syncAllocationDocToWorkload(doc, session);
+
     // Trigger capacity recalculation for all affected faculty (both existing & new)
     const affectedEmpIds = new Set([
       ...enrichedLSlots.map(s => s?.empId),
@@ -532,6 +553,16 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!doc || (req.query.semester && doc.semester !== req.query.semester && !(req.query.semester === 'ODD' && !doc.semester))) {
       return sendNotFound(res, 'Allocation not found.');
     }
+
+    // Sync removal to Workload collection
+    await removeWorkloadsForAllocation({
+      courseId: doc.courseId,
+      year: doc.year,
+      section: doc.section,
+      semester: doc.semester,
+      academicYear: doc.academicYear,
+    });
+
     await CourseAllocation.findByIdAndDelete(req.params.id);
 
     // Recalculate capacity for all affected faculty

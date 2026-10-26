@@ -40,20 +40,37 @@ const CoursesPage = ({ isAdmin = true }) => {
     }
   }, [contextCourses]);
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech').map(y => y.value);
-  const distinctCourseYears = Array.from(new Set((courseList || []).map(c => c.year).filter(y => y && y !== 'M.Tech')));
-  const allKnownYears = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears]));
+  // Standard base years per program
+  const BASE_BTECH_YEARS = ['I', 'II', 'III', 'IV'];
+  const BASE_MTECH_YEARS = ['I', 'II'];
 
-  const YEAR_OPTIONS = allKnownYears.length > 0
-    ? [...allKnownYears.filter(y => y !== 'M.Tech').map(y => ({ value: y, label: `${y} Year` })), { value: '__other__', label: 'Others' }]
-    : [{ value: '__other__', label: 'Others' }];
+  const activeYearsRaw = (systemConfig?.years || [])
+    .filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other')
+    .map(y => y.value);
+  const distinctCourseYears = Array.from(new Set((courseList || []).map(c => c.year).filter(y => y && y !== 'M.Tech' && y !== 'Other')));
+  const allKnownYears = Array.from(new Set([...BASE_BTECH_YEARS, ...activeYearsRaw, ...distinctCourseYears]));
 
+  // Dynamically derive year options based on program
+  const getYearOptionsForProgram = (prog) => {
+    const isMTech = String(prog || '').trim() === 'M.Tech';
+    const base = isMTech ? BASE_MTECH_YEARS : BASE_BTECH_YEARS;
+    const additional = isMTech
+      ? []
+      : allKnownYears.filter(y => !base.includes(y) && y !== 'M.Tech' && y !== 'Other');
+    return [
+      ...base.map(y => ({ value: y, label: `${y} Year` })),
+      ...additional.map(y => ({ value: y, label: `${y} Year` })),
+      { value: '__other__', label: 'Others' }
+    ];
+  };
+
+  const DEFAULT_COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
   const activeCourseTypes = (systemConfig?.courseTypes || [])
     .filter(c => c && c.isActive !== false)
     .map(c => typeof c === 'string' ? c : (c.value || c.name || c.label))
     .filter(Boolean);
   const distinctCourseTypes = Array.from(new Set((courseList || []).map(c => c.courseType).filter(Boolean)));
-  const COURSE_TYPES = Array.from(new Set([...activeCourseTypes, ...distinctCourseTypes])).filter(Boolean);
+  const COURSE_TYPES = Array.from(new Set([...(activeCourseTypes.length > 0 ? activeCourseTypes : DEFAULT_COURSE_TYPES), ...distinctCourseTypes])).filter(Boolean);
 
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
   const distinctCoursePrograms = Array.from(new Set((courseList || []).map(c => c.program).filter(Boolean)));
@@ -231,6 +248,8 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   // ── Course CRUD handlers ──
   const openAddCourse = () => {
+    // Use first available type, or empty string if types haven't loaded yet.
+    // The modal dropdown will show all loaded types; user must select one.
     const defaultType = COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '';
     setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear, courseType: defaultType });
     setEditCourse(null);
@@ -251,8 +270,9 @@ const CoursesPage = ({ isAdmin = true }) => {
     if (!f.subjectCode.trim() || !f.subjectName.trim() || !f.shortName.trim()) {
       showToast('Please fill in Subject Code, Name and Short Name.'); return;
     }
-    if (!f.courseType) {
-      showToast('Please select Course Type.'); return;
+    if (!f.courseType || f.courseType.trim() === '') {
+      showToast('Please select a Course Type. If none are available, click "Manage Course Types" to add one first.');
+      return;
     }
     if (f.courseType === '__other__' && !f.courseTypeOther.trim()) {
       showToast('Please type Course Type.'); return;
@@ -275,6 +295,8 @@ const CoursesPage = ({ isAdmin = true }) => {
       T: +f.T,
       P: +f.P,
       C: +f.C,
+      academicYear: selectedAcademicYear || '',
+      semester: selectedSemester || 'ODD',
       allowedSections: f.allowedSectionsText
         ? f.allowedSectionsText.split(',').map(s => s.trim()).filter(Boolean)
         : []
@@ -510,7 +532,15 @@ const CoursesPage = ({ isAdmin = true }) => {
                 <div className="cp-fg">
                   <label>Program</label>
                   <select value={courseForm.program}
-                    onChange={e => setCourseForm(p => ({ ...p, program: e.target.value, year: p.year }))}>
+                    onChange={e => {
+                      const newProg = e.target.value;
+                      const validYears = newProg === 'M.Tech' ? BASE_MTECH_YEARS : BASE_BTECH_YEARS;
+                      setCourseForm(p => ({
+                        ...p,
+                        program: newProg,
+                        year: validYears.includes(p.year) ? p.year : validYears[0]
+                      }));
+                    }}>
                     {PROGRAMS.map(pr => <option key={pr}>{pr}</option>)}
                     <option value="__other__">Other…</option>
                   </select>
@@ -526,8 +556,14 @@ const CoursesPage = ({ isAdmin = true }) => {
                 {/* Course Type */}
                 <div className="cp-fg">
                   <label>Course Type</label>
-                  <select value={courseForm.courseType || COURSE_TYPES[0] || ''}
+                  <select value={courseForm.courseType}
                     onChange={e => setCourseForm(p => ({ ...p, courseType: e.target.value }))}>
+                    {COURSE_TYPES.length === 0 && (
+                      <option value="">— No types configured (use Manage Course Types) —</option>
+                    )}
+                    {COURSE_TYPES.length > 0 && !courseForm.courseType && (
+                      <option value="">— Select course type —</option>
+                    )}
                     {Array.from(new Set([
                       ...COURSE_TYPES,
                       ...(courseForm.courseType && courseForm.courseType !== '__other__' ? [courseForm.courseType] : [])
@@ -548,13 +584,9 @@ const CoursesPage = ({ isAdmin = true }) => {
                   <label>Year</label>
                   <select value={courseForm.year}
                     onChange={e => setCourseForm(p => ({ ...p, year: e.target.value }))}>
-                    {YEAR_OPTIONS.filter(opt => {
-                      if (opt.value === '__other__') return true;
-                      if (courseForm.program === 'M.Tech') {
-                        return opt.value === 'I' || opt.value === 'II';
-                      }
-                      return opt.value !== 'M.Tech';
-                    }).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    {getYearOptionsForProgram(courseForm.program).map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                   {courseForm.year === '__other__' && (
                     <input

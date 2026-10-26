@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import FacultyPage from './FacultyPage';
@@ -23,6 +23,33 @@ import { logAuthDiagnostics } from './utils/authDiagnostics';
 import { useSharedData } from './DataContext';
 import wsClient from './utils/WebSocketClient';
 import './Dashboard.css';
+
+const TA_DESIGNATIONS_ORDER = [
+  'Teaching Associate',
+  'Teaching Assistant',
+  'Teaching Assistant-I',
+  'Teaching Assistant-II',
+  'Teaching Instructor'
+];
+
+const TA_COLORS = {
+  'Teaching Associate': { color: '#4f46e5', bg: '#eef2ff' },
+  'Teaching Assistant': { color: '#0891b2', bg: '#ecfeff' },
+  'Teaching Assistant-I': { color: '#2563eb', bg: '#eff6ff' },
+  'Teaching Assistant-II': { color: '#7c3aed', bg: '#f5f3ff' },
+  'Teaching Instructor': { color: '#059669', bg: '#ecfdf5' },
+};
+
+const matchTaDesignation = (raw) => {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (s === 'teaching associate' || s === 'teaching assoc' || s === 't assoc') return 'Teaching Associate';
+  if (s === 'teaching assistant ii' || s === 'teaching assistant 2' || s === 'ta ii' || s === 'ta 2' || s === 'ta-ii' || s === 'teaching assistant-ii') return 'Teaching Assistant-II';
+  if (s === 'teaching assistant i' || s === 'teaching assistant 1' || s === 'ta i' || s === 'ta 1' || s === 'ta-i' || s === 'teaching assistant-i') return 'Teaching Assistant-I';
+  if (s === 'teaching assistant' || s === 'ta') return 'Teaching Assistant';
+  if (s === 'teaching instructor' || s === 'instructor' || s === 'ti') return 'Teaching Instructor';
+  return null;
+};
 
 const NAV_ITEMS = [
   {
@@ -196,14 +223,32 @@ const toPct = (value) => Math.max(0, Math.min(100, value));
 
 const AUTO_REFRESH_MS = 60000;
 
-const Dashboard = ({ user, onLogout }) => {
+const Dashboard = ({ user = {}, onLogout, initialTab }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const publicUrl = process.env.PUBLIC_URL || '';
-  const [activeNav, setActiveNav] = useState('dashboard');
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const urlTab = searchParams.get('tab');
+
+  const resolvedInitialTab = initialTab || urlTab || 'dashboard';
+  const [activeNav, setActiveNav] = useState(resolvedInitialTab);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashMode, setDashMode] = useState(null);
 
   const [expandedCard, setExpandedCard] = useState(null);
+
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    const effective = initialTab || tabFromUrl;
+    if (effective && effective !== activeNav) {
+      setActiveNav(effective);
+    }
+  }, [initialTab, searchParams]);
+
+  const handleNavClick = (tabKey) => {
+    setActiveNav(tabKey);
+    navigate(initialTab ? `/${tabKey}` : `/?tab=${tabKey}`, { replace: false });
+  };
 
   // Helper to format session time
   const formatSessionTime = (seconds) => {
@@ -224,7 +269,7 @@ const Dashboard = ({ user, onLogout }) => {
 
 
 
-  const isAdmin = dashMode ? (dashMode === 'admin') : (user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true);
+  const isAdmin = dashMode ? (dashMode === 'admin') : (user?.role === 'admin' || user?.role === 'Admin' || user?.canAccessAdmin === true);
 
   const token = () => {
     const t = localStorage.getItem('wlm_token');
@@ -262,6 +307,7 @@ const Dashboard = ({ user, onLogout }) => {
     overloaded: [],
     pending: [],
     perfect: [],
+    taDesignationStats: [],
   });
   const [dashboardCards, setDashboardCards] = useState({
     loading: false,
@@ -326,7 +372,10 @@ const Dashboard = ({ user, onLogout }) => {
     }
 
     try {
-      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${user.id}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
+      const facultyEmpId = user?.id || user?.empId;
+      if (!facultyEmpId) return;
+      const yearIdParam = selectedAcademicYearId ? `&academicYearId=${selectedAcademicYearId}` : '';
+      const result = await fetchJsonWithRetry(`${API}/deva/submissions/by-faculty/${facultyEmpId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}${yearIdParam}`, {
         headers,
         silentMode: true // Suppress logs for expected 404 (no submission yet)
       });
@@ -341,17 +390,30 @@ const Dashboard = ({ user, onLogout }) => {
       }
 
       if (result.success && data.success) {
-        const list = Array.isArray(data.data) ? data.data : (data.data ? [data.data] : []);
-        setSubmissions(list);
+        const submissionObj = data.data;
+        // Only add to list if it's a real submitted record (id is not null)
+        // The server returns {id: null, prefs: [], ...} as a template when no submission exists
+        if (submissionObj && submissionObj.id !== null && submissionObj.id !== undefined) {
+          setSubmissions([submissionObj]);
+        } else {
+          setSubmissions([]); // No real submission yet
+        }
         setSubmissionsSyncError('');
         setSubmissionsLastSyncedAt(new Date());
       } else {
-        setSubmissionsSyncError(result.message || data.message || 'Failed to refresh submissions.');
+        // Don't show error for 'no submission' state — it's expected for new faculty
+        if (result.status !== 404) {
+          setSubmissionsSyncError(result.message || data.message || 'Failed to refresh submissions.');
+        } else {
+          setSubmissions([]);
+          setSubmissionsSyncError('');
+          setSubmissionsLastSyncedAt(new Date());
+        }
       }
     } catch {
       setSubmissionsSyncError('Failed to refresh submissions.');
     }
-  }, [user, isAdmin, selectedSemester, selectedAcademicYear]);
+  }, [user, isAdmin, selectedSemester, selectedAcademicYear, selectedAcademicYearId]);
 
   // Fetch submissions + toggle settings from the server
   useEffect(() => {
@@ -376,7 +438,9 @@ const Dashboard = ({ user, onLogout }) => {
 
     const refreshAssignedCourses = async () => {
       if (isAdmin) return;
-      const result = await fetchAllPages('/deva/workloads', { empId: user.id, semester: selectedSemester, academicYear: selectedAcademicYear }, { headers });
+      const facultyEmpId = user?.id || user?.empId;
+      if (!facultyEmpId) return;
+      const result = await fetchAllPages('/deva/workloads', { empId: facultyEmpId, semester: selectedSemester, academicYear: selectedAcademicYear }, { headers });
       if (result.success) {
         const uniqueSubjects = new Set();
         (result.data || []).forEach(w => uniqueSubjects.add(w.subjectCode));
@@ -520,6 +584,7 @@ const Dashboard = ({ user, onLogout }) => {
             overloaded: json.data.overloaded || [],
             pending: json.data.pending || [],
             perfect: json.data.perfect || [],
+            taDesignationStats: json.data.taDesignationStats || [],
           });
         }
       } catch (err) {
@@ -652,10 +717,17 @@ const Dashboard = ({ user, onLogout }) => {
     const { mode, section, input } = sectionModal;
     closeSectionModal();
 
+    const qs = new URLSearchParams();
+    if (selectedAcademicYear) qs.append('academicYear', selectedAcademicYear);
+    if (selectedSemester) qs.append('semester', selectedSemester);
+    const qsString = qs.toString() ? `?${qs.toString()}` : '';
+
     if (mode === 'add') {
       if (!input.trim()) return;
-      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ section: input.trim() }),
+      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}${qsString}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ section: input.trim(), academicYear: selectedAcademicYear, semester: selectedSemester }),
       });
       const data = await res.json();
       if (!res.ok || !data?.success) {
@@ -666,8 +738,10 @@ const Dashboard = ({ user, onLogout }) => {
       setSharedSectionsConfig(data?.data || null);
     } else if (mode === 'rename') {
       if (!input.trim() || input.trim() === section) return;
-      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}/${encodeURIComponent(section)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ newSection: input.trim() }),
+      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}/${encodeURIComponent(section)}${qsString}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ newSection: input.trim(), academicYear: selectedAcademicYear, semester: selectedSemester }),
       });
       const data = await res.json();
       if (!res.ok || !data?.success) {
@@ -677,8 +751,9 @@ const Dashboard = ({ user, onLogout }) => {
       setSectionsConfig(data?.data || null);
       setSharedSectionsConfig(data?.data || null);
     } else if (mode === 'delete') {
-      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}/${encodeURIComponent(section)}`, {
-        method: 'DELETE', headers: authHeaders(),
+      const res = await fetch(`${API}/deva/settings/sections/${encodeURIComponent(sectionYear)}/${encodeURIComponent(section)}${qsString}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
       });
       const data = await res.json();
       if (data.success) {
@@ -694,7 +769,7 @@ const Dashboard = ({ user, onLogout }) => {
     return true;
   });
 
-  const mySubmission = submissions.find(s => s.empId === user.id);
+  const mySubmission = (submissions || []).find(s => s.empId === (user?.id || user?.empId));
 
   const liveFaculty = isAdmin ? dashboardData.faculty : masterData.faculty;
   const liveCourses = isAdmin ? dashboardData.courses : masterData.courses;
@@ -867,10 +942,14 @@ const Dashboard = ({ user, onLogout }) => {
         },
       ];
 
+      const totalFacultyCount = (dashboardComputed.overloadedFaculty?.length || 0) +
+        (dashboardComputed.availableFaculty?.length || 0) +
+        (dashboardComputed.fullyLoadedFaculty?.length || 0) || (liveFaculty ? liveFaculty.length : 0);
+
       const analyticsStats = [
         {
           label: 'Total Faculty',
-          value: liveFaculty ? liveFaculty.length : 0,
+          value: totalFacultyCount,
           icon: (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -882,7 +961,19 @@ const Dashboard = ({ user, onLogout }) => {
           ),
           color: '#6b74e8', bg: '#eef0fd',
         },
-
+        {
+          label: 'Overloaded Faculty',
+          value: dashboardComputed.overloadedFaculty ? dashboardComputed.overloadedFaculty.length : 0,
+          icon: (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          ),
+          color: '#dc2626', bg: '#fee2e2',
+        },
         {
           label: 'Pending Faculty',
           value: dashboardComputed.availableFaculty ? dashboardComputed.availableFaculty.length : 0,
@@ -965,15 +1056,40 @@ const Dashboard = ({ user, onLogout }) => {
       },
     ];
     return { summaryStats, analyticsStats: [] };
-  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, liveFaculty?.length, analytics, myAssignedCourseCount]);
+  }, [isAdmin, mySubmission, submissions.length, dashboardComputed.overloadedFaculty?.length, dashboardComputed.availableFaculty?.length, dashboardComputed.fullyLoadedFaculty?.length, liveFaculty?.length, analytics, myAssignedCourseCount]);
 
   const { summaryStats, analyticsStats } = getMyStats;
+
+  const taDesignationMetrics = useMemo(() => {
+    return TA_DESIGNATIONS_ORDER.map(desig => {
+      const matched = (liveFaculty || []).filter(f => matchTaDesignation(f.designation) === desig);
+      const count = matched.length;
+      let totalCapacity = 0;
+      let totalAllocated = 0;
+      matched.forEach(f => {
+        const cap = f.capacity !== undefined ? Number(f.capacity) : 12;
+        const alloc = Number(f.allocated) || 0;
+        totalCapacity += cap;
+        totalAllocated += alloc;
+      });
+      const remainingCapacity = totalCapacity - totalAllocated;
+
+      return {
+        designation: desig,
+        count,
+        totalCapacity,
+        totalAllocated,
+        remainingCapacity,
+        faculty: matched
+      };
+    });
+  }, [liveFaculty]);
 
   // ─────────────────────────────────────────────────────────
   // Role picker — shown only for canAccessAdmin users before they choose
   // ─────────────────────────────────────────────────────────
-  if (user.canAccessAdmin && dashMode === null) {
-    const initials = user.name ? user.name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : 'U';
+  if (user?.canAccessAdmin && dashMode === null) {
+    const initials = user?.name ? user.name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : 'U';
     return (
       <div className="rp-overlay">
         {/* Animated background blobs */}
@@ -994,7 +1110,7 @@ const Dashboard = ({ user, onLogout }) => {
           {/* User greeting */}
           <div className="rp-greeting">
             <div className="rp-avatar">{initials}</div>
-            <h1 className="rp-welcome">Welcome back, <span className="rp-name-hl">{user.name || 'User'}</span></h1>
+            <h1 className="rp-welcome">Welcome back, <span className="rp-name-hl">{user?.name || 'User'}</span></h1>
             <p className="rp-sub">You have dual-access privileges. Select your dashboard to continue.</p>
           </div>
 
@@ -1046,7 +1162,7 @@ const Dashboard = ({ user, onLogout }) => {
 
           {/* Footer */}
           <div className="rp-footer">
-            <span className="rp-footer-id">ID: {user.id}</span>
+            <span className="rp-footer-id">ID: {user?.id || user?.empId || ''}</span>
             <button className="rp-logout-btn" onClick={onLogout}>
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1088,11 +1204,11 @@ const Dashboard = ({ user, onLogout }) => {
               {isAdmin
                 ? <span className="dash-role-badge dash-role-admin">
                   Admin
-                  {user.canAccessAdmin && (
+                  {user?.canAccessAdmin && (
                     <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.75 }}>(dual-access)</span>
                   )}
                 </span>
-                : <span className="dash-role-badge dash-role-faculty">Faculty &middot; {user.id}</span>
+                : <span className="dash-role-badge dash-role-faculty">Faculty &middot; {user?.id || user?.empId || ''}</span>
               }
             </span>
           </div>
@@ -1128,7 +1244,7 @@ const Dashboard = ({ user, onLogout }) => {
             })}
           </div>
 
-          {user.canAccessAdmin && (
+          {user?.canAccessAdmin && (
             <button
               className="dash-switch-btn"
               title="Switch between Admin and Faculty dashboard"
@@ -1157,7 +1273,7 @@ const Dashboard = ({ user, onLogout }) => {
               <button
                 key={item.key}
                 className={`sidebar-nav-btn ${item.colorClass}${activeNav === item.key ? ' active' : ''}`}
-                onClick={() => setActiveNav(item.key)}
+                onClick={() => handleNavClick(item.key)}
                 title={!sidebarOpen ? item.label : undefined}
               >
                 <span className="sidebar-nav-icon">{item.icon}</span>
@@ -1171,7 +1287,7 @@ const Dashboard = ({ user, onLogout }) => {
           <div className="sidebar-bottom">
             <button
               className={`sidebar-nav-btn nav-color-rainbow${activeNav === 'profile' ? ' active' : ''}`}
-              onClick={() => setActiveNav('profile')}
+              onClick={() => handleNavClick('profile')}
               title={!sidebarOpen ? 'Profile' : undefined}
             >
               <span className="sidebar-nav-icon">
@@ -1237,7 +1353,7 @@ const Dashboard = ({ user, onLogout }) => {
                             /* ── Dashboard overview ── */
                             <main className="dash-main">
                               <h1 className="dash-heading">
-                                {isAdmin ? 'Admin Overview' : `Welcome, ${user.name || 'Faculty'}`}
+                                {isAdmin ? 'Admin Overview' : `Welcome, ${user?.name || 'Faculty'}`}
                               </h1>
 
                               <div className="dash-sync-row">
@@ -1346,6 +1462,76 @@ const Dashboard = ({ user, onLogout }) => {
                                       </div>
                                     ))}
                                   </div>
+
+                                  {/* ── TA & Instructor Designations Section ── */}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', marginTop: '32px' }}>
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', margin: 0 }}>
+                                      TA & Instructor Designations (Workload & Capacity)
+                                    </h2>
+                                    <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px', fontWeight: 500 }}>
+                                      Permitted for R2, R3, R4 Allocations Only
+                                    </span>
+                                  </div>
+                                  <div className="dash-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+                                    {taDesignationMetrics.map((item) => {
+                                      const styling = TA_COLORS[item.designation] || { color: '#4f46e5', bg: '#eef2ff' };
+                                      const isSelected = expandedCard === item.designation;
+                                      return (
+                                        <div
+                                          className="dash-card"
+                                          key={item.designation}
+                                          style={{
+                                            cursor: 'pointer',
+                                            flexDirection: 'column',
+                                            alignItems: 'stretch',
+                                            padding: '18px 20px',
+                                            border: isSelected ? `2px solid ${styling.color}` : '1px solid #e2e8f0',
+                                            background: isSelected ? styling.bg : '#ffffff',
+                                            transition: 'all 0.2s ease',
+                                          }}
+                                          onClick={() => setExpandedCard(isSelected ? null : item.designation)}
+                                          title={`Click to view faculty in ${item.designation}`}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                              <div className="dash-card-icon" style={{ background: styling.bg, color: styling.color, width: '40px', height: '40px', borderRadius: '10px' }}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                                  <circle cx="9" cy="7" r="4" />
+                                                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                                </svg>
+                                              </div>
+                                              <div>
+                                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{item.designation}</div>
+                                                <div style={{ fontSize: '11px', color: '#64748b' }}>Designation</div>
+                                              </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                              <span style={{ fontSize: '24px', fontWeight: 800, color: styling.color }}>{item.count}</span>
+                                            </div>
+                                          </div>
+
+                                          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
+                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
+                                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalAllocated}h</div>
+                                            </div>
+                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
+                                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalCapacity}h</div>
+                                            </div>
+                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Remaining</div>
+                                              <div style={{ fontSize: '13px', fontWeight: 700, color: item.remainingCapacity < 0 ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
+                                                {item.remainingCapacity}h
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </>
                               )}
 
@@ -1396,6 +1582,27 @@ const Dashboard = ({ user, onLogout }) => {
                                 if (expandedCard === 'Pending Faculty') activeList = { title: 'Pending Faculty', data: dashboardComputed.availableFaculty || [], color: '#ca8a04' };
                                 if (expandedCard === 'Perfectly Assigned') activeList = { title: 'Perfectly Assigned Faculty', data: dashboardComputed.fullyLoadedFaculty || [], color: '#16a34a' };
 
+                                const taMatched = taDesignationMetrics.find(m => m.designation === expandedCard);
+                                if (taMatched) {
+                                  activeList = {
+                                    title: `${taMatched.designation} (${taMatched.count} Faculty • ${taMatched.totalAllocated}h Assigned / ${taMatched.totalCapacity}h Capacity)`,
+                                    data: taMatched.faculty.map(f => {
+                                      const cap = f.capacity !== undefined ? Number(f.capacity) : 12;
+                                      const alloc = Number(f.allocated) || 0;
+                                      return {
+                                        empId: f.empId,
+                                        name: f.name,
+                                        designation: f.designation,
+                                        capacity: cap,
+                                        assignedHours: alloc,
+                                        pendingLoad: cap - alloc,
+                                        overloadStatus: alloc > cap ? 'Overload' : 'Normal'
+                                      };
+                                    }),
+                                    color: TA_COLORS[taMatched.designation]?.color || '#4f46e5'
+                                  };
+                                }
+
                                 if (!activeList) return null;
 
                                 return (
@@ -1415,6 +1622,7 @@ const Dashboard = ({ user, onLogout }) => {
                                                 <>
                                                   <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Emp ID</th>
                                                   <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Name</th>
+                                                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>Designation</th>
                                                   <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Capacity</th>
                                                   <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Assigned</th>
                                                   <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>Remaining</th>
@@ -1440,6 +1648,7 @@ const Dashboard = ({ user, onLogout }) => {
                                                   <>
                                                     <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: 500 }}>{item.empId}</td>
                                                     <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>{item.name}</td>
+                                                    <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', color: '#4b5563' }}>{item.designation || '—'}</td>
                                                     <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600 }}>{item.capacity}h</td>
                                                     <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: activeList.color }}>{item.assignedHours}h</td>
                                                     <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: 600, color: item.overloadStatus === 'Overload' ? '#dc2626' : item.pendingLoad > 0 ? '#ca8a04' : '#16a34a' }}>
@@ -1488,9 +1697,9 @@ const Dashboard = ({ user, onLogout }) => {
                                     <div className="dash-alert-wrap">
                                       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: '0.9rem', color: '#666', padding: '12px 16px' }}>
                                         <span><strong>Employee ID:</strong></span>
-                                        <span>{user.id}</span>
+                                        <span>{user?.id || user?.empId || '—'}</span>
                                         <span><strong>Name:</strong></span>
-                                        <span>{user.name}</span>
+                                        <span>{user?.name || '—'}</span>
                                         <span><strong>Role:</strong></span>
                                         <span>Faculty</span>
                                         <span><strong>Form Status:</strong></span>

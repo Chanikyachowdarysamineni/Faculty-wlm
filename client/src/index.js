@@ -16,8 +16,12 @@ window.fetch = async (...args) => {
           ? new URL(resource, window.location.origin) 
           : new URL(resource);
           
+        const yearName = localStorage.getItem('selectedAcademicYear');
         if (!urlObj.searchParams.has('academicYearId')) {
           urlObj.searchParams.append('academicYearId', yearId);
+        }
+        if (yearName && !urlObj.searchParams.has('academicYear')) {
+          urlObj.searchParams.append('academicYear', yearName);
         }
         if (!urlObj.searchParams.has('semester')) {
           urlObj.searchParams.append('semester', sem);
@@ -29,7 +33,9 @@ window.fetch = async (...args) => {
       } catch (e) {
         if (!resource.includes('academicYearId=')) {
           const sep = resource.includes('?') ? '&' : '?';
-          resource += `${sep}academicYearId=${yearId}&semester=${sem}`;
+          const yearName = localStorage.getItem('selectedAcademicYear');
+          const yearParam = yearName ? `&academicYear=${encodeURIComponent(yearName)}` : '';
+          resource += `${sep}academicYearId=${yearId}${yearParam}&semester=${sem}`;
         }
       }
     }

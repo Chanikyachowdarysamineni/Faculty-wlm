@@ -33,10 +33,10 @@ const resolveApiBase = () => {
 	// PRIORITY 2: Check environment variable
 	const envApi = normalizeApiBase(process.env.REACT_APP_API_URL);
 	if (envApi) {
-		if (envApi.includes('localhost') && !isLocalhost()) {
+		const isLoopback = envApi.includes('localhost') || envApi.includes('127.0.0.1');
+		if (isLoopback && !isLocalhost()) {
 			console.warn(`[API Config] Warning: .env specifies ${envApi} but accessing remotely. Falling back to dynamic resolution.`);
 		} else {
-
 			return envApi;
 		}
 	}

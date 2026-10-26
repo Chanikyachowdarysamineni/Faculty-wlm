@@ -7,6 +7,8 @@ const jwt = require('jsonwebtoken');
 
 let mongoServer;
 
+jest.setTimeout(120000);
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const uri = mongoServer.getUri();
@@ -24,11 +26,13 @@ beforeAll(async () => {
     password: 'Password123!',
     role: 'admin'
   });
-});
+}, 120000);
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 });
 
 describe('Critical Paths: Auth & JWT Security', () => {

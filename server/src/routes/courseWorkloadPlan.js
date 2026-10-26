@@ -77,9 +77,10 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
     // Auto-sync: Ensure all active courses for this academic period have a CourseOffering
     if (academicYearName && semType) {
       try {
+        const escapedSem = String(semType).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const activeCourses = await Course.find({
           academicYear: academicYearName,
-          semester: new RegExp(`^${semType}$`, 'i'),
+          semester: new RegExp(`^${escapedSem}$`, 'i'),
           isDeleted: { $ne: true }
         }).lean();
 

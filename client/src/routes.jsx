@@ -38,11 +38,11 @@ const LoginPageWrapper = () => {
   );
 };
 
-const DashboardWrapper = () => {
+const DashboardWrapper = ({ initialTab }) => {
   const { currentUser, onLogout, remainingSeconds } = useAuth();
   return (
     <Suspense fallback={<LoadingIndicator message="Loading dashboard..." />}>
-      <Dashboard user={currentUser} onLogout={onLogout} remainingSeconds={remainingSeconds} />
+      <Dashboard user={currentUser} onLogout={onLogout} remainingSeconds={remainingSeconds} initialTab={initialTab} />
     </Suspense>
   );
 };
@@ -84,7 +84,21 @@ export const publicRoutes = [
 
 export const protectedRoutes = [
   { path: '/', element: <ProtectedRoute><DashboardWrapper /></ProtectedRoute>, title: 'Dashboard' },
-  { path: '/dashboard', element: <ProtectedRoute><DashboardWrapper /></ProtectedRoute>, title: 'Dashboard' },
+  { path: '/dashboard', element: <ProtectedRoute><DashboardWrapper initialTab="dashboard" /></ProtectedRoute>, title: 'Dashboard' },
+  { path: '/faculty', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="faculty" /></ProtectedRoute>, title: 'Manage Faculty' },
+  { path: '/courses', element: <ProtectedRoute><DashboardWrapper initialTab="courses" /></ProtectedRoute>, title: 'Manage Courses' },
+  { path: '/workload', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="workload" /></ProtectedRoute>, title: 'Workload Management' },
+  { path: '/capacity', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="workload" /></ProtectedRoute>, title: 'Capacity Management' },
+  { path: '/allocation', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="allocation" /></ProtectedRoute>, title: 'Course Allocation' },
+  { path: '/sections', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="sections" /></ProtectedRoute>, title: 'Section Management' },
+  { path: '/academic-years', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="academic-years" /></ProtectedRoute>, title: 'Academic Years' },
+  { path: '/settings', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="academic-years" /></ProtectedRoute>, title: 'Settings' },
+  { path: '/designations', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="designations" /></ProtectedRoute>, title: 'Manage Designations' },
+  { path: '/admin-management', element: <ProtectedRoute roles={['admin']}><DashboardWrapper initialTab="admin-management" /></ProtectedRoute>, title: 'Admin Management' },
+  { path: '/facultyform', element: <ProtectedRoute><DashboardWrapper initialTab="facultyform" /></ProtectedRoute>, title: 'Faculty Form' },
+  { path: '/mysubmissions', element: <ProtectedRoute><DashboardWrapper initialTab="mysubmissions" /></ProtectedRoute>, title: 'My Submissions' },
+  { path: '/myworkload', element: <ProtectedRoute><DashboardWrapper initialTab="myworkload" /></ProtectedRoute>, title: 'My Workload' },
+  { path: '/profile', element: <ProtectedRoute><DashboardWrapper initialTab="profile" /></ProtectedRoute>, title: 'Profile' },
   { path: '/admin-dashboard', element: <ProtectedRoute roles={['admin']}><AdminDashboardWrapper /></ProtectedRoute>, title: 'Admin Dashboard' },
   { path: '/course-wise-workload', element: <ProtectedRoute><CourseWiseWorkloadPageWrapper /></ProtectedRoute>, title: 'Course Wise Workload Details' },
   { path: '/course-loads', element: <ProtectedRoute><CourseLoadsPageWrapper /></ProtectedRoute>, title: 'Course Loads' }

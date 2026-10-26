@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 import './MySubmissionsPage.css';
 
 const MySubmissionsPage = ({
@@ -11,7 +12,8 @@ const MySubmissionsPage = ({
   onUpdateSubmission,
   onNavigateToForm,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig } = useSharedData();
+  const { selectedSemester, selectedAcademicYear } = useAcademicPeriod();
   
   const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
   const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
@@ -31,10 +33,15 @@ const MySubmissionsPage = ({
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);
-  const mySubmission = submissions.find(s => s.empId === currentUser.id);
+  const currentEmpId = currentUser?.id || currentUser?.empId;
+  const mySubmission = (submissions || []).find(s =>
+    s.empId === currentEmpId &&
+    (!selectedSemester || !s.semester || s.semester === selectedSemester) &&
+    (!selectedAcademicYear || !s.academicYear || s.academicYear === selectedAcademicYear)
+  );
   const myFaculty = useMemo(
-    () => facultyList.find(f => f.empId === currentUser.id),
-    [facultyList, currentUser.id]
+    () => (facultyList || []).find(f => f.empId === currentEmpId),
+    [facultyList, currentEmpId]
   );
 
   // ── inline edit state ──────────────────────────
@@ -101,7 +108,7 @@ const MySubmissionsPage = ({
     setSaving(true);
     setApiError('');
     try {
-      const res  = await fetch(`${API}/deva/submissions/by-faculty/${currentUser.id}`, {
+      const res  = await fetch(`${API}/deva/submissions/by-faculty/${currentEmpId}`, {
         method: 'PUT', headers: authHeaders(),
         body: JSON.stringify({ prefs: filled.map(Number), semester: selectedSemester, academicYear: selectedAcademicYear }),
       });
@@ -196,12 +203,12 @@ const MySubmissionsPage = ({
           {/* ── Faculty profile card ── */}
           <div className="ms-profile-card">
             <div className="ms-profile-avatar">
-              {(myFaculty?.name || currentUser.name || 'F').trim()[0].toUpperCase()}
+              {(myFaculty?.name || currentUser?.name || 'F').trim()[0].toUpperCase()}
             </div>
             <div className="ms-profile-info">
-              <div className="ms-profile-name">{myFaculty?.name || currentUser.name || '—'}</div>
+              <div className="ms-profile-name">{myFaculty?.name || currentUser?.name || '—'}</div>
               <div className="ms-profile-meta">
-                <span className="ms-meta-chip ms-meta-id">ID: {currentUser.id}</span>
+                <span className="ms-meta-chip ms-meta-id">ID: {currentEmpId || '—'}</span>
                 <span className="ms-meta-chip ms-meta-desig">{myFaculty?.designation || '—'}</span>
                 {myFaculty?.mobile && (
                   <span className="ms-meta-chip ms-meta-mobile">📱 {myFaculty.mobile}</span>

@@ -189,10 +189,18 @@ router.post(
         return sendSuccess(res, null, 200, { message: 'If the Employee ID is registered, an OTP has been sent to the associated email.' });
       }
 
-      // Check if faculty is relieved
+      // Check if faculty is relieved or deleted
       const facultyData = await Faculty.findOne({ empId }).lean();
-      if (facultyData?.relievingDate && new Date(facultyData.relievingDate) < new Date()) {
-        return sendError(res, 'Account deactivated (Faculty Relieved).', 403);
+      if (user.isDeleted || facultyData?.isDeleted) {
+        return sendError(res, 'Account deactivated.', 403);
+      }
+      const relDateVal = user.relievingDate || facultyData?.relievingDate;
+      if (relDateVal) {
+        const relievingDate = new Date(relDateVal);
+        relievingDate.setHours(23, 59, 59, 999);
+        if (new Date() > relievingDate) {
+          return sendError(res, 'Account deactivated (Faculty Relieved).', 403);
+        }
       }
 
       // H-7: Check account lock
@@ -258,6 +266,19 @@ router.post(
       const user = await User.findOne({ empId });
       if (!user) return sendError(res, 'Employee ID not found.', 401);
 
+      const facultyData = await Faculty.findOne({ empId }).lean();
+      if (user.isDeleted || facultyData?.isDeleted) {
+        return sendError(res, 'Account deactivated.', 403);
+      }
+      const relDateVal = user.relievingDate || facultyData?.relievingDate;
+      if (relDateVal) {
+        const relievingDate = new Date(relDateVal);
+        relievingDate.setHours(23, 59, 59, 999);
+        if (new Date() > relievingDate) {
+          return sendError(res, 'Account deactivated (Faculty Relieved).', 403);
+        }
+      }
+
       // Check lock
       if (user.lockUntil && user.lockUntil > new Date()) {
         const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
@@ -275,9 +296,14 @@ router.post(
         return sendError(res, 'OTP has expired or was not found. Please request a new OTP.', 400);
       }
 
-      // Verify OTP
+      // Verify OTP using constant-time comparison (prevents timing attacks)
       const expectedHash = OtpToken.hashOtp(rawOtp);
-      if (otpDoc.otpHash !== expectedHash) {
+      const expectedBuffer = Buffer.from(expectedHash, 'utf8');
+      const storedBuffer = Buffer.from(otpDoc.otpHash || '', 'utf8');
+      const isMatch = expectedBuffer.length === storedBuffer.length &&
+        crypto.timingSafeEqual(expectedBuffer, storedBuffer);
+
+      if (!isMatch) {
         // Increment attempt counter; lock after 5 bad guesses
         const newAttempts = (otpDoc.attempts || 0) + 1;
         if (newAttempts >= 5) {

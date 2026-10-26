@@ -194,7 +194,8 @@ const validateFacultyCreate = [
     .notEmpty()
     .withMessage('Designation is required')
     .custom(async (value) => {
-      const valid = await Designation.findOne({ name: new RegExp(`^${value}$`, 'i'), isEnabled: true });
+      const escaped = String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const valid = await Designation.findOne({ name: new RegExp(`^${escaped}$`, 'i'), isEnabled: true });
       if (!valid) throw new Error('Invalid designation.');
       return true;
     }),
@@ -207,6 +208,24 @@ const validateFacultyCreate = [
     .withMessage('Department must be 2-50 characters')
     .matches(/^[A-Za-z0-9\s\-&.,'()]+$/)
     .withMessage('Department must contain only letters, numbers, spaces, and common separators'),
+
+  body('joiningDate')
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage('Joining date must be a valid ISO8601 date'),
+
+  body('relievingDate')
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage('Relieving date must be a valid ISO8601 date')
+    .custom((value, { req }) => {
+      if (value && req.body.joiningDate) {
+        if (new Date(value) < new Date(req.body.joiningDate)) {
+          throw new Error('Relieving date cannot be earlier than joining date.');
+        }
+      }
+      return true;
+    }),
 
   handleValidationErrors,
 ];
@@ -258,6 +277,24 @@ const validateFacultyUpdate = [
     .if((value) => value !== undefined && value !== null && value !== '')
     .isInt({ min: 1 })
     .withMessage('Serial number must be a positive integer'),
+
+  body('joiningDate')
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage('Joining date must be a valid ISO8601 date'),
+
+  body('relievingDate')
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage('Relieving date must be a valid ISO8601 date')
+    .custom((value, { req }) => {
+      if (value && req.body.joiningDate) {
+        if (new Date(value) < new Date(req.body.joiningDate)) {
+          throw new Error('Relieving date cannot be earlier than joining date.');
+        }
+      }
+      return true;
+    }),
 
   handleValidationErrors,
 ];

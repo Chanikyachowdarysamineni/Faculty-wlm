@@ -243,6 +243,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     const updates = { ...req.body };
+    delete updates._id;
+    delete updates.courseId;
+    delete updates.__v;
     
     if (updates.subjectCode !== undefined) updates.subjectCode = String(updates.subjectCode || '').trim().toUpperCase();
     if (updates.courseType !== undefined) updates.courseType = String(updates.courseType || '').trim();
@@ -291,6 +294,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (updates.courseType !== undefined && updates.courseType !== current.courseType) cascadeUpdates.courseType = updates.courseType;
     if (updates.shortName !== undefined && updates.shortName !== current.shortName) cascadeUpdates.shortName = updates.shortName;
     if (updates.program !== undefined && updates.program !== current.program) cascadeUpdates.program = updates.program;
+    if (updates.year !== undefined && updates.year !== current.year) cascadeUpdates.year = updates.year;
     if (updates.C !== undefined && updates.C !== current.C) cascadeUpdates.C = updates.C;
     if (updates.L !== undefined && updates.L !== current.L) cascadeUpdates.fixedL = updates.L;
     if (updates.T !== undefined && updates.T !== current.T) cascadeUpdates.fixedT = updates.T;
@@ -304,6 +308,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       if (cascadeUpdates.subjectName !== undefined) allocUpdates.subjectName = cascadeUpdates.subjectName;
       if (cascadeUpdates.shortName !== undefined) allocUpdates.shortName = cascadeUpdates.shortName;
       if (cascadeUpdates.program !== undefined) allocUpdates.program = cascadeUpdates.program;
+      if (cascadeUpdates.year !== undefined) allocUpdates.year = cascadeUpdates.year;
       if (cascadeUpdates.C !== undefined) allocUpdates.C = cascadeUpdates.C;
       if (cascadeUpdates.fixedL !== undefined) allocUpdates.fixedL = cascadeUpdates.fixedL;
       if (cascadeUpdates.fixedT !== undefined) allocUpdates.fixedT = cascadeUpdates.fixedT;

@@ -31,9 +31,9 @@ class WebSocketClient {
     }
 
     let url = `${backendUrl}/ws`;
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('wlm_token') || localStorage.getItem('token');
     if (token) {
-      url += `?token=${token}`;
+      url += `?token=${encodeURIComponent(token)}`;
     }
     return url;
   }

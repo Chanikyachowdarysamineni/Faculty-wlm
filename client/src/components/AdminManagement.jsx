@@ -34,7 +34,8 @@ const AdminManagement = ({ user }) => {
   };
 
   const handleToggleAdmin = async (empId, currentStatus) => {
-    if (empId === user.id) {
+    const currentEmpId = user?.id || user?.empId;
+    if (currentEmpId && empId === currentEmpId) {
       return showToast('You cannot change your own admin status.');
     }
     
@@ -125,7 +126,7 @@ const AdminManagement = ({ user }) => {
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     {u.isEnvAdmin ? (
                       <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>System Configured</span>
-                    ) : u.empId === user.id ? (
+                    ) : (user && u.empId === (user.id || user.empId)) ? (
                       <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Current User</span>
                     ) : (
                       <button

@@ -94,26 +94,41 @@ const authHeader = () => authJsonHeaders();
 const WorkloadPage = ({ submissions }) => {
   const { selectedAcademicYearId, selectedSemester, selectedAcademicYear } = useAcademicPeriod();
 
-  const { faculty: contextFaculty, courses: contextCourses, systemConfig, setFaculty } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, systemConfig, setSystemConfig, setFaculty } = useSharedData();
 
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech').map(y => y.value);
-  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(y => y && y !== 'M.Tech')));
-  const allKnownYears = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears]));
+  const BASE_BTECH_YEARS = ['I', 'II', 'III', 'IV'];
+  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'M.Tech' && y.value !== 'Other').map(y => y.value);
+  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(y => y && y !== 'M.Tech' && y !== 'Other')));
+  const allKnownYears = Array.from(new Set([...BASE_BTECH_YEARS, ...activeYearsRaw, ...distinctCourseYears]));
   const YEARS = allKnownYears.filter(y => y !== 'Other' && y !== 'M.Tech');
   const YEAR_OPTIONS = allKnownYears.length > 0
     ? [...allKnownYears.filter(y => y !== 'M.Tech').map(y => ({ value: y, label: `${y} Year` })), { value: '__other__', label: 'Others' }]
     : [{ value: '__other__', label: 'Others' }];
 
+  const DEFAULT_COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
   const activeCourseTypes = (systemConfig?.courseTypes || [])
-    .filter(c => c && c.isActive !== false)
+    .filter(c => c && (typeof c === 'string' || c.isActive !== false))
     .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
     .filter(Boolean);
   const distinctCourseTypes = Array.from(new Set((contextCourses || []).map(c => c.courseType).filter(Boolean)));
-  const COURSE_TYPES = Array.from(new Set([...activeCourseTypes, ...distinctCourseTypes])).filter(Boolean);
-  const FACULTY_ROLES = (systemConfig?.facultyRoles || []).filter(r => r.isActive).map(r => r.value);
-  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const COURSE_TYPES = Array.from(new Set([...(activeCourseTypes.length > 0 ? activeCourseTypes : DEFAULT_COURSE_TYPES), ...distinctCourseTypes])).filter(Boolean);
+
+  const DEFAULT_FACULTY_ROLES = ['Main Faculty', 'Supporting Faculty', 'TA'];
+  const configuredFacultyRoles = (systemConfig?.facultyRoles || [])
+    .filter(r => r && (typeof r === 'string' || r.isActive !== false))
+    .map(r => (typeof r === 'string' ? r : (r.value || r.name || r.label)))
+    .filter(Boolean);
+  const FACULTY_ROLES = Array.from(new Set([
+    ...(configuredFacultyRoles.length > 0 ? configuredFacultyRoles : DEFAULT_FACULTY_ROLES)
+  ])).filter(Boolean);
+
+  const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
+  const configPrograms = (systemConfig?.programs || [])
+    .filter(c => c && (typeof c === 'string' || c.isActive !== false))
+    .map(c => typeof c === 'string' ? c : (c.value || c.name || c.label))
+    .filter(Boolean);
   const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
-  const PROGRAMS = Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+  const PROGRAMS = Array.from(new Set([...(configPrograms.length > 0 ? configPrograms : DEFAULT_PROGRAMS), ...distinctCoursePrograms])).filter(Boolean);
 
   const [workloads, setWorkloads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -246,6 +261,20 @@ const WorkloadPage = ({ submissions }) => {
   }, [form.empId, courseList]);
 
   useEffect(() => { loadSectionsConfig(); }, [loadSectionsConfig]);
+
+  // Refresh system config if facultyRoles not yet populated
+  useEffect(() => {
+    if (!systemConfig || !systemConfig.facultyRoles || systemConfig.facultyRoles.length === 0) {
+      fetch(`${API}/deva/config`, { headers: authHeader() })
+        .then(r => r.json())
+        .then(json => {
+          if (json.success && json.data && setSystemConfig) {
+            setSystemConfig(prev => ({ ...(prev || {}), ...json.data }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [systemConfig, setSystemConfig]);
 
   // ── Fetch workloads from server on mount ──────────────────
   const fetchWorkloads = useCallback(async ({ withLoader = true } = {}) => {
@@ -389,11 +418,26 @@ const WorkloadPage = ({ submissions }) => {
     }
   };
 
+  // Helper: check if a designation belongs to TA category
+  const isTADesignationStr = (desig) => {
+    const d = String(desig || '').toLowerCase().replace(/\s+/g, ' ');
+    return d === 'ta' ||
+      d.includes('teaching assistant') ||
+      d.includes('teaching associate') ||
+      d.includes('teaching instructor');
+  };
+
   // Filter faculty by search input (ID or name)
-  const filteredFaculty = facultyList.filter(f =>
-    f.empId.toLowerCase().includes(facultySearchInput.toLowerCase()) ||
-    f.name.toLowerCase().includes(facultySearchInput.toLowerCase())
-  );
+  const filteredFaculty = facultyList.filter(f => {
+    const match = f.empId.toLowerCase().includes(facultySearchInput.toLowerCase()) ||
+      f.name.toLowerCase().includes(facultySearchInput.toLowerCase());
+    if (!match) return false;
+    // When role is Main Faculty or Supporting Faculty, exclude TA designations from dropdown
+    if (form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty') {
+      if (isTADesignationStr(f.designation)) return false;
+    }
+    return true;
+  });
 
   // ── Fetch faculty workload hours summary ──
   const fetchFacultyWorkloadHours = async (empId) => {
@@ -510,6 +554,13 @@ const WorkloadPage = ({ submissions }) => {
     if (!form.year) e.year = 'Select year.';
     if (!form.section) e.section = 'Select section.';
 
+    // TA Designation restrictions: Teaching Associate, Teaching Assistant, Teaching Assistant-I, Teaching Assistant-II, Teaching Instructor cannot be Main Faculty or Supporting Faculty
+    const fac = facultyList.find(f => f.empId === form.empId);
+    const desig = fac ? fac.designation : (form.empId === '__other__' ? form.designationOther : form.designation);
+    if (isTADesignationStr(desig) && (form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty')) {
+      e.facultyRole = `${desig || 'TA-designated faculty'} can only participate in course allocations as TA (R2, R3, R4), not as ${form.facultyRole}.`;
+    }
+
     return e;
   };
 
@@ -607,6 +658,16 @@ const WorkloadPage = ({ submissions }) => {
 
       const selectedRole = form.facultyRole || 'Main Faculty';
 
+      const facObj = facultyList.find(f => f.empId === resolvedEmpId);
+      const facDesig = facObj ? facObj.designation : (form.designationOther || form.designation);
+      if (isTADesignationStr(facDesig) && (selectedRole === 'Main Faculty' || selectedRole === 'Supporting Faculty')) {
+        const errorMsg = `${facDesig || 'TA-designated faculty'} can only participate in course allocations as TA (R2, R3, R4), not as ${selectedRole}.`;
+        setErrors((prev) => ({ ...prev, facultyRole: errorMsg }));
+        showToast({ type: 'error', message: errorMsg });
+        setSaving(false);
+        return;
+      }
+
       if (selectedRole === 'Main Faculty' && courseTypeKey === 'DE' && isRestrictedDeYear(resolvedYear)) {
         const conflict = workloads.find((w) => (
           String(w.year) === String(resolvedYear)
@@ -627,19 +688,21 @@ const WorkloadPage = ({ submissions }) => {
       }
 
       if (selectedRole === 'TA') {
+        const targetRow = { R2: 1, R3: 2, R4: 3 }[form.taAllocationRow] || 1;
         const duplicateTa = workloads.find((w) => (
           String(w.facultyRole || 'Main Faculty') === 'TA'
           && Number(w.courseId || 0) === Number(resolvedCrsId || 0)
           && String(w.year) === String(resolvedYear)
           && String(w.section) === String(resolvedSection)
+          && Number(w.allocationRow || 1) === Number(targetRow)
           && (!editTarget || String(w.id) !== String(editTarget.id))
         ));
         if (duplicateTa) {
           setErrors((prev) => ({
             ...prev,
-            facultyRole: 'Only one TA can be assigned for the same subject and section.'
+            facultyRole: `A TA is already assigned to ${form.taAllocationRow || 'this slot'} for this subject and section.`
           }));
-          showToast({ type: 'error', message: 'TA is already assigned for this subject and section. Only one TA is allowed per section.' });
+          showToast({ type: 'error', message: `A TA is already assigned to ${form.taAllocationRow || 'this slot'} for this subject and section.` });
           setSaving(false);
           return;
         }
@@ -960,7 +1023,7 @@ const WorkloadPage = ({ submissions }) => {
   const exportColumns = [
     { header: 'Emp ID', key: 'empId' },
     { header: 'Faculty Name', key: 'empName' },
-    { header: 'Faculty Role', key: 'facultyRole' },
+    { header: 'Faculty Role', value: (r) => (r.facultyRole || 'Main Faculty') + (r.allocationRow ? ` (R${Number(r.allocationRow) + 1})` : '') },
     { header: 'Department', key: 'department' },
     { header: 'Designation', key: 'designation' },
     { header: 'Program', key: 'program' },
@@ -1340,8 +1403,12 @@ const WorkloadPage = ({ submissions }) => {
                 value={form.facultyRole || 'Main Faculty'}
                 onChange={e => setForm(p => ({ ...p, facultyRole: e.target.value }))}
               >
-                {FACULTY_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                {Array.from(new Set([
+                  ...FACULTY_ROLES,
+                  ...(form.facultyRole ? [form.facultyRole] : ['Main Faculty'])
+                ])).map((role) => <option key={role} value={role}>{role}</option>)}
               </select>
+              <FieldError error={errors.facultyRole} id="err-facultyRole" />
             </div>
             {form.facultyRole === 'TA' && (
               <div className="wl-fg">
@@ -1930,7 +1997,7 @@ const WorkloadPage = ({ submissions }) => {
                                     <td className="wl-td-sl">{i + 1}</td>
                                     <td className="wl-td-code">{w.subjectCode}</td>
                                     <td className="wl-td-sname">{w.subjectName}</td>
-                                    <td>{w.facultyRole || 'Main Faculty'}{w.facultyRole === 'TA' && w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
+                                    <td>{w.facultyRole || 'Main Faculty'}{w.allocationRow ? ` (R${Number(w.allocationRow) + 1})` : ''}</td>
                                     <td><span className="wl-badge-prog">{w.program || (PROGRAMS[0] || 'B.Tech')}</span></td>
                                     <td><span className="wl-year-pill">{w.year}</span></td>
                                     <td><span className="wl-sec-pill">{w.section}</span></td>

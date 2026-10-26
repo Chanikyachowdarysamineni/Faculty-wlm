@@ -12,6 +12,8 @@ const AcademicYearSemester = require('../models/AcademicYearSemester');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendSuccess, sendError } = require('../utils/response');
 
+const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const router = express.Router();
 
 /**
@@ -141,7 +143,7 @@ router.get('/', requireAuth, async (req, res) => {
       academicYearId: ayDoc._id,
       $or: [
         { semesterType: semTypeNorm },
-        { semesterType: new RegExp(`^${semesterType}$`, 'i') }
+        { semesterType: new RegExp(`^${escapeRegex(semesterType)}$`, 'i') }
       ]
     }).lean();
     if (!semDoc) return sendSuccess(res, []);
@@ -150,6 +152,8 @@ router.get('/', requireAuth, async (req, res) => {
     const Setting = require('../models/Setting');
     let configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semTypeNorm}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semesterType}` }).lean();
+    if (!configDoc && semTypeNorm === 'EVEN') configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_ODD` }).lean();
+    if (!configDoc && semTypeNorm === 'ODD') configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_EVEN` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: 'sections_config' }).lean();
     
@@ -166,7 +170,7 @@ router.get('/', requireAuth, async (req, res) => {
     try {
       const activeCourses = await Course.find({
         academicYear,
-        semester: new RegExp(`^${semesterType}$`, 'i'),
+        semester: new RegExp(`^${escapeRegex(semesterType)}$`, 'i'),
         isDeleted: { $ne: true }
       }).lean();
 
@@ -214,7 +218,7 @@ router.get('/', requireAuth, async (req, res) => {
     ];
 
     if (program) {
-      pipeline.push({ $match: { 'course.program': new RegExp(`^${program}$`, 'i') } });
+      pipeline.push({ $match: { 'course.program': new RegExp(`^${escapeRegex(program)}$`, 'i') } });
     }
     if (year) {
       const romanToNum = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
@@ -227,12 +231,13 @@ router.get('/', requireAuth, async (req, res) => {
       pipeline.push({ $match: { 'course.year': { $in: yrVariants } } });
     }
     if (search) {
+      const escapedSearch = escapeRegex(search);
       pipeline.push({
         $match: {
           $or: [
-            { 'course.subjectCode': new RegExp(search, 'i') },
-            { 'course.subjectName': new RegExp(search, 'i') },
-            { 'course.shortName': new RegExp(search, 'i') }
+            { 'course.subjectCode': new RegExp(escapedSearch, 'i') },
+            { 'course.subjectName': new RegExp(escapedSearch, 'i') },
+            { 'course.shortName': new RegExp(escapedSearch, 'i') }
           ]
         }
       });

@@ -35,7 +35,8 @@ const MyWorkloadPage = ({ currentUser }) => {
     if (withLoader) setLoading(true);
     setApiError('');
     try {
-      const params = currentUser?.id ? { empId: String(currentUser.id), semester: selectedSemester, academicYear: selectedAcademicYear } : { semester: selectedSemester, academicYear: selectedAcademicYear };
+      const currentEmpId = currentUser?.id || currentUser?.empId;
+      const params = currentEmpId ? { empId: String(currentEmpId), semester: selectedSemester, academicYear: selectedAcademicYear } : { semester: selectedSemester, academicYear: selectedAcademicYear };
       const data = await fetchAllPages('/deva/workloads', params, { headers: authHeader() });
       if (!data.success) {
         const msg = data.message || 'Failed to load workloads.';
@@ -54,7 +55,7 @@ const MyWorkloadPage = ({ currentUser }) => {
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [currentUser?.id, selectedSemester, selectedAcademicYear]);
+  }, [currentUser?.id, currentUser?.empId, selectedSemester, selectedAcademicYear]);
 
   useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads]);
 
@@ -79,7 +80,8 @@ const MyWorkloadPage = ({ currentUser }) => {
   const totalP = workloads.reduce((s, w) => s + (w.manualP ?? w.fixedP ?? 0), 0);
   const totalHrs = totalL + totalT + totalP;
   const designation = workloads[0]?.designation || '';
-  const facultyData = faculty.find(f => String(f.empId) === String(currentUser?.id));
+  const currentEmpId = currentUser?.id || currentUser?.empId;
+  const facultyData = (faculty || []).find(f => String(f.empId) === String(currentEmpId));
   const defaultCap = getDefaultCapacity(facultyData?.designation || designation);
   const target = Number(facultyData?.capacity) || defaultCap;
   const pct = target > 0 ? Math.min(100, Math.round((totalHrs / target) * 100)) : 0;

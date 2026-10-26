@@ -77,3 +77,17 @@ export const deleteSectionConfig = async (year, section, academicYear, semester)
   return res.json();
 };
 
+export const saveFullSectionsConfig = async (sections, academicYear, semester) => {
+  const qs = new URLSearchParams();
+  if (academicYear) qs.append('academicYear', academicYear);
+  if (semester) qs.append('semester', semester);
+  const qsString = qs.toString() ? `?${qs.toString()}` : '';
+
+  const res = await fetch(`${API}/deva/settings/sections${qsString}`, {
+    method: 'PUT',
+    headers: authHeader(),
+    body: JSON.stringify({ sections, academicYear, semester }),
+  });
+  return res.json();
+};
+

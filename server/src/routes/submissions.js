@@ -17,6 +17,8 @@ const Submission  = require('../models/Submission');
 const Course      = require('../models/Course');
 const Faculty     = require('../models/Faculty');
 const Setting     = require('../models/Setting');
+const AcademicYear = require('../models/AcademicYear');
+const AcademicYearSemester = require('../models/AcademicYearSemester');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 const requireAcademicPeriod = require('../middleware/academicPeriod');
@@ -34,6 +36,8 @@ const toClient = (doc) => ({
   designation: String(doc.designation || '').trim() || 'N/A',
   mobile:      String(doc.mobile || '').trim() || 'N/A',
   prefs:       Array.isArray(doc.prefs) ? doc.prefs : [],
+  semester:    String(doc.semester || 'ODD'),
+  academicYear: String(doc.academicYear || ''),
   submittedAt: doc.createdAt?.toISOString() || null,
   updatedAt:   doc.updatedAt?.toISOString() || null,
 });
@@ -49,6 +53,46 @@ const validatePrefsAgainstCourses = async (prefs = []) => {
     return { ok: false, message: `Invalid course preference ID(s): ${missing.join(', ')}` };
   }
   return { ok: true };
+};
+
+const resolveFormAndEditStatus = async (academicYear, semester) => {
+  let isFormOpen = null;
+  let isEditEnabled = null;
+
+  const sem = String(semester || '').toUpperCase().trim();
+  let yearName = String(academicYear || '').trim();
+
+  if (!yearName) {
+    const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+    yearName = currentYear ? currentYear.name : null;
+  }
+
+  if (yearName && sem) {
+    const yearDoc = await AcademicYear.findOne({ name: yearName }).lean();
+    if (yearDoc) {
+      const semDoc = await AcademicYearSemester.findOne({
+        academicYearId: yearDoc._id,
+        semesterType: sem
+      }).lean();
+      if (semDoc) {
+        if (typeof semDoc.formEnabled === 'boolean') isFormOpen = semDoc.formEnabled;
+        if (typeof semDoc.editEnabled === 'boolean') isEditEnabled = semDoc.editEnabled;
+      }
+    }
+  }
+
+  // Fallback to legacy Setting collection
+  if (isFormOpen === null) {
+    const formSetting = await Setting.findOne({ key: 'form_enabled' }).lean();
+    isFormOpen = formSetting ? formSetting.value === 'true' : true;
+  }
+
+  if (isEditEnabled === null) {
+    const editSetting = await Setting.findOne({ key: 'edit_enabled' }).lean();
+    isEditEnabled = editSetting ? editSetting.value === 'true' : true;
+  }
+
+  return { isFormOpen, isEditEnabled };
 };
 
 // GET /api/submissions  (admin)
@@ -82,31 +126,47 @@ router.get('/', requireAuth, requireAdmin, requireAcademicPeriod, validatePagina
 // GET /api/submissions/by-faculty/:empId  (self or admin)
 router.get('/by-faculty/:empId', requireAuth, requireSelfOrAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    const doc = await Submission.findOne({ 
-      empId: req.params.empId, 
-      ...req.getPeriodFilter() 
-    }).lean();
+    // Build a filter that includes semester and academicYear so each
+    // (academicYear, semester) pair is treated as an independent context.
+    const periodFilter = req.getPeriodFilter();
+    const empId = String(req.params.empId || '').trim();
+
+    // Also support plain query params as fallback (for non-period-aware callers)
+    const semester = req.query.semester || req.body?.semester;
+    const academicYear = req.query.academicYear || req.body?.academicYear;
+
+    let filter = { empId };
+    if (Object.keys(periodFilter).length > 0) {
+      Object.assign(filter, periodFilter);
+    } else if (semester || academicYear) {
+      if (semester) filter.semester = semester;
+      if (academicYear) filter.academicYear = academicYear;
+    }
+    // If no filter at all, fall back to most recent submission for this faculty
+
+    const doc = await Submission.findOne(filter).sort({ createdAt: -1 }).lean();
     
     if (!doc) {
       // If no submission exists, return an empty submission template
-      // This allows faculty to view and create preferences even if they haven't submitted yet
-      const member = await Faculty.findOne({ empId: String(req.params.empId || '').trim() }).lean();
+      const member = await Faculty.findOne({ empId }).lean();
       
-      logger.info('Empty submission returned (not yet submitted)', { empId: req.params.empId, userId: req.user.id });
+      logger.info('Empty submission returned (not yet submitted)', { empId, userId: req.user.id, filter });
       
       return sendSuccess(res, {
         id: null,
-        empId: req.params.empId,
+        empId,
         empName: member?.name ?? 'Unknown',
         designation: member?.designation ?? 'N/A',
         mobile: member?.mobile ?? 'N/A',
         prefs: [],
+        semester: semester || '',
+        academicYear: academicYear || '',
         submittedAt: null,
         updatedAt: null,
       }, 200);
     }
     
-    logger.info('Submission retrieved', { empId: req.params.empId, userId: req.user.id });
+    logger.info('Submission retrieved', { empId, userId: req.user.id, semester: doc.semester, academicYear: doc.academicYear });
     sendSuccess(res, toClient(doc), 200);
   } catch (err) { 
     logger.error('Error retrieving submission', { error: err.message, empId: req.params.empId, userId: req.user.id });
@@ -124,19 +184,18 @@ router.put(
   ],
   async (req, res, next) => {
     try {
-      // M-3: Check that form is open (in addition to edit being enabled)
-      const formSetting = await Setting.findOne({ key: 'form_enabled' }).lean();
-      const isFormOpen = formSetting ? formSetting.value === 'true' : true;
-      if (!isFormOpen && req.user.role !== 'admin') {
-        logger.warn('Submission update blocked: form closed', { empId: req.params.empId, userId: req.user.id });
+      const semester = req.query.semester || req.body?.semester;
+      const academicYear = String(req.query.academicYear || req.body?.academicYear || '').trim();
+      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+
+      const { isFormOpen, isEditEnabled } = await resolveFormAndEditStatus(academicYear, semester);
+      if (!isFormOpen && !isAdmin) {
+        logger.warn('Submission update blocked: form closed', { empId: req.params.empId, userId: req.user.id, semester, academicYear });
         return sendForbidden(res, 'The submission form is currently closed.');
       }
 
-      // Check that editing is allowed
-      const editSetting = await Setting.findOne({ key: 'edit_enabled' }).lean();
-      const isEditEnabled = editSetting ? editSetting.value === 'true' : true;
-      if (!isEditEnabled && req.user.role !== 'admin') {
-        logger.warn('Edit disabled attempt', { empId: req.params.empId, userId: req.user.id });
+      if (!isEditEnabled && !isAdmin) {
+        logger.warn('Edit disabled attempt', { empId: req.params.empId, userId: req.user.id, semester, academicYear });
         return sendForbidden(res, 'Editing submissions is currently disabled by the administrator.');
       }
 
@@ -159,9 +218,10 @@ router.put(
         return sendError(res, prefCheck.message, 400);
       }
 
-      const semester = req.query.semester ;
+      const updateFilter = { empId: req.params.empId, semester };
+      if (academicYear) updateFilter.academicYear = academicYear;
       const doc = await Submission.findOneAndUpdate(
-        { empId: req.params.empId, semester },
+        updateFilter,
         { prefs },
         { new: true }
       ).lean();
@@ -187,24 +247,31 @@ router.post(
   validateSubmissionCreate,
   async (req, res, next) => {
     try {
+      const { empId, prefs } = req.body;
+      const semester = req.body.semester || 'EVEN';
+      let academicYear = String(req.body.academicYear || '').trim();
+
+      if (!academicYear) {
+        const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+        academicYear = currentYear ? currentYear.name : '2026-2027';
+      }
+
+      const isSelf = String(req.user.id) === String(empId || '').trim();
+      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+
       // Check form open (defaults to open if setting not yet seeded)
-      const setting = await Setting.findOne({ key: 'form_enabled' }).lean();
-      const isFormOpen = setting ? setting.value === 'true' : true;
-      if (!isFormOpen) {
-        logger.warn('Submission form not open', { empId: req.body.empId, userId: req.user.id });
+      const { isFormOpen } = await resolveFormAndEditStatus(academicYear, semester);
+      if (!isFormOpen && !isAdmin) {
+        logger.warn('Submission form not open', { empId, userId: req.user.id, semester, academicYear });
         return sendForbidden(res, 'The submission form is currently closed.');
       }
 
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        logger.warn('Submission creation validation failed', { empId: req.body.empId, userId: req.user.id, errors: errors.array() });
+        logger.warn('Submission creation validation failed', { empId, userId: req.user.id, errors: errors.array() });
         return sendValidationError(res, errors.array());
       }
 
-      const { empId, prefs } = req.body;
-
-      const isSelf = String(req.user.id) === String(empId || '').trim();
-      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
       if (!isSelf && !isAdmin) {
         logger.warn('Unauthorized attempt to submit preferences for another faculty', { empId, userId: req.user.id });
         return sendForbidden(res, 'You can only submit preferences for your own account.');
@@ -227,11 +294,20 @@ router.post(
       const designation = member?.designation ?? (req.body.designation || '');
       const mobile      = member?.mobile      ?? (req.body.mobile      || '');
 
-      const semester = req.body.semester ;
-      const existing = await Submission.findOne({ empId: empId.trim(), semester });
+      if (member) {
+        const { getSemesterPeriodDates, isFacultyEligibleForPeriod } = require('../utils/academicPeriodUtils');
+        const periodDates = getSemesterPeriodDates({ academicYear, semesterType: semester });
+        if (!isFacultyEligibleForPeriod(member, periodDates.periodStart, periodDates.periodEnd)) {
+          return sendError(res, 'You are not eligible to submit preferences for this semester based on your employment dates.', 400);
+        }
+      }
+
+      // Duplicate check MUST include academicYear + semester so ODD does not block EVEN
+      // and prior academic year submissions do not block the current year
+      const existing = await Submission.findOne({ empId: empId.trim(), semester, academicYear });
       if (existing) {
-        logger.warn('Duplicate submission attempt', { empId, semester, userId: req.user.id });
-        return sendConflict(res, 'This faculty already submitted preferences for this semester.');
+        logger.warn('Duplicate submission attempt', { empId, semester, academicYear, userId: req.user.id });
+        return sendConflict(res, 'You have already submitted preferences for this semester and academic year.');
       }
 
       const doc = await Submission.create({
@@ -241,6 +317,7 @@ router.post(
         mobile,
         prefs,
         semester,
+        academicYear,
       });
 
       logger.info('Submission created', { empId: doc.empId, prefCount: prefs.length, userId: req.user.id });

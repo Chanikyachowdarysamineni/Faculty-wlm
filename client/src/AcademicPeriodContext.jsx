@@ -73,11 +73,15 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
         setSelectedAcademicYear(currentYear.name);
         setSelectedSemester(savedSem);
 
-        // Persist resolved ObjectId so interceptor always sends correct ID
+        // Persist resolved values so interceptor and DataContext stay in sync
         localStorage.setItem('selectedAcademicYearId', yearId);
+        localStorage.setItem('selectedAcademicYear', currentYear.name);
         localStorage.setItem('selectedSemester', savedSem);
 
         updateSemesterId(yearId, savedSem, currentYear.semesters);
+        window.dispatchEvent(new CustomEvent('academicPeriodChanged', {
+          detail: { yearId, yearName: currentYear.name, semester: savedSem }
+        }));
       }
     } catch (error) {
       console.error('Failed to fetch academic years:', error);
@@ -105,7 +109,12 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
       updateSemesterId(id, semester, yearObj.semesters);
 
       localStorage.setItem('selectedAcademicYearId', id);
+      localStorage.setItem('selectedAcademicYear', yearObj.name);
       localStorage.setItem('selectedSemester', semester);
+
+      window.dispatchEvent(new CustomEvent('academicPeriodChanged', {
+        detail: { yearId: id, yearName: yearObj.name, semester }
+      }));
     }
   };
 

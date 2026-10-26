@@ -166,7 +166,7 @@ const AdminDashboard = () => {
  * Admin Overview Card - Shows key admin information and quick actions
  */
 const AdminOverview = ({ user, selectedSemester }) => {
-  const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [] });
+  const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [], taDesignationStats: [] });
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -190,7 +190,9 @@ const AdminOverview = ({ user, selectedSemester }) => {
           setStats({
             overloaded: json.data.overloaded || [],
             pending:    json.data.pending    || [],
-            perfect:    json.data.perfect    || []});
+            perfect:    json.data.perfect    || [],
+            taDesignationStats: json.data.taDesignationStats || []
+          });
         }
       } catch (err) {
         console.error('Error fetching dashboard analytics:', err);
@@ -209,6 +211,22 @@ const AdminOverview = ({ user, selectedSemester }) => {
     if (expandedCard === 'overloaded') return { title: 'Overloaded Faculty (Exceeding Capacity)', data: stats.overloaded, color: '#dc2626' };
     if (expandedCard === 'pending') return { title: 'Pending Faculty (Under Capacity)', data: stats.pending, color: '#eab308' };
     if (expandedCard === 'perfect') return { title: 'Perfectly Assigned Faculty', data: stats.perfect, color: '#16a34a' };
+    const taMatch = (stats.taDesignationStats || []).find(t => t.designation === expandedCard);
+    if (taMatch) {
+      return {
+        title: `${taMatch.designation} (${taMatch.count} Faculty • ${taMatch.totalAllocated}h Assigned / ${taMatch.totalCapacity}h Capacity)`,
+        data: (taMatch.faculty || []).map(f => ({
+          empId: f.empId,
+          name: f.name,
+          designation: f.designation,
+          capacity: f.capacity,
+          assignedHours: f.allocated,
+          pendingLoad: f.remaining,
+          overloadStatus: f.status === 'Overloaded' ? 'Overload' : 'Normal'
+        })),
+        color: '#4f46e5'
+      };
+    }
     return null;
   };
 
@@ -217,15 +235,28 @@ const AdminOverview = ({ user, selectedSemester }) => {
   return (
     <div className="admin-overview">
       <div className="welcome-card" style={{ marginBottom: '24px' }}>
-        <h1>Welcome, Admin {user.name}!</h1>
-        <p className="emp-id">Employee ID: {user.id}</p>
+        <h1>Welcome, Admin {user?.name || 'Administrator'}!</h1>
+        <p className="emp-id">Employee ID: {user?.id || user?.empId || ''}</p>
       </div>
 
 
 
       {/* Analytics Cards */}
-      <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+      <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         
+        {/* Total Faculty Card */}
+        <div 
+          className="stat-card" 
+          style={{ transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+        >
+          <div className="stat-icon" style={{ background: '#eef0fd', color: '#6b74e8' }}>👥</div>
+          <div className="stat-content">
+            <h3 style={{ color: '#4338ca' }}>Total Faculty</h3>
+            <p className="stat-value">{loading ? '...' : (stats.overloaded.length + stats.pending.length + stats.perfect.length)}</p>
+            <p className="stat-desc">All Active Faculty</p>
+          </div>
+        </div>
+
         {/* Overloaded Card */}
         <div 
           className="stat-card" 
@@ -268,6 +299,62 @@ const AdminOverview = ({ user, selectedSemester }) => {
           </div>
         </div>
 
+      </div>
+
+      {/* TA & Instructor Designations Section */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', marginTop: '16px' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', margin: 0 }}>
+          TA & Instructor Designations (Workload & Capacity)
+        </h2>
+        <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px', fontWeight: 500 }}>
+          Permitted for R2, R3, R4 Allocations Only
+        </span>
+      </div>
+      <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+        {(stats.taDesignationStats || []).map((item) => {
+          const isSelected = expandedCard === item.designation;
+          return (
+            <div
+              className="stat-card"
+              key={item.designation}
+              onClick={() => handleCardClick(item.designation)}
+              style={{
+                cursor: 'pointer',
+                border: isSelected ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'stretch'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '14px', color: '#1e293b' }}>{item.designation}</h3>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>Designation</span>
+                </div>
+                <span style={{ fontSize: '24px', fontWeight: 800, color: '#4f46e5' }}>{item.count}</span>
+              </div>
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
+                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{item.totalAllocated}h</div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{item.totalCapacity}h</div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Remaining</div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: item.remainingCapacity < 0 ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
+                    {item.remainingCapacity}h
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Detailed Faculty List (Expanded) */}

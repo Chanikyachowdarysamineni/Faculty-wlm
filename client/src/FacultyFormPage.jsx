@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
+import { useAcademicPeriod } from './AcademicPeriodContext';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import './FacultyFormPage.css';
 import { useToast } from './Toast';
@@ -12,7 +13,8 @@ const FacultyFormPage = ({
   submissions, onSubmit, onUpdateSubmission, onDeleteSubmission,
   isAdmin, currentUser,
 }) => {
-  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, selectedSemester, selectedAcademicYear, systemConfig } = useSharedData();
+  const { faculty: contextFaculty, courses: contextCourses, designations: contextDesignations, setDesignations, systemConfig } = useSharedData();
+  const { selectedSemester, selectedAcademicYear } = useAcademicPeriod();
   const { showToast } = useToast();
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
   const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
@@ -24,7 +26,8 @@ const FacultyFormPage = ({
   }, [configPrograms, distinctCoursePrograms]);
   
   // Auto-fill empId for logged-in faculty
-  const initialEmpId = !isAdmin && currentUser?.id ? currentUser.id : '';
+  const currentEmpId = currentUser?.id || currentUser?.empId || '';
+  const initialEmpId = !isAdmin && currentEmpId ? currentEmpId : '';
   const [empIdInput, setEmpIdInput]   = useState(initialEmpId);
   const [prefs, setPrefs]             = useState(['', '', '', '', '']);
   const [errors, setErrors]           = useState({});
@@ -145,10 +148,15 @@ const FacultyFormPage = ({
     [empIdInput, facultyList]
   );
 
-  // Existing submission for the currently typed empId
+  // Existing submission for the currently typed empId — scoped to selected semester + academicYear
+  // so ODD and EVEN submissions are independent and prior year submissions don't block current year
   const existingSubmission = useMemo(
-    () => submissions.find(s => s.empId === empIdInput.trim()),
-    [empIdInput, submissions]
+    () => submissions.find(s =>
+      s.empId === empIdInput.trim() &&
+      (!selectedSemester || !s.semester || s.semester === selectedSemester) &&
+      (!selectedAcademicYear || !s.academicYear || s.academicYear === selectedAcademicYear)
+    ),
+    [empIdInput, submissions, selectedSemester, selectedAcademicYear]
   );
 
   // ── Validation ──────────────────────────────────

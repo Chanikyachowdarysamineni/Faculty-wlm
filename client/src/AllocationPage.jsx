@@ -114,7 +114,17 @@ const CellPicker = ({
         f.empId.includes(search);
       if (!textMatch) return false;
 
-      // B-3 FIX: Faculty objects from API have `designation`, not `role`.
+      // RULE: When assigning R1 (rowIdx === 0), exclude all TA designations (Teaching Associate, Teaching Assistant, Teaching Assistant-I, Teaching Assistant-II, Teaching Instructor)
+      if (rowIdx === 0) {
+        const desig = String(f.designation || '').toLowerCase();
+        const isTA =
+          desig.includes('teaching assistant') ||
+          desig.includes('teaching associate') ||
+          desig.includes('teaching instructor') ||
+          desig === 'ta';
+        if (isTA) return false;
+      }
+
       // R2-R4 should only show Supporting Faculty and TAs.
       if (rowIdx >= 1) {
         const desig = String(f.designation || '').toLowerCase();

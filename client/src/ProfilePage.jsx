@@ -8,7 +8,8 @@ import { useSharedData } from './DataContext';
 
 const ProfilePage = ({ user, submissions = [], onLogout }) => {
   const { faculty: contextFaculty, setFaculty, courses: contextCourses, selectedSemester, selectedAcademicYear } = useSharedData();
-  
+  const userId = user?.id || user?.empId || '';
+
   const [myWorkloads, setMyWorkloads] = useState([]);
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
@@ -42,7 +43,10 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   }, []);
 
   const loadProfileData = useCallback(async ({ withLoader = true } = {}) => {
-    if (!user?.id) return;
+    if (!userId) {
+      if (withLoader) setLoading(false);
+      return;
+    }
     if (withLoader) setLoading(true);
     setApiError('');
     
@@ -51,7 +55,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
     try {
       const headers = authHeaders();
-      const workloadParams = { empId: String(user.id), semester: selectedSemester, academicYear: selectedAcademicYear };
+      const workloadParams = { empId: String(userId), semester: selectedSemester, academicYear: selectedAcademicYear };
       const [wData] = await Promise.all([
         fetchAllPages('/deva/workloads', workloadParams, { headers }),
       ]);
@@ -62,21 +66,22 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       }
 
       const allWorkloads = wData.data || [];
-      setMyWorkloads(allWorkloads.filter((workload) => String(workload.empId) === String(user.id)));
+      setMyWorkloads(allWorkloads.filter((workload) => String(workload.empId) === String(userId)));
       setLastSyncedAt(new Date());
     } catch {
       setApiError('Failed to load profile data.');
     } finally {
       if (withLoader) setLoading(false);
     }
-  }, [authHeaders, user, selectedSemester, selectedAcademicYear]);
+  }, [authHeaders, userId, selectedSemester, selectedAcademicYear]);
 
   // Refetch current user's faculty data from backend
   const refetchFacultyProfile = useCallback(async () => {
+    if (!userId) return false;
     try {
 
       const headers = authHeaders();
-      const response = await fetch(`${API}/deva/faculty/${user.id}`, {
+      const response = await fetch(`${API}/deva/faculty/${userId}`, {
         method: 'GET',
         headers,
       });
@@ -87,10 +92,10 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
         
         // Update local faculty list
-        setFacultyList(prev => prev.map(f => f.empId === user.id ? updatedFaculty : f));
+        setFacultyList(prev => prev.map(f => f.empId === userId ? updatedFaculty : f));
         
         // Update shared context
-        setFaculty(prev => prev.map(f => f.empId === user.id ? updatedFaculty : f));
+        setFaculty(prev => prev.map(f => f.empId === userId ? updatedFaculty : f));
         
 
         return true;
@@ -102,19 +107,19 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
       console.error('[ProfilePage] Error refetching faculty profile:', err.message);
       return false;
     }
-  }, [user.id, authHeaders, setFaculty]);
+  }, [userId, authHeaders, setFaculty]);
 
   useEffect(() => {
     loadProfileData({ withLoader: true });
   }, [loadProfileData]);
 
   // Find this faculty member by their login employee ID
-  let profile = facultyList.find(f => f.empId === user.id);
+  let profile = (facultyList || []).find(f => f.empId === userId);
   
-  if (!profile && (user.role === 'admin' || user.role === 'Admin' || user.canAccessAdmin === true)) {
+  if (!profile && (user?.role === 'admin' || user?.role === 'Admin' || user?.canAccessAdmin === true)) {
     profile = {
-      empId: user.id,
-      name: user.name || 'System Administrator',
+      empId: userId,
+      name: user?.name || 'System Administrator',
       designation: 'Admin',
       mobile: 'N/A',
       email: 'N/A',
@@ -127,7 +132,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   }
 
   // Their preference submission (if any)
-  const mySubmission = submissions.find(s => s.empId === user.id);
+  const mySubmission = (submissions || []).find(s => s.empId === userId);
 
   // Initials for avatar
   const getInitials = (name = '') => {
@@ -140,7 +145,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
     ['#6366f1', '#a855f7'], ['#f97316', '#ef4444'], ['#06b6d4', '#3b82f6'],
     ['#22c55e', '#16a34a'], ['#facc15', '#f97316'], ['#ec4899', '#a855f7'],
   ];
-  const avatarPair = AVATAR_COLORS[(parseInt(user.id, 10) || 0) % AVATAR_COLORS.length];
+  const avatarPair = AVATAR_COLORS[(parseInt(userId, 10) || 0) % AVATAR_COLORS.length];
 
   const getCourseById = (id) => courseList.find(c => c.id === id);
 
@@ -178,7 +183,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
 
 
-      const response = await fetch(`${API}/deva/faculty/${user.id}`, {
+      const response = await fetch(`${API}/deva/faculty/${userId}`, {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify(payload),
@@ -235,7 +240,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
         <div className="pp-not-found">
           <div className="pp-nf-icon">🔍</div>
           <h2>Profile Not Found</h2>
-          <p>Employee ID <strong>{user.id}</strong> is not registered in the faculty directory.</p>
+          <p>Employee ID <strong>{userId || '—'}</strong> is not registered in the faculty directory.</p>
           <p className="pp-nf-sub">Contact your administrator to link your account.</p>
         </div>
       </main>
@@ -311,7 +316,7 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
             >
               ✎ Edit Profile
             </button>
-            {profile.empId && user.id && profile.empId !== user.id && (
+            {profile.empId && userId && profile.empId !== userId && (
               <span style={{ fontSize: '12px', color: '#999', marginLeft: '8px' }}>
                 (View only - can only edit your own profile)
               </span>

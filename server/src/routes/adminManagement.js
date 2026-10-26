@@ -54,7 +54,10 @@ router.post('/toggle-admin', requireAuth, requireAdmin, async (req, res, next) =
     const roleToSet = makeAdmin ? 'admin' : 'faculty';
     await User.updateOne(
       { empId },
-      { $set: { role: roleToSet, canAccessAdmin: makeAdmin } }
+      {
+        $set: { role: roleToSet, canAccessAdmin: makeAdmin },
+        $inc: { tokenVersion: 1 }
+      }
     );
 
     sendSuccess(res, { message: `User ${empId} is ${makeAdmin ? 'now' : 'no longer'} an admin` }, 200);

@@ -59,8 +59,12 @@ router.post('/', requireAuth, requireAdmin, sectionValidation, async (req, res, 
   if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
   try {
+    const { name, year, department, status } = req.body;
     const newSection = new Section({
-      ...req.body,
+      name: String(name || '').trim(),
+      year: normalizeYear(year),
+      department: department ? String(department).trim() : 'CSE',
+      status: status || 'Active',
       isDeleted: false
     });
     

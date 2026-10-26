@@ -41,6 +41,12 @@ const FacultyPage = () => {
     initialValues: EMPTY_FORM,
     showToast: (t) => showToast(t.message),
     onSubmit: async (values) => {
+      if (values.joiningDate && values.relievingDate) {
+        if (new Date(values.relievingDate) < new Date(values.joiningDate)) {
+          showToast('Relieving date cannot be earlier than joining date.');
+          throw new Error('Relieving date cannot be earlier than joining date.');
+        }
+      }
       const payload = { ...values, semester: selectedSemester };
       if (!payload.capacity) payload.capacity = getDefaultCapacity(payload.designation.trim());
       return fetch(
@@ -445,9 +451,11 @@ const FacultyPage = () => {
 
   // ── Export CSV ─────────────────────────────────────────
   const exportCSV = () => {
-    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Department', 'Designation', 'L', 'T', 'P', 'Allocated', 'Capacity', 'Remaining', 'Workload %', 'Status'];
+    const headers = ['Sl.No', 'Employee ID', 'Name of the Faculty', 'Department', 'Designation', 'Joining Date', 'Relieving Date', 'L', 'T', 'P', 'Allocated', 'Capacity', 'Remaining', 'Workload %', 'Status'];
     const rows = mergedList.map(f => [
       f.slNo || '', f.empId, `"${f.name}"`, `"${f.department || 'CSE'}"`, `"${f.designation}"`,
+      f.joiningDate ? new Date(f.joiningDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '',
+      f.relievingDate ? new Date(f.relievingDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '',
       f.lectureHours, f.tutorialHours, f.practicalHours,
       f.allocated, f.capacity, f.remaining,
       f.workloadPercentage ? `${f.workloadPercentage}%` : '0%',
@@ -650,6 +658,7 @@ const FacultyPage = () => {
               <th>Mobile</th>
               <th>Email</th>
               <th>Joining Date</th>
+              <th>Relieving Date</th>
               <th>Department</th>
               <th title="Lecture Hours">L</th>
               <th title="Tutorial Hours">T</th>
@@ -664,7 +673,7 @@ const FacultyPage = () => {
           </thead>
           <tbody>
             {(restoreMode ? deletedList : (isDragMode ? mergedList : filtered)).length === 0 ? (
-              <tr><td colSpan={isDragMode ? 16 : 17} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
+              <tr><td colSpan={isDragMode ? 17 : 18} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
             ) : (
               (isDragMode ? mergedList : filtered).map((f, i) => (
                 <tr
@@ -696,6 +705,7 @@ const FacultyPage = () => {
                   <td>{f.mobile || 'N/A'}</td>
                   <td>{f.email || 'N/A'}</td>
                   <td>{f.joiningDate ? new Date(f.joiningDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'N/A'}</td>
+                  <td>{f.relievingDate ? new Date(f.relievingDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '-'}</td>
                   <td>{f.department || 'CSE'}</td>
                   <td>{f.lectureHours}</td>
                   <td>{f.tutorialHours}</td>

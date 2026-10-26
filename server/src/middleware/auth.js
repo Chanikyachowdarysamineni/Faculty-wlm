@@ -30,15 +30,23 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Session expired (logged out).' });
     }
 
-    // B-8 FIX: Verify tokenVersion to instantly invalidate old tokens on password change
-    // This requires a DB lookup, but it's necessary for secure token revocation
-    const user = await User.findOne({ empId: req.user.id }).select('tokenVersion relievingDate');
+    const Faculty = require('../models/Faculty');
+    const [user, facultyDoc] = await Promise.all([
+      User.findOne({ empId: req.user.id }).select('tokenVersion relievingDate isDeleted').lean(),
+      Faculty.findOne({ empId: req.user.id }).select('relievingDate isDeleted').lean()
+    ]);
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
     }
     
-    if (user.relievingDate) {
-      const relievingDate = new Date(user.relievingDate);
+    if (user.isDeleted || facultyDoc?.isDeleted) {
+      return res.status(403).json({ success: false, message: 'Account deactivated.' });
+    }
+
+    const relDateVal = user.relievingDate || facultyDoc?.relievingDate;
+    if (relDateVal) {
+      const relievingDate = new Date(relDateVal);
+      relievingDate.setHours(23, 59, 59, 999);
       if (new Date() > relievingDate) {
         return res.status(403).json({ success: false, message: 'Account deactivated: relieving date has passed.' });
       }

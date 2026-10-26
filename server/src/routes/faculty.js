@@ -29,6 +29,7 @@ const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = req
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 const { getDefaultCapacity } = require('../utils/designationUtils');
+const { buildFacultyDateFilter, validateEmploymentDates } = require('../utils/academicPeriodUtils');
 
 const router = express.Router();
 
@@ -63,26 +64,9 @@ const buildFacultyFilter = (matchFilter = {}, periodStart = null, periodEnd = nu
     ...matchFilter
   };
 
-  if (periodEnd) {
-    baseFilter.$or = [
-      { joiningDate: { $lte: new Date(periodEnd) } },
-      { joiningDate: null },
-      { joiningDate: { $exists: false } }
-    ];
-  }
-
-  if (periodStart) {
-    const startCond = [
-      { relievingDate: { $gte: new Date(periodStart) } },
-      { relievingDate: null },
-      { relievingDate: { $exists: false } }
-    ];
-    if (baseFilter.$or) {
-      baseFilter.$and = [{ $or: baseFilter.$or }, { $or: startCond }];
-      delete baseFilter.$or;
-    } else {
-      baseFilter.$or = startCond;
-    }
+  const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+  if (dateClauses.length > 0) {
+    baseFilter.$and = (baseFilter.$and || []).concat(dateClauses);
   }
   return baseFilter;
 };
@@ -239,8 +223,8 @@ router.get('/', requireAuth, requireAcademicPeriod, validatePagination, async (r
         { department: { $regex: q, $options: 'i' } },
       ];
     }
-    const periodStart = req.academicPeriod?.academicYear?.startDate;
-    const periodEnd = req.academicPeriod?.academicYear?.endDate;
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
 
     // H-3: Exclude soft-deleted faculty from count (pipeline already excludes them)
     const countFilter = buildFacultyFilter(filter, periodStart, periodEnd);
@@ -269,8 +253,8 @@ router.get('/deleted', requireAuth, requireAdmin, async (req, res, next) => {
 router.get('/:empId', requireAuth, requireAcademicPeriod, async (req, res, next) => {
   try {
     const semester = req.query.semester;
-    const periodStart = req.academicPeriod?.academicYear?.startDate;
-    const periodEnd = req.academicPeriod?.academicYear?.endDate;
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
     const pipeline = buildFacultyPipeline({ empId: req.params.empId }, null, 0, 1, semester, req.academicPeriod?.academicYear?.name || req.query.academicYear, periodStart, periodEnd);
     const docs = await Faculty.aggregate(pipeline);
     const doc = docs[0];
@@ -318,6 +302,15 @@ router.post(
       const safeDesignation = String(designation || '').trim();
       const safeMobile = String(mobile || '').trim();
       const safeEmail = String(email || '').trim();
+
+      if (joiningDate || relievingDate) {
+        const dateVal = validateEmploymentDates(joiningDate, relievingDate);
+        if (!dateVal.valid) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, dateVal.message, 400);
+        }
+      }
 
       const existing = await Faculty.findOne({ empId: safeEmpId }).session(session);
       if (existing) {
@@ -369,7 +362,9 @@ router.post(
         passwordHash,
         role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
         canAccessAdmin: false,
-        forcePasswordChange: true
+        forcePasswordChange: true,
+        joiningDate: joiningDate || null,
+        relievingDate: relievingDate || null,
       }], { session });
 
       logger.info('User account created for faculty', { empId: doc.empId });
@@ -489,6 +484,24 @@ router.put(
       if (researchArea !== undefined) allowedUpdates.researchArea = String(researchArea).trim();
       if (specialization !== undefined) allowedUpdates.specialization = String(specialization).trim();
 
+      const existingFaculty = await Faculty.findOne({ empId }).session(session).lean();
+      if (!existingFaculty) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendNotFound(res, 'Faculty member not found.');
+      }
+
+      const effJoining = allowedUpdates.joiningDate !== undefined ? allowedUpdates.joiningDate : existingFaculty.joiningDate;
+      const effRelieving = allowedUpdates.relievingDate !== undefined ? allowedUpdates.relievingDate : existingFaculty.relievingDate;
+      if (effJoining || effRelieving) {
+        const dateVal = validateEmploymentDates(effJoining, effRelieving);
+        if (!dateVal.valid) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, dateVal.message, 400);
+        }
+      }
+
       allowedUpdates.updatedAt = new Date();
 
       const doc = await Faculty.findOneAndUpdate(
@@ -503,12 +516,14 @@ router.put(
         return sendNotFound(res, 'Faculty member not found.');
       }
 
-      if (allowedUpdates.mobile || allowedUpdates.name || allowedUpdates.designation || allowedUpdates.email || allowedUpdates.empId) {
+      if (allowedUpdates.mobile || allowedUpdates.name || allowedUpdates.designation || allowedUpdates.email || allowedUpdates.empId || allowedUpdates.joiningDate !== undefined || allowedUpdates.relievingDate !== undefined) {
         const userUpdates = {};
         if (allowedUpdates.name) userUpdates.name = allowedUpdates.name;
         if (allowedUpdates.designation) userUpdates.designation = allowedUpdates.designation;
         if (allowedUpdates.email !== undefined) userUpdates.email = allowedUpdates.email;
         if (allowedUpdates.empId) userUpdates.empId = allowedUpdates.empId;
+        if (allowedUpdates.joiningDate !== undefined) userUpdates.joiningDate = allowedUpdates.joiningDate || null;
+        if (allowedUpdates.relievingDate !== undefined) userUpdates.relievingDate = allowedUpdates.relievingDate || null;
         if (allowedUpdates.mobile !== undefined) {
           userUpdates.mobile = allowedUpdates.mobile;
           if (allowedUpdates.mobile.trim()) {
@@ -607,7 +622,9 @@ router.put(
 
       // M-1: Re-fetch via aggregation pipeline so response reflects accurate computed capacity fields
       const refreshSemester = req.query.semester;
-      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester, req.query.academicYear, req.academicPeriod?.academicYearSemester?.startDate, req.academicPeriod?.academicYearSemester?.endDate);
+      const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYearSemester?.startDate;
+      const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYearSemester?.endDate;
+      const freshPipeline = buildFacultyPipeline({ empId }, null, 0, 1, refreshSemester, req.query.academicYear, periodStart, periodEnd);
       const freshDocs = await Faculty.aggregate(freshPipeline);
       const freshDoc = freshDocs[0] || doc;
 
