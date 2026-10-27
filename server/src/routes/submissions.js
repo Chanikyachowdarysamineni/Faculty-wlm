@@ -234,6 +234,10 @@ router.put(
 
       sendSuccess(res, toClient(doc), 200);
     } catch (err) { 
+      if (err.code === 11000) {
+        logger.warn('Duplicate submission in update caught at DB level', { empId: req.params.empId, userId: req.user.id });
+        return sendConflict(res, 'A submission already exists for this semester and academic year.');
+      }
       logger.error('Error updating submission', { error: err.message, empId: req.params.empId, userId: req.user.id });
       next(err); 
     }
@@ -324,6 +328,10 @@ router.post(
 
       sendCreated(res, toClient(doc));
     } catch (err) { 
+      if (err.code === 11000) {
+        logger.warn('Duplicate submission caught at DB level', { empId: req.body.empId, userId: req.user.id });
+        return sendConflict(res, 'You have already submitted preferences for this semester and academic year.');
+      }
       logger.error('Error creating submission', { error: err.message, empId: req.body.empId, userId: req.user.id });
       next(err); 
     }

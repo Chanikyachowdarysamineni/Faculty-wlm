@@ -132,7 +132,11 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   }
 
   // Their preference submission (if any)
-  const mySubmission = (submissions || []).find(s => s.empId === userId);
+  const mySubmission = (submissions || []).find(s =>
+    s.empId === userId &&
+    (!selectedSemester || !s.semester || s.semester === selectedSemester) &&
+    (!selectedAcademicYear || !s.academicYear || s.academicYear === selectedAcademicYear)
+  );
 
   // Initials for avatar
   const getInitials = (name = '') => {

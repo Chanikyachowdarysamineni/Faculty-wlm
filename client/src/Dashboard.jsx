@@ -769,7 +769,11 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
     return true;
   });
 
-  const mySubmission = (submissions || []).find(s => s.empId === (user?.id || user?.empId));
+  const mySubmission = (submissions || []).find(s =>
+    s.empId === (user?.id || user?.empId) &&
+    (!selectedSemester || !s.semester || s.semester === selectedSemester) &&
+    (!selectedAcademicYear || !s.academicYear || s.academicYear === selectedAcademicYear)
+  );
 
   const liveFaculty = isAdmin ? dashboardData.faculty : masterData.faculty;
   const liveCourses = isAdmin ? dashboardData.courses : masterData.courses;

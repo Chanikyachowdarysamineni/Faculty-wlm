@@ -39,6 +39,24 @@ const LoginPage = ({ onLogin }) => {
     }
   }, [step]);
 
+  // Background email delivery verification for proactive feedback
+  useEffect(() => {
+    if (step !== 'otp' || !employeeId.trim()) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/deva/auth/otp-status?employeeId=${encodeURIComponent(employeeId.trim())}`);
+        const data = await res.json();
+        if (data.success && data.data?.deliveryStatus === 'failed') {
+          setVerifyError(`Email delivery failed: ${data.data.deliveryError || 'Unable to deliver message'}. Please click Resend or contact administrator.`);
+          setResendCooldown(0); // Allow immediate retry
+        }
+      } catch {
+        // Non-blocking network check
+      }
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [step, employeeId, resendCooldown]);
+
   // ── Step 1: Request OTP
   const handleSendOtp = async (e) => {
     e.preventDefault();
@@ -56,13 +74,13 @@ const LoginPage = ({ onLogin }) => {
         body:    JSON.stringify({ employeeId: employeeId.trim() }),
       });
       const data = await res.json();
-      if (!data.success && res.status !== 200) {
+      if (!res.ok || !data.success) {
         setSendError(data.message || 'Failed to send OTP. Please try again.');
       } else {
         setMaskedEmail(data.data?.maskedEmail || '');
         setOtpDigits(Array(OTP_LENGTH).fill(''));
         setVerifyError('');
-        setResendCooldown(60); // 60-second cooldown before resend
+        setResendCooldown(data.data?.cooldownSeconds || 60);
         setStep('otp');
       }
     } catch {
@@ -91,7 +109,7 @@ const LoginPage = ({ onLogin }) => {
         body:    JSON.stringify({ employeeId: employeeId.trim(), otp }),
       });
       const data = await res.json();
-      if (!data.success) {
+      if (!res.ok || !data.success) {
         setVerifyStatus('error');
         setVerifyError(data.message || 'Invalid OTP. Please try again.');
         // Clear OTP boxes on error
@@ -104,7 +122,7 @@ const LoginPage = ({ onLogin }) => {
           localStorage.setItem('wlm_token', data.data.token);
           localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
           onLogin(data.data.user);
-        }, 1500);
+        }, 1200);
       }
     } catch {
       setVerifyStatus('error');
@@ -169,12 +187,12 @@ const LoginPage = ({ onLogin }) => {
         body:    JSON.stringify({ employeeId: employeeId.trim() }),
       });
       const data = await res.json();
-      if (!data.success && res.status !== 200) {
+      if (!res.ok || !data.success) {
         setVerifyError(data.message || 'Failed to resend OTP.');
       } else {
         setMaskedEmail(data.data?.maskedEmail || maskedEmail);
         setOtpDigits(Array(OTP_LENGTH).fill(''));
-        setResendCooldown(60);
+        setResendCooldown(data.data?.cooldownSeconds || 60);
         setTimeout(() => otpRefs.current[0]?.focus(), 80);
       }
     } catch {

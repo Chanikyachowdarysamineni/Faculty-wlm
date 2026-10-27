@@ -8,6 +8,11 @@
 
 'use strict';
 
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 // H-6 FIX: Import logger BEFORE env var validation so it is available if we need to log the error
@@ -76,6 +81,8 @@ const Counter = require('./models/Counter');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const TokenBlacklist = require('./models/TokenBlacklist');
 const SystemConfig = require('./models/SystemConfig');
+const Submission = require('./models/Submission');
+const FacultyCapacity = require('./models/FacultyCapacity');
 const { syncAuthAndRBAC } = require('./utils/authSync');
 const { refreshConfig } = require('./utils/configManager');
 
@@ -412,6 +419,8 @@ process.on('uncaughtException', (err) => {
   await syncIndexesSafe(Course);
   await syncIndexesSafe(CourseAllocation);
   await syncIndexesSafe(Counter);
+  await syncIndexesSafe(Submission);
+  await syncIndexesSafe(FacultyCapacity);
 
   await syncIndexesSafe(PasswordResetToken);
   await backfillWorkloadCourseTypeKeys();

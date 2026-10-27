@@ -14,7 +14,7 @@ const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const nodemailer = require('nodemailer');
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const User     = require('../models/User');
 const Faculty  = require('../models/Faculty');
 const OtpToken = require('../models/OtpToken');
@@ -25,7 +25,7 @@ const getIp = (req) => req.headers['x-forwarded-for'] || req.socket.remoteAddres
 const { sendSuccess, sendError, sendUnauthorized, sendValidationError } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateLogin } = require('../middleware/validators');
-const { loginLimiter } = require('../middleware/rateLimiters');
+const { loginLimiter, otpLimiter, otpIpLimiter } = require('../middleware/rateLimiters');
 const { isAdminEmployeeId } = require('../config/adminConfig');
 
 const router = express.Router();
@@ -33,7 +33,7 @@ const router = express.Router();
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 30);
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || 10);
 
-// ── Email transport (configured via env vars) ──────────────
+// ── Email transport (configured via env vars with connection pool) ──────────────
 let mailTransport = null;
 
 const getMailTransport = () => {
@@ -46,6 +46,11 @@ const getMailTransport = () => {
     : port === 465;
   
   mailTransport = nodemailer.createTransport({
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    rateDelta: 1000,
+    rateLimit: 5,
     host: process.env.SMTP_HOST,
     port,
     secure,
@@ -53,11 +58,36 @@ const getMailTransport = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 5000,
+    socketTimeout: 15000,
     tls: {
       rejectUnauthorized: false,
     },
   });
+
+  // Pre-warm connection in background
+  mailTransport.verify((err) => {
+    if (err) {
+      logger.warn('SMTP connection pre-warm notice', { error: err.message });
+    } else {
+      logger.info('SMTP connection pool initialized and verified');
+    }
+  });
+
   return mailTransport;
+};
+
+// Mask email for display (e.g. vf***@gmail.com)
+const maskEmail = (email = '') => {
+  if (!email || !email.includes('@')) return '';
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) {
+    return `${local[0] || '*'}*@${domain}`;
+  }
+  const visiblePrefix = local.slice(0, 2);
+  const maskedLocal = visiblePrefix + '*'.repeat(Math.min(6, Math.max(3, local.length - 2)));
+  return `${maskedLocal}@${domain}`;
 };
 
 // ── OTP Email sender ──────────────────────────────────────
@@ -172,8 +202,18 @@ VFSTR.`;
 // ─────────────────────────────────────────────────────────
 router.post(
   '/send-otp',
-  loginLimiter,
-  [body('employeeId').trim().notEmpty().withMessage('Employee ID is required.')],
+  otpIpLimiter,
+  otpLimiter,
+  [
+    body('employeeId')
+      .trim()
+      .notEmpty()
+      .withMessage('Employee ID is required.')
+      .isLength({ min: 1, max: 50 })
+      .withMessage('Invalid Employee ID format.')
+      .matches(/^[a-zA-Z0-9_\-\.]+$/)
+      .withMessage('Employee ID contains invalid characters.'),
+  ],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -181,16 +221,18 @@ router.post(
 
       const empId = req.body.employeeId.trim();
 
-      // Check user exists
-      const user = await User.findOne({ empId });
+      // Check user and faculty in parallel using lean queries for max performance
+      const [user, facultyData] = await Promise.all([
+        User.findOne({ empId }).lean(),
+        Faculty.findOne({ empId }).lean(),
+      ]);
+
       if (!user) {
         logger.warn('OTP requested for non-existent user', { empId, ip: getIp(req) });
-        // Generic message to not reveal whether ID exists
-        return sendSuccess(res, null, 200, { message: 'If the Employee ID is registered, an OTP has been sent to the associated email.' });
+        return sendError(res, 'Employee ID is not registered. Please contact the administrator.', 404);
       }
 
       // Check if faculty is relieved or deleted
-      const facultyData = await Faculty.findOne({ empId }).lean();
       if (user.isDeleted || facultyData?.isDeleted) {
         return sendError(res, 'Account deactivated.', 403);
       }
@@ -203,43 +245,92 @@ router.post(
         }
       }
 
-      // H-7: Check account lock
-      if (user.lockUntil && user.lockUntil > new Date()) {
-        const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      // Check account lock
+      if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+        const minutesLeft = Math.ceil((new Date(user.lockUntil) - Date.now()) / 60000);
         return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
       }
 
       // Determine email to send OTP to
-      let email = user.email || facultyData?.email || '';
-
-
+      const email = user.email || facultyData?.email || '';
       if (!email) {
         logger.warn('OTP requested but no email on file', { empId });
         return sendError(res, 'No email address found for this Employee ID. Please contact the administrator.', 400);
       }
 
-      // Generate and persist OTP
-      const rawOtp = await OtpToken.createOtp(empId, OTP_EXPIRY_MINUTES);
-
-      // Send OTP email
-      try {
-        await sendOtpEmail({ toEmail: email, empId, otp: rawOtp, expiryMinutes: OTP_EXPIRY_MINUTES });
-        logger.info('OTP email sent', { empId, email });
-      } catch (mailErr) {
-        logger.error('Failed to send OTP email', { empId, error: mailErr.message });
-        // Clean up the token so the user can retry
-        await OtpToken.deleteMany({ empId });
-        return sendError(res, 'Failed to send OTP email. Please try again or contact the administrator.', 500);
+      // Enforce 60-second server-side resend cooldown
+      const recentOtp = await OtpToken.getRecentActiveOtp(empId, 60);
+      if (recentOtp) {
+        const elapsedSeconds = Math.floor((Date.now() - new Date(recentOtp.createdAt).getTime()) / 1000);
+        const waitSeconds = Math.max(1, 60 - elapsedSeconds);
+        return sendError(res, `Please wait ${waitSeconds}s before requesting a new OTP.`, 429);
       }
 
-      // Mask email for display (e.g., vf***@gmail.com)
-      const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + b.replace(/./g, '*') + c);
+      // Generate cryptographically secure OTP and save to DB
+      const { raw: rawOtp, docId } = await OtpToken.createOtp(empId, OTP_EXPIRY_MINUTES);
 
-      return sendSuccess(res, { maskedEmail }, 200, {
-        message: `OTP sent to ${maskedEmail}. It is valid for ${OTP_EXPIRY_MINUTES} minutes.`,
+      // Mask email for display (e.g., vf***@gmail.com)
+      const maskedEmail = maskEmail(email);
+
+      // Dispatch OTP email asynchronously via pooled SMTP connection (non-blocking)
+      sendOtpEmail({ toEmail: email, empId, otp: rawOtp, expiryMinutes: OTP_EXPIRY_MINUTES })
+        .then(() => {
+          logger.info('OTP email sent successfully', { empId, email });
+          OtpToken.updateOne({ _id: docId }, { $set: { deliveryStatus: 'sent' } }).catch(() => {});
+        })
+        .catch((mailErr) => {
+          logger.error('Failed to send OTP email in background', { empId, error: mailErr.message });
+          OtpToken.updateOne({ _id: docId }, { $set: { deliveryStatus: 'failed', deliveryError: mailErr.message } }).catch(() => {});
+        });
+
+      // Respond instantly (< 30ms) to frontend
+      return sendSuccess(res, {
+        maskedEmail,
+        expiryMinutes: OTP_EXPIRY_MINUTES,
+        cooldownSeconds: 60,
+      }, 200, {
+        message: `OTP sent to ${maskedEmail}. Valid for ${OTP_EXPIRY_MINUTES} minutes.`,
       });
     } catch (err) {
       logger.error('Send OTP error', { error: err.message });
+      next(err);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────
+//  GET /api/auth/otp-status  — check delivery status of latest OTP
+// ─────────────────────────────────────────────────────────
+router.get(
+  '/otp-status',
+  [
+    query('employeeId')
+      .trim()
+      .notEmpty()
+      .withMessage('Employee ID is required.')
+      .matches(/^[a-zA-Z0-9_\-\.]+$/)
+      .withMessage('Invalid Employee ID.'),
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return sendValidationError(res, errors.array());
+
+      const empId = req.query.employeeId.trim();
+      const latestOtp = await OtpToken.findOne({ empId }).sort({ createdAt: -1 }).lean();
+
+      if (!latestOtp) {
+        return sendError(res, 'No OTP request found.', 404);
+      }
+
+      return sendSuccess(res, {
+        deliveryStatus: latestOtp.deliveryStatus || 'sent',
+        deliveryError: latestOtp.deliveryError || null,
+        isExpired: new Date() > new Date(latestOtp.expiresAt),
+        isUsed: !!latestOtp.usedAt,
+      });
+    } catch (err) {
+      logger.error('OTP status error', { error: err.message });
       next(err);
     }
   }
@@ -253,7 +344,11 @@ router.post(
   loginLimiter,
   [
     body('employeeId').trim().notEmpty().withMessage('Employee ID is required.'),
-    body('otp').trim().notEmpty().withMessage('OTP is required.'),
+    body('otp')
+      .trim()
+      .isLength({ min: 6, max: 6 })
+      .isNumeric()
+      .withMessage('OTP must be a 6-digit number.'),
   ],
   async (req, res, next) => {
     try {
@@ -263,10 +358,13 @@ router.post(
       const empId = req.body.employeeId.trim();
       const rawOtp = req.body.otp.trim();
 
-      const user = await User.findOne({ empId });
+      const [user, facultyData] = await Promise.all([
+        User.findOne({ empId }),
+        Faculty.findOne({ empId }).lean(),
+      ]);
+
       if (!user) return sendError(res, 'Employee ID not found.', 401);
 
-      const facultyData = await Faculty.findOne({ empId }).lean();
       if (user.isDeleted || facultyData?.isDeleted) {
         return sendError(res, 'Account deactivated.', 403);
       }
@@ -280,8 +378,8 @@ router.post(
       }
 
       // Check lock
-      if (user.lockUntil && user.lockUntil > new Date()) {
-        const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+        const minutesLeft = Math.ceil((new Date(user.lockUntil) - Date.now()) / 60000);
         return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
       }
 
@@ -315,8 +413,8 @@ router.post(
         return sendError(res, `Invalid OTP. ${5 - newAttempts} attempt(s) remaining.`, 401);
       }
 
-      // Mark OTP as used
-      await OtpToken.updateOne({ _id: otpDoc._id }, { $set: { usedAt: new Date() } });
+      // Single-use token: immediately delete OTP tokens for this user to prevent replay
+      await OtpToken.deleteMany({ empId });
 
       // Reset failed login attempts on success
       if (user.failedLoginAttempts || user.lockUntil) {

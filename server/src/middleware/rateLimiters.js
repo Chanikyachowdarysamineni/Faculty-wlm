@@ -268,6 +268,47 @@ const passwordResetLimiter = createLimiter({
 });
 
 /**
+ * OTP SEND LIMITER (Per Employee ID)
+ * 
+ * Purpose: Prevent email bombing / spamming OTP requests to a specific faculty member
+ * Config: Max 5 requests per employee ID per 15 minutes
+ */
+const otpLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_OTP_RATE_LIMIT || 5),
+  keyGenerator: (req) => {
+    const empId = getEmployeeIdFromBody(req);
+    const ipHash = ipKeyGenerator(req);
+    return empId ? `otp-send:emp:${empId}` : `otp-send:ip:${ipHash}`;
+  },
+  message: {
+    success: false,
+    message: 'Too many OTP requests for this account. Please wait 15 minutes before trying again.',
+  },
+  prefix: 'otp-send',
+  skip: () => false,
+});
+
+/**
+ * OTP IP LIMITER (Per IP)
+ * 
+ * Purpose: Prevent enumeration and network-wide spamming
+ * Config: Max 20 requests per IP per 15 minutes
+ */
+const otpIpLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_OTP_IP_RATE_LIMIT || 20),
+  keyGenerator: (req) => `otp-ip:${ipKeyGenerator(req)}`,
+  message: {
+    success: false,
+    message: 'Too many OTP requests from your network. Please wait a few minutes before trying again.',
+  },
+  prefix: 'otp-ip',
+  skip: () => false,
+});
+
+
+/**
  * GENERAL API LIMITER
  * 
  * Purpose: Protect all other API endpoints from general DOS attacks
@@ -348,6 +389,8 @@ module.exports = {
   initializeRedis,
   loginLimiter,
   passwordResetLimiter,
+  otpLimiter,
+  otpIpLimiter,
   apiLimiter,
   strictLimiter,
   exportLimiter,
