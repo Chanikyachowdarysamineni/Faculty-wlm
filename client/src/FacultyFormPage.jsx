@@ -253,7 +253,7 @@ const cancelEdit = () => {
     }
 
     // New submission — POST /api/submissions
-    if (existingSubmission) {
+    if (existingSubmission && !isAdmin) {
       setErrors({ empId: 'This faculty already submitted. Click "Edit Submission" to update it.' });
       setSaving(false);
       return;
@@ -291,8 +291,13 @@ const cancelEdit = () => {
         setSaving(false);
         return;
       }
-      onSubmit(newSubmission);
-      setSubmittedLabel('submitted');
+      if (existingSubmission) {
+        onUpdateSubmission(newSubmission);
+        setSubmittedLabel('updated');
+      } else {
+        onSubmit(newSubmission);
+        setSubmittedLabel('submitted');
+      }
       setSubmitted(true);
       setEmpIdInput(initialEmpId);
       setPrefs(['', '', '', '', '']);
@@ -528,8 +533,8 @@ const cancelEdit = () => {
 
           {/* Existing submission notice — show only when NOT in edit mode */}
           {!editMode && existingSubmission && foundFaculty && (
-            <div className={`ff-banner ${editEnabled ? 'ff-banner-warning' : 'ff-banner-disabled'}`}>
-              {editEnabled ? (
+            <div className={`ff-banner ${(editEnabled || isAdmin) ? 'ff-banner-warning' : 'ff-banner-disabled'}`}>
+              {(editEnabled || isAdmin) ? (
                 <>
                   ✏️&nbsp; <strong>{foundFaculty.name}</strong> already has a submission.
                   <button
@@ -553,7 +558,7 @@ const cancelEdit = () => {
             </div>
           )}
 
-          <div className={`ff-card${(!formEnabled && !editMode) ? ' ff-card-locked' : ''}`}>
+          <div className={`ff-card${(!formEnabled && !editMode && !isAdmin) ? ' ff-card-locked' : ''}`}>
 
             {/* ── Faculty identification (admin enters ID; faculty sees locked banner above) ── */}
             {isAdmin && (
@@ -575,7 +580,7 @@ const cancelEdit = () => {
                           className="ff-faculty-search-input"
                           placeholder="Search by ID, name, designation, mobile…"
                           value={facultySearch}
-                          disabled={!formEnabled && !editMode}
+                          disabled={!formEnabled && !editMode && !isAdmin}
                           autoComplete="off"
                           onChange={e => {
                             setFacultySearch(e.target.value);
@@ -802,7 +807,7 @@ const cancelEdit = () => {
               </button>
               <button
                 className={`ff-btn ${editMode ? 'ff-btn-update' : 'ff-btn-submit'}`}
-                disabled={saving || (!formEnabled && !editMode)}
+                disabled={saving || (!formEnabled && !editMode && !isAdmin)}
                 onClick={handleSubmit}
               >
                 {saving ? '⏳ Saving…' : editMode ? '💾 Update Preferences' : 'Submit Preferences'}

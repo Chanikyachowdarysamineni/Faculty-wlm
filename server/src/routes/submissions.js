@@ -186,7 +186,7 @@ router.put(
     try {
       const semester = req.query.semester || req.body?.semester;
       const academicYear = String(req.query.academicYear || req.body?.academicYear || '').trim();
-      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+      const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
 
       const { isFormOpen, isEditEnabled } = await resolveFormAndEditStatus(academicYear, semester);
       if (!isFormOpen && !isAdmin) {
@@ -220,14 +220,27 @@ router.put(
 
       const updateFilter = { empId: req.params.empId, semester };
       if (academicYear) updateFilter.academicYear = academicYear;
-      const doc = await Submission.findOneAndUpdate(
+      let doc = await Submission.findOneAndUpdate(
         updateFilter,
         { prefs },
         { new: true }
       ).lean();
       if (!doc) {
-        logger.warn('Submission not found for update', { empId: req.params.empId, userId: req.user.id });
-        return sendNotFound(res, 'No submission found to update.');
+        if (isAdmin) {
+          const member = await Faculty.findOne({ empId: req.params.empId.trim() }).lean();
+          doc = await Submission.create({
+            empId: req.params.empId.trim(),
+            empName: member?.name || req.params.empId,
+            designation: member?.designation || '',
+            mobile: member?.mobile || '',
+            prefs,
+            semester: semester || 'EVEN',
+            academicYear: academicYear || '2026-2027',
+          });
+        } else {
+          logger.warn('Submission not found for update', { empId: req.params.empId, userId: req.user.id });
+          return sendNotFound(res, 'No submission found to update.');
+        }
       }
 
       logger.info('Submission updated', { empId: req.params.empId, prefCount: prefs.length, userId: req.user.id });
@@ -261,7 +274,7 @@ router.post(
       }
 
       const isSelf = String(req.user.id) === String(empId || '').trim();
-      const isAdmin = req.user.role === 'admin' || req.user.canAccessAdmin === true;
+      const isAdmin = String(req.user.role || '').toLowerCase() === 'admin' || req.user.canAccessAdmin === true;
 
       // Check form open (defaults to open if setting not yet seeded)
       const { isFormOpen } = await resolveFormAndEditStatus(academicYear, semester);
@@ -298,7 +311,7 @@ router.post(
       const designation = member?.designation ?? (req.body.designation || '');
       const mobile      = member?.mobile      ?? (req.body.mobile      || '');
 
-      if (member) {
+      if (member && !isAdmin) {
         const { getSemesterPeriodDates, isFacultyEligibleForPeriod } = require('../utils/academicPeriodUtils');
         const periodDates = getSemesterPeriodDates({ academicYear, semesterType: semester });
         if (!isFacultyEligibleForPeriod(member, periodDates.periodStart, periodDates.periodEnd)) {
@@ -310,6 +323,15 @@ router.post(
       // and prior academic year submissions do not block the current year
       const existing = await Submission.findOne({ empId: empId.trim(), semester, academicYear });
       if (existing) {
+        if (isAdmin) {
+          existing.prefs = prefs;
+          if (empName) existing.empName = empName;
+          if (designation) existing.designation = designation;
+          if (mobile) existing.mobile = mobile;
+          await existing.save();
+          logger.info('Submission updated via admin POST', { empId: existing.empId, prefCount: prefs.length, userId: req.user.id });
+          return sendSuccess(res, toClient(existing), 200);
+        }
         logger.warn('Duplicate submission attempt', { empId, semester, academicYear, userId: req.user.id });
         return sendConflict(res, 'You have already submitted preferences for this semester and academic year.');
       }
