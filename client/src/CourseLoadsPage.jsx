@@ -225,6 +225,19 @@ const CourseLoadsPage = () => {
     loadData();
   }, [loadData]);
 
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      loadData();
+    };
+    window.addEventListener('wlm:workloads_reload', handleReload);
+    window.addEventListener('wlm:allocations_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:workloads_reload', handleReload);
+      window.removeEventListener('wlm:allocations_reload', handleReload);
+    };
+  }, [loadData]);
+
   const handleFilterChange = (field, value) => {
     setFilters(prev => {
       const newFilters = { ...prev, [field]: value };

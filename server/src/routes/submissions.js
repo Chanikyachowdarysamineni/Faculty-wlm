@@ -26,6 +26,7 @@ const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated,
 const logger = require('../utils/logger');
 const { validateSubmissionCreate, validatePagination } = require('../middleware/validators');
 const { exportSubmissions } = require('../utils/exportUtils');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
@@ -244,7 +245,10 @@ router.put(
       }
 
       logger.info('Submission updated', { empId: req.params.empId, prefCount: prefs.length, userId: req.user.id });
-
+      wsHandler.broadcast({
+        type: 'submissions_updated',
+        data: { action: 'update', empId: req.params.empId }
+      });
       sendSuccess(res, toClient(doc), 200);
     } catch (err) { 
       if (err.code === 11000) {
@@ -330,6 +334,10 @@ router.post(
           if (mobile) existing.mobile = mobile;
           await existing.save();
           logger.info('Submission updated via admin POST', { empId: existing.empId, prefCount: prefs.length, userId: req.user.id });
+          wsHandler.broadcast({
+            type: 'submissions_updated',
+            data: { action: 'update', empId: existing.empId }
+          });
           return sendSuccess(res, toClient(existing), 200);
         }
         logger.warn('Duplicate submission attempt', { empId, semester, academicYear, userId: req.user.id });
@@ -347,7 +355,10 @@ router.post(
       });
 
       logger.info('Submission created', { empId: doc.empId, prefCount: prefs.length, userId: req.user.id });
-
+      wsHandler.broadcast({
+        type: 'submissions_updated',
+        data: { action: 'create', empId: doc.empId }
+      });
       sendCreated(res, toClient(doc));
     } catch (err) { 
       if (err.code === 11000) {
@@ -430,6 +441,10 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     }
     await Submission.findByIdAndDelete(req.params.id);
     logger.info('Submission deleted', { id: req.params.id, empId: doc.empId, userId: req.user.id });
+    wsHandler.broadcast({
+      type: 'submissions_updated',
+      data: { action: 'delete', empId: doc.empId, id: req.params.id }
+    });
     sendSuccess(res, { message: 'Submission deleted.' }, 200);
   } catch (err) { 
     logger.error('Error deleting submission', { error: err.message, id: req.params.id, userId: req.user.id });

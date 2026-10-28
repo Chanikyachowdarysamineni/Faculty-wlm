@@ -25,15 +25,22 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
   // eslint-disable-next-line
   }, [currentUser]);
 
-  // Fallback: also watch storage events (cross-tab login)
+  // Fallback: also watch storage events (cross-tab login) and real-time updates
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === 'wlm_token' && e.newValue) {
         fetchAcademicYears();
       }
     };
+    const onRealtimeReload = () => {
+      fetchAcademicYears();
+    };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('wlm:academic_period_reload', onRealtimeReload);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('wlm:academic_period_reload', onRealtimeReload);
+    };
   }, []);
 
   const fetchAcademicYears = async () => {

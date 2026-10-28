@@ -20,6 +20,7 @@ const { mongoose } = require('../db');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const requireAcademicPeriod = require('../middleware/academicPeriod');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
@@ -133,6 +134,7 @@ router.put(
         { value: String(Boolean(formEnabled)) },
         { upsert: true }
       );
+      wsHandler.broadcast({ type: 'settings_updated', formEnabled: Boolean(formEnabled) });
       sendSuccess(res, { formEnabled: Boolean(formEnabled) }, 200);
     } catch (err) { next(err); }
   }
@@ -154,6 +156,7 @@ router.put('/sections', requireAuth, requireAdmin, requireAcademicPeriod, async 
     const acYear = req.academicPeriod?.academicYear?.name || req.body.academicYear;
     const sem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester;
     const sections = await saveSectionsConfig(req.body?.sections, acYear, sem);
+    wsHandler.broadcast({ type: 'sections_updated', academicYear: acYear, semester: sem });
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }
 });
@@ -169,13 +172,13 @@ router.post('/sections/:year', requireAuth, requireAdmin, requireAcademicPeriod,
       return sendError(res, 'year and section are required.', 400);
     }
     const current = await getSectionsConfig(acYear, sem);
-    if (!current[year] && year.includes('M.Tech')) current[year] = [];
-    if (!current[year]) return sendError(res, 'Invalid year.', 400);
+    if (!current[year]) current[year] = [];
     if (current[year].includes(section)) {
       return sendConflict(res, 'Section already exists.');
     }
     current[year].push(section);
     const sections = await saveSectionsConfig(current, acYear, sem);
+    wsHandler.broadcast({ type: 'sections_updated', academicYear: acYear, semester: sem });
     sendCreated(res, sections);
   } catch (err) { next(err); }
 });
@@ -207,6 +210,7 @@ router.put('/sections/:year/:section', requireAuth, requireAdmin, requireAcademi
     await saveSectionsConfig(normalized, currentAcYear, currentSem, session);
     await session.commitTransaction();
     const sections = normalized;
+    wsHandler.broadcast({ type: 'sections_updated', academicYear: currentAcYear, semester: currentSem });
     sendSuccess(res, sections, 200);
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
@@ -237,6 +241,7 @@ router.delete('/sections/:year/:section', requireAuth, requireAdmin, requireAcad
     await saveSectionsConfig(normalized, currentAcYear, currentSem, session);
     await session.commitTransaction();
     const sections = normalized;
+    wsHandler.broadcast({ type: 'sections_updated', academicYear: currentAcYear, semester: currentSem });
     sendSuccess(res, sections, 200);
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
@@ -293,6 +298,7 @@ router.put(
         { value: String(Boolean(editEnabled)) },
         { upsert: true }
       );
+      wsHandler.broadcast({ type: 'settings_updated', editEnabled: Boolean(editEnabled) });
       sendSuccess(res, { editEnabled: Boolean(editEnabled) }, 200);
     } catch (err) { next(err); }
   }

@@ -5,6 +5,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const AcademicYear = require('../models/AcademicYear');
 const AcademicYearSemester = require('../models/AcademicYearSemester');
 const { sendSuccess, sendError, sendNotFound } = require('../utils/response');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
@@ -56,6 +57,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     ]);
     
     const semesters = await AcademicYearSemester.find({ academicYearId: newYear._id }).lean();
+    wsHandler.broadcast({ type: 'academic_period_updated' });
     sendSuccess(res, { ...newYear.toObject(), semesters }, 201);
   } catch (err) {
     next(err);
@@ -74,6 +76,7 @@ router.put('/:id/status', requireAuth, requireAdmin, async (req, res, next) => {
     if (isCurrent !== undefined) year.isCurrent = isCurrent; // pre-save hook handles setting others to false
     
     await year.save();
+    wsHandler.broadcast({ type: 'academic_period_updated' });
     sendSuccess(res, year, 200);
   } catch (err) {
     next(err);
@@ -96,6 +99,7 @@ router.put('/:id/semesters/:type', requireAuth, requireAdmin, async (req, res, n
     if (editEnabled !== undefined) semester.editEnabled = editEnabled;
     
     await semester.save();
+    wsHandler.broadcast({ type: 'academic_period_updated' });
     sendSuccess(res, semester, 200);
   } catch (err) {
     next(err);
@@ -115,6 +119,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (endDate) year.endDate = endDate;
     
     await year.save();
+    wsHandler.broadcast({ type: 'academic_period_updated' });
     sendSuccess(res, year, 200);
   } catch (err) {
     next(err);
@@ -134,6 +139,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     await AcademicYearSemester.deleteMany({ academicYearId: year._id });
     await AcademicYear.deleteOne({ _id: year._id });
     
+    wsHandler.broadcast({ type: 'academic_period_updated' });
     sendSuccess(res, { message: 'Academic year deleted successfully' }, 200);
   } catch (err) {
     next(err);

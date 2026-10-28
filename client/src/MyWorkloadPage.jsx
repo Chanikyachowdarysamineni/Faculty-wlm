@@ -64,6 +64,17 @@ const MyWorkloadPage = ({ currentUser }) => {
     return () => clearInterval(id);
   }, [fetchWorkloads]);
 
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      fetchWorkloads({ withLoader: false });
+    };
+    window.addEventListener('wlm:workloads_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:workloads_reload', handleReload);
+    };
+  }, [fetchWorkloads]);
+
   useEffect(() => {
     const onVisible = () => {
       if (!document.hidden) fetchWorkloads({ withLoader: false });

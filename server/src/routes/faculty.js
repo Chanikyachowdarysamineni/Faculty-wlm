@@ -30,6 +30,7 @@ const { recalculateCapacity } = require('../utils/capacityUtils');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 const { getDefaultCapacity } = require('../utils/designationUtils');
 const { buildFacultyDateFilter, validateEmploymentDates } = require('../utils/academicPeriodUtils');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
@@ -381,8 +382,10 @@ router.post(
         semester: req.academicPeriod?.academicYearSemester?.semesterType
       });
 
-      // Emit websocket event if possible, assuming wsHandler is available globally or we can let RealtimeCapacityContext pull on refresh
-      // For now, the creation is successful.
+      wsHandler.broadcast({
+        type: 'faculty_updated',
+        data: { action: 'create', empId: doc.empId }
+      });
       sendCreated(res, toClient(doc));
     } catch (err) {
       await session.abortTransaction();
@@ -629,6 +632,14 @@ router.put(
       const freshDoc = freshDocs[0] || doc;
 
       logger.info('Faculty updated successfully', { empId, fields: Object.keys(allowedUpdates), userId: req.user.id, isSelfEdit: isSelf });
+      wsHandler.broadcast({
+        type: 'faculty_updated',
+        data: { action: 'update', empId: allowedUpdates.empId || empId }
+      });
+      if (allowedUpdates.empId || allowedUpdates.name || allowedUpdates.designation || capacity !== undefined) {
+        wsHandler.broadcast({ type: 'workloads_reload' });
+        wsHandler.broadcast({ type: 'allocations_reload' });
+      }
       sendSuccess(res, toClient(freshDoc), 200);
     } catch (err) {
       await session.abortTransaction();
@@ -701,6 +712,12 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
     session.endSession();
 
     logger.info('Faculty soft deleted with cascade cleanup', { empId, name: doc.name, userId: req.user.id, cleanupStats: counters });
+    wsHandler.broadcast({
+      type: 'faculty_updated',
+      data: { action: 'delete', empId }
+    });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
     sendSuccess(res, { message: 'Faculty member deleted successfully.', cleaned: counters }, 200);
   } catch (err) {
     await session.abortTransaction();
@@ -737,6 +754,12 @@ router.post('/:empId/restore', requireAuth, requireAdmin, async (req, res, next)
     session.endSession();
 
     logger.info('Faculty restored', { empId, userId: req.user.id });
+    wsHandler.broadcast({
+      type: 'faculty_updated',
+      data: { action: 'restore', empId }
+    });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
     sendSuccess(res, toClient(doc), 200, { message: 'Faculty member restored successfully.' });
   } catch (err) {
     await session.abortTransaction();

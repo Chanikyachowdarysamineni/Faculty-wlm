@@ -292,12 +292,12 @@ const otpLimiter = createLimiter({
 /**
  * OTP IP LIMITER (Per IP)
  * 
- * Purpose: Prevent enumeration and network-wide spamming
- * Config: Max 20 requests per IP per 15 minutes
+ * Purpose: Prevent enumeration and network-wide spamming while supporting institutional NAT
+ * Config: Max 500 requests per IP per 15 minutes (or AUTH_OTP_IP_RATE_LIMIT)
  */
 const otpIpLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.AUTH_OTP_IP_RATE_LIMIT || 20),
+  max: Number(process.env.AUTH_OTP_IP_RATE_LIMIT || 500),
   keyGenerator: (req) => `otp-ip:${ipKeyGenerator(req)}`,
   message: {
     success: false,

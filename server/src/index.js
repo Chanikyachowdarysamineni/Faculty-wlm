@@ -43,6 +43,7 @@ const helmet       = require('helmet');
 const compression  = require('compression');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
+const emailQueue = require('./services/emailQueue');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeRedis, apiLimiter, strictLimiter } = require('./middleware/rateLimiters');
 
@@ -96,6 +97,8 @@ const DEFAULT_SECTIONS = {
     ...Array.from({ length: 19 }, (_, i) => String(i + 1)),
     ...Array.from({ length: 9 }, (_, i) => String(51 + i)),
   ],
+  'M.Tech_I': ['1'],
+  'M.Tech_II': ['1']
 };
 
 // L-3 FIX: normalizeCourseTypeKey removed (now imported from courseUtils)
@@ -492,6 +495,9 @@ process.on('uncaughtException', (err) => {
 
       // Initialize WebSocket server
       WebSocketHandler.initialize(server);
+
+      // Start durable background email delivery queue worker
+      emailQueue.startWorker();
     });
   }
 
@@ -505,6 +511,11 @@ process.on('uncaughtException', (err) => {
   const gracefulShutdown = (signal) => {
     console.log(`\n⚠️  ${signal} received. Closing servers…`);
     
+    // Stop email queue worker
+    emailQueue.stopWorker().catch((err) => {
+      logger.error('Error stopping email queue worker', { error: err.message });
+    });
+
     // Close WebSocket server first
     WebSocketHandler.close();
     

@@ -244,28 +244,46 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const { faculty: contextFaculty, courses: contextCourses, systemConfig} = useSharedData();
 
-  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
+  const BASE_BTECH_YEARS = ['I', 'II', 'III', 'IV'];
+  const BASE_MTECH_YEARS = ['I', 'II'];
+
+  const configPrograms = (systemConfig?.programs || [])
+    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+    .filter(Boolean);
   const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
   }, [configPrograms, distinctCoursePrograms]);
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
   const [activeProgram, setActiveProgram] = useState('');
   const [activeYear,    setActiveYear]    = useState('');
-
-  const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
-  const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
-  const YEARS = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
+  const [sectionsConfig, setSectionsConfig] = useState({});
 
   const displayYears = useMemo(() => {
-    const inProg = Array.from(new Set((contextCourses || []).filter(c => c.program === activeProgram).map(c => c.year).filter(Boolean)));
-    return Array.from(new Set([...YEARS, ...inProg])).sort((a, b) => {
-      const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+    const isMTech = activeProgram === 'M.Tech';
+    const baseYears = isMTech ? BASE_MTECH_YEARS : BASE_BTECH_YEARS;
+    const inProg = Array.from(
+      new Set(
+        (contextCourses || [])
+          .filter(c => c.program === activeProgram)
+          .map(c => c.year)
+          .filter(Boolean)
+      )
+    );
+    const inSections = Object.keys(sectionsConfig || {})
+      .filter(k => isMTech ? k.startsWith('M.Tech_') : (!k.includes('_') || k.startsWith('B.Tech_')))
+      .map(k => k.includes('_') ? k.split('_')[1] : k)
+      .filter(Boolean);
+
+    const romanOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
+    return Array.from(new Set([...baseYears, ...inProg, ...inSections])).sort((a, b) => {
       return (romanOrder[a] || 99) - (romanOrder[b] || 99);
     });
-  }, [activeProgram, contextCourses, YEARS]);
+  }, [activeProgram, contextCourses, sectionsConfig]);
 
   useEffect(() => {
     if (PROGRAMS.length > 0 && (!activeProgram || !PROGRAMS.includes(activeProgram))) {
@@ -285,7 +303,6 @@ const AllocationPage = ({ isAdmin = true }) => {
   const [unsaved,       setUnsaved]       = useState(false);
   const { showToast } = useToast();
   const [lastSyncedAt,  setLastSyncedAt]  = useState(null);
-  const [sectionsConfig, setSectionsConfig] = useState({});
   const [facultyList, setFacultyList] = useState([]);
   const [courseList, setCourseList] = useState([]);
   const persistTimersRef = useRef({});
@@ -326,7 +343,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   // yearKey must be defined before any hook that uses it
   const effectiveProg = activeProgram || PROGRAMS[0] || 'B.Tech';
   const effectiveYear = activeYear || displayYears[0] || 'I';
-  const yearKey = effectiveProg === (PROGRAMS[0] || 'B.Tech') ? effectiveYear : `${effectiveProg}_${effectiveYear}`;
+  const yearKey = effectiveProg === 'B.Tech' ? effectiveYear : `${effectiveProg}_${effectiveYear}`;
 
   const markSynced = useCallback(() => setLastSyncedAt(new Date()), []);
 
@@ -398,7 +415,7 @@ const AllocationPage = ({ isAdmin = true }) => {
     const curProg = activeProgram || PROGRAMS[0] || 'B.Tech';
     const curYear = activeYear || displayYears[0] || 'I';
     return courseList.filter(c => {
-      const progMatch = c.program === curProg || (!c.program && curProg === (PROGRAMS[0] || 'B.Tech'));
+      const progMatch = c.program === curProg || (!c.program && curProg === 'B.Tech');
       const yearMatch = c.year === curYear || 
                         romanToNum[c.year] === curYear || 
                         numToRoman[c.year] === curYear;
@@ -538,11 +555,20 @@ const AllocationPage = ({ isAdmin = true }) => {
     const onVisibility = () => {
       if (!document.hidden) refreshAllocationReadData({ withLoader: false });
     };
+    const onRealtimeReload = () => {
+      refreshAllocationReadData({ withLoader: false });
+    };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onVisibility);
+    window.addEventListener('wlm:allocations_reload', onRealtimeReload);
+    window.addEventListener('wlm:workloads_reload', onRealtimeReload);
+    window.addEventListener('wlm:sections_reload', onRealtimeReload);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onVisibility);
+      window.removeEventListener('wlm:allocations_reload', onRealtimeReload);
+      window.removeEventListener('wlm:workloads_reload', onRealtimeReload);
+      window.removeEventListener('wlm:sections_reload', onRealtimeReload);
     };
   }, [refreshAllocationReadData]);
 
@@ -657,10 +683,17 @@ const AllocationPage = ({ isAdmin = true }) => {
       activeYear
     ];
     let found = [];
-    for (const k of candidateKeys) {
-      if (Array.isArray(sectionsConfig[k]) && sectionsConfig[k].length > 0) {
-        found = sectionsConfig[k];
-        break;
+    if (activeProgram === 'M.Tech') {
+      const mTechKey = `M.Tech_${activeYear}`;
+      found = Array.isArray(sectionsConfig[mTechKey]) && sectionsConfig[mTechKey].length > 0
+        ? sectionsConfig[mTechKey]
+        : ['1'];
+    } else {
+      for (const k of candidateKeys) {
+        if (Array.isArray(sectionsConfig[k]) && sectionsConfig[k].length > 0) {
+          found = sectionsConfig[k];
+          break;
+        }
       }
     }
     setSections([...found]);

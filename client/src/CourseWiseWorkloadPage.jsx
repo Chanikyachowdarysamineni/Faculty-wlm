@@ -162,6 +162,19 @@ const CourseWiseWorkloadPage = () => {
     fetchData();
   }, [selectedAcademicYearId, selectedSemester]);
 
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      fetchData();
+    };
+    window.addEventListener('wlm:workloads_reload', handleReload);
+    window.addEventListener('wlm:courses_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:workloads_reload', handleReload);
+      window.removeEventListener('wlm:courses_reload', handleReload);
+    };
+  }, [selectedAcademicYearId, selectedSemester]);
+
   const fetchData = async () => {
     setLoading(true);
     setError('');

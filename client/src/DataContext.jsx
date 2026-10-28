@@ -44,6 +44,50 @@ export const DataProvider = ({ children }) => {
     return () => window.removeEventListener('academicPeriodChanged', handlePeriodChange);
   }, []);
 
+  // Connect WebSocket and listen for real-time updates
+  React.useEffect(() => {
+    const token = localStorage.getItem('wlm_token');
+    if (token) {
+      const wsClient = require('./utils/WebSocketClient').default;
+      wsClient.connect();
+    }
+
+    const handleRealtime = (e) => {
+      const msg = e?.detail;
+      if (!msg) return;
+
+      if (msg.type === 'sections_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:sections_reload'));
+      }
+      if (msg.type === 'academic_period_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:academic_period_reload'));
+      }
+      if (msg.type === 'allocations_updated' || msg.type === 'allocations_reload') {
+        window.dispatchEvent(new CustomEvent('wlm:allocations_reload'));
+      }
+      if (msg.type === 'workload_updated' || msg.type === 'workloads_reload') {
+        window.dispatchEvent(new CustomEvent('wlm:workloads_reload'));
+      }
+      if (msg.type === 'settings_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:settings_reload'));
+      }
+      if (msg.type === 'courses_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:courses_reload'));
+      }
+      if (msg.type === 'faculty_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:faculty_reload'));
+      }
+      if (msg.type === 'submissions_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:submissions_reload'));
+      }
+    };
+
+    window.addEventListener('wlm:realtime', handleRealtime);
+    return () => {
+      window.removeEventListener('wlm:realtime', handleRealtime);
+    };
+  }, []);
+
   const value = {
     faculty,
     setFaculty,

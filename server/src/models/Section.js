@@ -7,7 +7,7 @@ const sectionSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true }, // e.g., '1', '2', 'A'
     code: { type: String, trim: true, default: '' },
     department: { type: String, default: 'CSE', trim: true },
-    year: { type: String, required: true, enum: ['I', 'II', 'III', 'IV'] },
+    year: { type: String, required: true, trim: true },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
     description: { type: String, trim: true, default: '' },
     displayName: { type: String, trim: true, default: '' },

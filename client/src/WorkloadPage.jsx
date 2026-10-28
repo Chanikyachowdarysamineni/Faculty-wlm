@@ -329,7 +329,12 @@ const WorkloadPage = ({ submissions }) => {
 
   useEffect(() => {
     const id = setInterval(() => { fetchWorkloads({ withLoader: false }); }, AUTO_REFRESH_MS);
-    return () => clearInterval(id);
+    const onRealtimeWorkload = () => { fetchWorkloads({ withLoader: false }); };
+    window.addEventListener('wlm:workloads_reload', onRealtimeWorkload);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('wlm:workloads_reload', onRealtimeWorkload);
+    };
   }, [fetchWorkloads, selectedAcademicYear, selectedSemester]);
 
   // ── derived from current form ──
@@ -345,9 +350,7 @@ const WorkloadPage = ({ submissions }) => {
   const sectionConfigKey = isMTech ? `M.Tech_${form.year}` : form.year;
   const sections = (sectionsConfig && (
     sectionsConfig[sectionConfigKey] || 
-    sectionsConfig[form.year] || 
-    sectionsConfig[`B.Tech_${form.year}`] ||
-    sectionsConfig['I']
+    (!isMTech ? (sectionsConfig[form.year] || sectionsConfig[`B.Tech_${form.year}`] || sectionsConfig['I']) : ['1'])
   )) || ['1'];
 
   const allocationPreviewRows = useMemo(() => {
@@ -497,22 +500,26 @@ const WorkloadPage = ({ submissions }) => {
   };
 
   const handleAddSection = async () => {
-    const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
-    const section = window.prompt(`Add section for ${targetYear}:`);
+    const isMTechCourse = selectedCourse?.program === 'M.Tech';
+    const formYearVal = form.year && form.year !== '__other__' ? form.year : 'I';
+    const targetYearKey = isMTechCourse ? `M.Tech_${formYearVal}` : formYearVal;
+    const section = window.prompt(`Add section for ${isMTechCourse ? 'M.Tech ' : ''}${formYearVal} Year:`);
     if (!section) return;
-    const data = await addSectionConfig(targetYear, section.trim(), selectedAcademicYear);
+    const data = await addSectionConfig(targetYearKey, section.trim(), selectedAcademicYear, selectedSemester);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not add section.'}`);
     await loadSectionsConfig();
-    if (targetYear === form.year) setForm(p => ({ ...p, section: section.trim() }));
+    if (formYearVal === form.year) setForm(p => ({ ...p, section: section.trim() }));
     showToast('Section added.');
   };
 
   const handleEditSection = async () => {
     if (!form.section || form.section === '__other__') return;
-    const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
-    const next = window.prompt(`Rename section '${form.section}'`, form.section);
+    const isMTechCourse = selectedCourse?.program === 'M.Tech';
+    const formYearVal = form.year && form.year !== '__other__' ? form.year : 'I';
+    const targetYearKey = isMTechCourse ? `M.Tech_${formYearVal}` : formYearVal;
+    const next = window.prompt(`Rename section '${form.section}' for ${isMTechCourse ? 'M.Tech ' : ''}${formYearVal} Year`, form.section);
     if (!next || next.trim() === form.section) return;
-    const data = await renameSectionConfig(targetYear, form.section, next.trim(), selectedAcademicYear);
+    const data = await renameSectionConfig(targetYearKey, form.section, next.trim(), selectedAcademicYear, selectedSemester);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not edit section.'}`);
     await loadSectionsConfig();
     setForm(p => ({ ...p, section: next.trim() }));
@@ -521,13 +528,15 @@ const WorkloadPage = ({ submissions }) => {
 
   const handleDeleteSection = async () => {
     if (!form.section || form.section === '__other__') return;
-    const targetYear = form.year && form.year !== '__other__' ? form.year : 'I';
-    if (!window.confirm(`Delete section '${form.section}' for ${targetYear}?`)) return;
-    const data = await deleteSectionConfig(targetYear, form.section, selectedAcademicYear);
+    const isMTechCourse = selectedCourse?.program === 'M.Tech';
+    const formYearVal = form.year && form.year !== '__other__' ? form.year : 'I';
+    const targetYearKey = isMTechCourse ? `M.Tech_${formYearVal}` : formYearVal;
+    if (!window.confirm(`Delete section '${form.section}' for ${isMTechCourse ? 'M.Tech ' : ''}${formYearVal} Year?`)) return;
+    const data = await deleteSectionConfig(targetYearKey, form.section, selectedAcademicYear, selectedSemester);
     if (!data.success) return showToast(`⚠ ${data.message || 'Could not delete section.'}`);
     const refreshed = await fetchSectionsConfig(selectedAcademicYear, selectedSemester).catch(() => ({}));
     setSectionsConfig(refreshed);
-    const nextList = refreshed[targetYear] || ['1'];
+    const nextList = refreshed[targetYearKey] || ['1'];
     setForm(p => ({ ...p, section: nextList[0] || '1' }));
     showToast('Section deleted.');
   };

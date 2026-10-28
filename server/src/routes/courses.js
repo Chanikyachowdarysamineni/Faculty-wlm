@@ -23,18 +23,23 @@ const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateCourseCreate, validatePagination } = require('../middleware/validators');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
-// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV'
 const normalizeYear = (year) => {
-  const trimmed = String(year || '').trim().toUpperCase();
-  if (trimmed === 'I' || trimmed === '1') return 'I';
-  if (trimmed === 'II' || trimmed === '2') return 'II';
-  if (trimmed === 'III' || trimmed === '3') return 'III';
-  if (trimmed === 'IV' || trimmed === '4') return 'IV';
-  return trimmed; // Return as-is if not recognized
+  const trimmed = String(year || '').trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'I' || upper === '1') return 'I';
+  if (upper === 'II' || upper === '2') return 'II';
+  if (upper === 'III' || upper === '3') return 'III';
+  if (upper === 'IV' || upper === '4') return 'IV';
+  if (upper === 'V' || upper === '5') return 'V';
+  if (upper === 'VI' || upper === '6') return 'VI';
+  if (upper === 'M.TECH_I' || upper === 'MTECH_I' || upper === 'M.TECH-I' || upper === 'MTECH I') return 'M.Tech_I';
+  if (upper === 'M.TECH_II' || upper === 'MTECH_II' || upper === 'M.TECH-II' || upper === 'MTECH II') return 'M.Tech_II';
+  return trimmed;
 };
 
 // HELPER: Derive year from subject code if year field is empty
@@ -214,6 +219,10 @@ router.post(
         allowedSections: Array.isArray(allowedSections) ? allowedSections.map(s => String(s).trim()).filter(Boolean) : [],
       });
       logger.info('Course created', { courseId: doc.courseId, subjectCode: doc.subjectCode, userId: req.user.id });
+      wsHandler.broadcast({
+        type: 'courses_updated',
+        data: { action: 'create', course: toClient(doc) }
+      });
       sendCreated(res, toClient(doc));
     } catch (err) {
       if (err.code === 11000 || err.code === 11001) {
@@ -324,6 +333,14 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     session.endSession();
 
     logger.info('Course updated', { courseId, fields: Object.keys(updates), userId: req.user.id });
+    wsHandler.broadcast({
+      type: 'courses_updated',
+      data: { action: 'update', course: toClient(doc) }
+    });
+    if (Object.keys(cascadeUpdates).length > 0) {
+      wsHandler.broadcast({ type: 'workloads_reload' });
+      wsHandler.broadcast({ type: 'allocations_reload' });
+    }
     sendSuccess(res, toClient(doc), 200);
   } catch (err) {
     await session.abortTransaction();
@@ -376,6 +393,12 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     session.endSession();
 
     logger.info('Course deleted', { courseId, subjectCode: doc.subjectCode, userId: req.user.id });
+    wsHandler.broadcast({
+      type: 'courses_updated',
+      data: { action: 'delete', courseId }
+    });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
     sendSuccess(res, { message: 'Course deleted.' }, 200);
   } catch (err) {
     await session.abortTransaction();
@@ -420,6 +443,12 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req, res, next) =>
     session.endSession();
 
     logger.info('Course restored', { courseId, userId: req.user.id });
+    wsHandler.broadcast({
+      type: 'courses_updated',
+      data: { action: 'restore', course: toClient(doc) }
+    });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
     sendSuccess(res, toClient(doc), 200, { message: 'Course restored successfully.' });
   } catch (err) {
     await session.abortTransaction();

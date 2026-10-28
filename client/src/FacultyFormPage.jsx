@@ -19,10 +19,14 @@ const FacultyFormPage = ({
   const activeYearsRaw = (systemConfig?.years || []).filter(y => y.isActive && y.value !== 'Other').map(y => y.value);
   const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
   const YEARS_ORDER = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
-  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
+  const configPrograms = (systemConfig?.programs || [])
+    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+    .filter(Boolean);
   const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
   }, [configPrograms, distinctCoursePrograms]);
   
   // Auto-fill empId for logged-in faculty
@@ -142,6 +146,19 @@ const FacultyFormPage = ({
       if (!silent) setMasterLoading(false);
     }
   }, [selectedSemester, selectedAcademicYear]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      loadMasterData({ silent: true });
+    };
+    window.addEventListener('wlm:courses_reload', handleReload);
+    window.addEventListener('wlm:faculty_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:courses_reload', handleReload);
+      window.removeEventListener('wlm:faculty_reload', handleReload);
+    };
+  }, [loadMasterData]);
 
   const foundFaculty = useMemo(
     () => facultyList.find(f => f.empId === empIdInput.trim()),

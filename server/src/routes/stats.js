@@ -25,7 +25,9 @@ const router = express.Router();
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))]
+  I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
+  'M.Tech_I': ['1'],
+  'M.Tech_II': ['1']
 };
 
 const getSectionsConfig = async (academicYear, semester) => {

@@ -565,7 +565,18 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
     if (!isAdmin) return;
     refreshDashboardData();
     const id = setInterval(refreshDashboardData, AUTO_REFRESH_MS);
-    return () => clearInterval(id);
+    const onRealtimeReload = () => { refreshDashboardData(); };
+    window.addEventListener('wlm:allocations_reload', onRealtimeReload);
+    window.addEventListener('wlm:workloads_reload', onRealtimeReload);
+    window.addEventListener('wlm:settings_reload', onRealtimeReload);
+    window.addEventListener('wlm:academic_period_reload', onRealtimeReload);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('wlm:allocations_reload', onRealtimeReload);
+      window.removeEventListener('wlm:workloads_reload', onRealtimeReload);
+      window.removeEventListener('wlm:settings_reload', onRealtimeReload);
+      window.removeEventListener('wlm:academic_period_reload', onRealtimeReload);
+    };
   }, [isAdmin, refreshDashboardData]);
 
   useEffect(() => {

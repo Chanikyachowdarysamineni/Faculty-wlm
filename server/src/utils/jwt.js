@@ -31,7 +31,7 @@ const EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
  * @returns {string} signed token
  */
 const signToken = (payload) =>
-  jwt.sign(payload, SECRET, { algorithm: 'HS256' });
+  jwt.sign(payload, SECRET, { algorithm: 'HS256', expiresIn: EXPIRES });
 
 /**
  * Verify and decode a JWT.

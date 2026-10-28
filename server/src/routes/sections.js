@@ -7,22 +7,32 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendCreated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
 const normalizeYear = (year) => {
-  const trimmed = String(year || '').trim().toUpperCase();
-  if (trimmed === 'I' || trimmed === '1') return 'I';
-  if (trimmed === 'II' || trimmed === '2') return 'II';
-  if (trimmed === 'III' || trimmed === '3') return 'III';
-  if (trimmed === 'IV' || trimmed === '4') return 'IV';
+  const trimmed = String(year || '').trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'I' || upper === '1') return 'I';
+  if (upper === 'II' || upper === '2') return 'II';
+  if (upper === 'III' || upper === '3') return 'III';
+  if (upper === 'IV' || upper === '4') return 'IV';
+  if (upper === 'V' || upper === '5') return 'V';
+  if (upper === 'VI' || upper === '6') return 'VI';
+  if (upper === 'M.TECH_I' || upper === 'MTECH_I' || upper === 'M.TECH-I' || upper === 'MTECH I') return 'M.Tech_I';
+  if (upper === 'M.TECH_II' || upper === 'MTECH_II' || upper === 'M.TECH-II' || upper === 'MTECH II') return 'M.Tech_II';
   return trimmed;
 };
 
 // Validation rules
 const sectionValidation = [
   body('name').trim().notEmpty().withMessage('Section name is required'),
-  body('year').customSanitizer(normalizeYear).isIn(['I', 'II', 'III', 'IV']).withMessage('Valid year is required'),
+  body('year')
+    .trim()
+    .notEmpty()
+    .withMessage('Valid year is required')
+    .customSanitizer(normalizeYear),
   body('department').optional().trim(),
   body('status').optional().isIn(['Active', 'Inactive']),
 ];
@@ -70,6 +80,11 @@ router.post('/', requireAuth, requireAdmin, sectionValidation, async (req, res, 
     
     await newSection.save();
     
+    wsHandler.broadcast({
+      type: 'sections_updated',
+      data: { action: 'create', section: newSection }
+    });
+
     sendCreated(res, newSection);
   } catch (err) {
     next(err);
@@ -92,6 +107,11 @@ router.put('/:id', requireAuth, requireAdmin, sectionValidation, async (req, res
     
     if (!updated) return res.status(404).json({ success: false, message: 'Section not found' });
     
+    wsHandler.broadcast({
+      type: 'sections_updated',
+      data: { action: 'update', section: updated }
+    });
+
     sendSuccess(res, updated);
   } catch (err) {
     next(err);
@@ -109,6 +129,11 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     
     if (!section) return res.status(404).json({ success: false, message: 'Section not found' });
     
+    wsHandler.broadcast({
+      type: 'sections_updated',
+      data: { action: 'delete', sectionId: req.params.id }
+    });
+
     sendSuccess(res, { message: 'Section deleted successfully' });
   } catch (err) {
     next(err);

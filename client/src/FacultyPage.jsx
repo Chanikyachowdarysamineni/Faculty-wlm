@@ -124,6 +124,17 @@ const FacultyPage = () => {
     }
   }, [contextFaculty, deduplicateList, refetchFaculty, selectedSemester, selectedAcademicYear]);
 
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      refetchFaculty();
+    };
+    window.addEventListener('wlm:faculty_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:faculty_reload', handleReload);
+    };
+  }, [refetchFaculty]);
+
   // Fetch designations
   useEffect(() => {
     const fetchDesignations = async () => {

@@ -19,9 +19,14 @@ class WebSocketClient {
   getWebSocketURL() {
     let backendUrl;
 
-    if (process.env.NODE_ENV === 'development') {
-      // Development: Use current hostname with port 5000
-      const host = window.location.hostname;
+    if (process.env.REACT_APP_WS_URL) {
+      backendUrl = process.env.REACT_APP_WS_URL.replace(/\/+$/, '');
+    } else if (process.env.REACT_APP_API_URL && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
+      const apiUrl = process.env.REACT_APP_API_URL.replace(/\/+$/, '');
+      backendUrl = apiUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    } else if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development or localhost: Use current hostname with port 5000
+      const host = window.location.hostname || 'localhost';
       backendUrl = `ws://${host}:5000`;
     } else {
       // Production: Match page protocol (HTTPS → WSS, HTTP → WS)
@@ -43,27 +48,27 @@ class WebSocketClient {
    */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-
       return;
     }
 
     this.url = this.getWebSocketURL();
 
-
     try {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-
         this.reconnectAttempts = 0;
         this.emit('connect');
       };
 
       this.ws.onmessage = (event) => {
-
         try {
           const data = JSON.parse(event.data);
           this.emit('message', data);
+          if (data && data.type) {
+            this.emit(data.type, data);
+            window.dispatchEvent(new CustomEvent('wlm:realtime', { detail: data }));
+          }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
           this.emit('message', event.data);

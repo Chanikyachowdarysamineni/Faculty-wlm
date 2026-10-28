@@ -10,8 +10,9 @@ const otpTokenSchema = new mongoose.Schema(
     expiresAt:      { type: Date, required: true },
     usedAt:         { type: Date, default: null },
     attempts:       { type: Number, default: 0 },              // wrong-guess counter (max 5)
-    deliveryStatus: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
+    deliveryStatus: { type: String, enum: ['pending', 'queued', 'processing', 'sent', 'failed'], default: 'pending' },
     deliveryError:  { type: String, default: null },
+    deliveredAt:    { type: Date, default: null },
   },
   { timestamps: true, collection: 'otp_tokens' }
 );

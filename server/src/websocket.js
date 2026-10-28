@@ -116,6 +116,11 @@ class WebSocketHandler {
         break;
 
       case 'broadcast':
+        if (!ws.user || (String(ws.user.role || '').toLowerCase() !== 'admin' && !ws.user.canAccessAdmin)) {
+          logger.warn(`Unauthorized broadcast attempt from ${clientIp} (User: ${ws.user?.id})`);
+          ws.send(JSON.stringify({ type: 'error', error: 'Admin privileges required to broadcast' }));
+          break;
+        }
         this.broadcast({
           type: 'notification',
           from: clientIp,

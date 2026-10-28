@@ -20,7 +20,8 @@ const Faculty  = require('../models/Faculty');
 const OtpToken = require('../models/OtpToken');
 const TokenBlacklist = require('../models/TokenBlacklist');
 const { signToken } = require('../utils/jwt');
-const { requireAuth, validateActiveSession } = require('../middleware/auth');
+const { requireAuth, requireAdmin, validateActiveSession } = require('../middleware/auth');
+const emailQueue = require('../services/emailQueue');
 const getIp = (req) => req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 const { sendSuccess, sendError, sendUnauthorized, sendValidationError } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -90,18 +91,47 @@ const maskEmail = (email = '') => {
   return `${maskedLocal}@${domain}`;
 };
 
-// ── OTP Email sender ──────────────────────────────────────
-const sendOtpEmail = async ({ toEmail, empId, otp, expiryMinutes }) => {
-  const transport = getMailTransport();
-  if (!transport) {
-    logger.error('SMTP configuration missing: SMTP_HOST environment variable is not set.');
-    throw new Error('SMTP environment variables are not configured on the production server.');
+/**
+ * Resolve User and Faculty records by either Employee ID or verified linked Email address
+ */
+const findUserAndFaculty = async (identifier) => {
+  const trimmed = String(identifier || '').trim();
+  const isEmail = trimmed.includes('@');
+
+  if (isEmail) {
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const emailRegex = new RegExp(`^${escaped}$`, 'i');
+
+    let user = await User.findOne({ email: emailRegex });
+    let facultyData = await Faculty.findOne({ email: emailRegex }).lean();
+
+    // Cross-reference: find matching Faculty if only User was found or vice versa
+    if (user && !facultyData) {
+      facultyData = await Faculty.findOne({ empId: user.empId }).lean();
+    } else if (!user && facultyData) {
+      user = await User.findOne({ empId: facultyData.empId });
+    }
+
+    const resolvedEmpId = user?.empId || facultyData?.empId || null;
+    return { user, facultyData, isEmail: true, resolvedEmpId };
   }
 
-  const fromName  = process.env.MAIL_FROM_NAME || 'VFSTR Faculty System';
-  const fromEmail = process.env.SMTP_USER; // Strictly use authenticated user to prevent spoofing flags
+  // Standard Employee ID lookup
+  const [user, facultyData] = await Promise.all([
+    User.findOne({ empId: trimmed }),
+    Faculty.findOne({ empId: trimmed }).lean(),
+  ]);
 
-  const htmlBody = `
+  return { user, facultyData, isEmail: false, resolvedEmpId: trimmed };
+};
+
+/**
+ * Build professional responsive OTP email template
+ */
+const generateOtpEmailContent = (otp, expiryMinutes) => {
+  const subject = 'Your OTP Login Code – Faculty Workload Management System';
+
+  const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -161,7 +191,7 @@ const sendOtpEmail = async ({ toEmail, empId, otp, expiryMinutes }) => {
 </html>
 `;
 
-  const textBody =
+  const text =
 `Dear Faculty Member,
 
 Your One-Time Password (OTP) for logging in to the Faculty Workload Management System – Department of Computer Science & Engineering is:
@@ -184,21 +214,11 @@ Regards,
 Department of Computer Science & Engineering
 VFSTR.`;
 
-  const info = await transport.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    replyTo: fromEmail,
-    to: toEmail,
-    subject: 'Your OTP Login Code – Faculty Workload Management System',
-    text: textBody,
-    html: htmlBody
-  });
-  return info;
+  return { subject, html, text };
 };
 
-
-
 // ─────────────────────────────────────────────────────────
-//  POST /api/auth/send-otp   — faculty enters employee ID → OTP is emailed
+//  POST /api/auth/send-otp   — faculty enters empId OR linked email → OTP queued
 // ─────────────────────────────────────────────────────────
 router.post(
   '/send-otp',
@@ -208,29 +228,32 @@ router.post(
     body('employeeId')
       .trim()
       .notEmpty()
-      .withMessage('Employee ID is required.')
-      .isLength({ min: 1, max: 50 })
-      .withMessage('Invalid Employee ID format.')
-      .matches(/^[a-zA-Z0-9_\-\.]+$/)
-      .withMessage('Employee ID contains invalid characters.'),
+      .withMessage('Employee ID or linked email is required.')
+      .isLength({ min: 1, max: 100 })
+      .withMessage('Invalid identifier format.')
+      .matches(/^[a-zA-Z0-9_\-\.@+]+$/)
+      .withMessage('Identifier contains invalid characters.'),
   ],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
-      const empId = req.body.employeeId.trim();
-
-      // Check user and faculty in parallel using lean queries for max performance
-      const [user, facultyData] = await Promise.all([
-        User.findOne({ empId }).lean(),
-        Faculty.findOne({ empId }).lean(),
-      ]);
+      const rawIdentifier = req.body.employeeId.trim();
+      const { user, facultyData, isEmail } = await findUserAndFaculty(rawIdentifier);
 
       if (!user) {
-        logger.warn('OTP requested for non-existent user', { empId, ip: getIp(req) });
-        return sendError(res, 'Employee ID is not registered. Please contact the administrator.', 404);
+        logger.warn('OTP requested for non-existent user', { identifier: rawIdentifier, ip: getIp(req) });
+        return sendError(
+          res,
+          isEmail
+            ? 'Email address is not linked to any registered account. Please contact the administrator.'
+            : 'Employee ID is not registered. Please contact the administrator.',
+          404
+        );
       }
+
+      const empId = user.empId;
 
       // Check if faculty is relieved or deleted
       if (user.isDeleted || facultyData?.isDeleted) {
@@ -251,14 +274,14 @@ router.post(
         return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
       }
 
-      // Determine email to send OTP to
-      const email = user.email || facultyData?.email || '';
+      // Determine destination email
+      const email = user.email || facultyData?.email || (isEmail ? rawIdentifier : '');
       if (!email) {
         logger.warn('OTP requested but no email on file', { empId });
-        return sendError(res, 'No email address found for this Employee ID. Please contact the administrator.', 400);
+        return sendError(res, 'No verified email address found for this account. Please contact the administrator.', 400);
       }
 
-      // Enforce 60-second server-side resend cooldown
+      // Enforce 60-second server-side resend cooldown per canonical employee ID
       const recentOtp = await OtpToken.getRecentActiveOtp(empId, 60);
       if (recentOtp) {
         const elapsedSeconds = Math.floor((Date.now() - new Date(recentOtp.createdAt).getTime()) / 1000);
@@ -269,28 +292,38 @@ router.post(
       // Generate cryptographically secure OTP and save to DB
       const { raw: rawOtp, docId } = await OtpToken.createOtp(empId, OTP_EXPIRY_MINUTES);
 
-      // Mask email for display (e.g., vf***@gmail.com)
+      // Mask email for display
       const maskedEmail = maskEmail(email);
 
-      // Dispatch OTP email asynchronously via pooled SMTP connection (non-blocking)
-      sendOtpEmail({ toEmail: email, empId, otp: rawOtp, expiryMinutes: OTP_EXPIRY_MINUTES })
-        .then(() => {
-          logger.info('OTP email sent successfully', { empId, email });
-          OtpToken.updateOne({ _id: docId }, { $set: { deliveryStatus: 'sent' } }).catch(() => {});
-        })
-        .catch((mailErr) => {
-          logger.error('Failed to send OTP email in background', { empId, error: mailErr.message });
-          OtpToken.updateOne({ _id: docId }, { $set: { deliveryStatus: 'failed', deliveryError: mailErr.message } }).catch(() => {});
-        });
+      // Generate email content
+      const { subject, html, text } = generateOtpEmailContent(rawOtp, OTP_EXPIRY_MINUTES);
+
+      // Enqueue into durable email queue (handles provider rate limits, retries, worker pooling)
+      await emailQueue.enqueueEmail({
+        type: 'otp',
+        empId,
+        to: email,
+        subject,
+        text,
+        html,
+        otpTokenId: docId,
+        metadata: { clientIp: getIp(req) },
+      });
 
       // Respond instantly (< 30ms) to frontend
-      return sendSuccess(res, {
-        maskedEmail,
-        expiryMinutes: OTP_EXPIRY_MINUTES,
-        cooldownSeconds: 60,
-      }, 200, {
-        message: `OTP sent to ${maskedEmail}. Valid for ${OTP_EXPIRY_MINUTES} minutes.`,
-      });
+      return sendSuccess(
+        res,
+        {
+          empId,
+          maskedEmail,
+          expiryMinutes: OTP_EXPIRY_MINUTES,
+          cooldownSeconds: 60,
+        },
+        200,
+        {
+          message: `OTP sent to ${maskedEmail}. Valid for ${OTP_EXPIRY_MINUTES} minutes.`,
+        }
+      );
     } catch (err) {
       logger.error('Send OTP error', { error: err.message });
       next(err);
@@ -308,15 +341,18 @@ router.get(
       .trim()
       .notEmpty()
       .withMessage('Employee ID is required.')
-      .matches(/^[a-zA-Z0-9_\-\.]+$/)
-      .withMessage('Invalid Employee ID.'),
+      .matches(/^[a-zA-Z0-9_\-\.@+]+$/)
+      .withMessage('Invalid format.'),
   ],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
-      const empId = req.query.employeeId.trim();
+      const rawIdentifier = req.query.employeeId.trim();
+      const { user, resolvedEmpId } = await findUserAndFaculty(rawIdentifier);
+      const empId = user?.empId || resolvedEmpId || rawIdentifier;
+
       const latestOtp = await OtpToken.findOne({ empId }).sort({ createdAt: -1 }).lean();
 
       if (!latestOtp) {
@@ -324,8 +360,9 @@ router.get(
       }
 
       return sendSuccess(res, {
-        deliveryStatus: latestOtp.deliveryStatus || 'sent',
+        deliveryStatus: latestOtp.deliveryStatus || 'pending',
         deliveryError: latestOtp.deliveryError || null,
+        deliveredAt: latestOtp.deliveredAt || null,
         isExpired: new Date() > new Date(latestOtp.expiresAt),
         isUsed: !!latestOtp.usedAt,
       });
@@ -343,7 +380,12 @@ router.post(
   '/verify-otp',
   loginLimiter,
   [
-    body('employeeId').trim().notEmpty().withMessage('Employee ID is required.'),
+    body('employeeId')
+      .trim()
+      .notEmpty()
+      .withMessage('Employee ID or linked email is required.')
+      .matches(/^[a-zA-Z0-9_\-\.@+]+$/)
+      .withMessage('Invalid format.'),
     body('otp')
       .trim()
       .isLength({ min: 6, max: 6 })
@@ -355,15 +397,16 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return sendValidationError(res, errors.array());
 
-      const empId = req.body.employeeId.trim();
+      const rawIdentifier = req.body.employeeId.trim();
       const rawOtp = req.body.otp.trim();
 
-      const [user, facultyData] = await Promise.all([
-        User.findOne({ empId }),
-        Faculty.findOne({ empId }).lean(),
-      ]);
+      const { user, facultyData, isEmail } = await findUserAndFaculty(rawIdentifier);
 
-      if (!user) return sendError(res, 'Employee ID not found.', 401);
+      if (!user) {
+        return sendError(res, isEmail ? 'Linked email not found.' : 'Employee ID not found.', 401);
+      }
+
+      const empId = user.empId;
 
       if (user.isDeleted || facultyData?.isDeleted) {
         return sendError(res, 'Account deactivated.', 403);
@@ -449,6 +492,19 @@ router.post(
   }
 );
 
+// ─────────────────────────────────────────────────────────
+//  GET /api/auth/email-queue/status  — queue monitoring (admin only)
+// ─────────────────────────────────────────────────────────
+router.get('/email-queue/status', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const stats = await emailQueue.getQueueStats();
+    return sendSuccess(res, stats);
+  } catch (err) {
+    logger.error('Email queue status error', { error: err.message });
+    next(err);
+  }
+});
+
 
 
 // ─────────────────────────────────────────────────────────
@@ -478,9 +534,8 @@ router.post('/logout', requireAuth, async (req, res, next) => {
     }
 
     // Log the logout event and blacklist the token
-    if (req.token && req.user && req.user.exp) {
-      // Decode exp which is in seconds, convert to Date
-      const expiresAt = new Date(req.user.exp * 1000);
+    if (req.token) {
+      const expiresAt = req.user?.exp ? new Date(req.user.exp * 1000) : new Date(Date.now() + 8 * 3600000);
       try {
         await TokenBlacklist.create({ token: req.token, expiresAt });
       } catch (e) {

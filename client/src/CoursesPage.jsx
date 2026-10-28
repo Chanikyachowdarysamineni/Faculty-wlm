@@ -72,10 +72,14 @@ const CoursesPage = ({ isAdmin = true }) => {
   const distinctCourseTypes = Array.from(new Set((courseList || []).map(c => c.courseType).filter(Boolean)));
   const COURSE_TYPES = Array.from(new Set([...(activeCourseTypes.length > 0 ? activeCourseTypes : DEFAULT_COURSE_TYPES), ...distinctCourseTypes])).filter(Boolean);
 
-  const configPrograms = (systemConfig?.programs || []).filter(c => c.isActive).map(c => c.value);
+  const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
+  const configPrograms = (systemConfig?.programs || [])
+    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+    .filter(Boolean);
   const distinctCoursePrograms = Array.from(new Set((courseList || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
   }, [configPrograms, distinctCoursePrograms]);
   const YEARS = allKnownYears.filter(y => y !== 'Other' && y !== 'M.Tech');
 
@@ -148,6 +152,17 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   useEffect(() => {
     fetchCourses();
+  }, [fetchCourses]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => {
+      fetchCourses();
+    };
+    window.addEventListener('wlm:courses_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:courses_reload', handleReload);
+    };
   }, [fetchCourses]);
 
   // ── Re-fetch systemConfig to refresh COURSE_TYPES after modal changes or on mount ──

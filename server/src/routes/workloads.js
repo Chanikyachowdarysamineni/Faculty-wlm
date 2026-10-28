@@ -49,14 +49,18 @@ const DE_SECTION_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
 const DE_COURSE_TYPE_REGEX = /^\s*(de|department\s+elective)\s*$/i;
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
-// Maps: '1' -> 'I', '2' -> 'II', '3' -> 'III', '4' -> 'IV'
 const normalizeYear = (year) => {
-  const trimmed = String(year || '').trim().toUpperCase();
-  if (trimmed === 'I' || trimmed === '1') return 'I';
-  if (trimmed === 'II' || trimmed === '2') return 'II';
-  if (trimmed === 'III' || trimmed === '3') return 'III';
-  if (trimmed === 'IV' || trimmed === '4') return 'IV';
-  return trimmed; // Return as-is if not recognized
+  const trimmed = String(year || '').trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'I' || upper === '1') return 'I';
+  if (upper === 'II' || upper === '2') return 'II';
+  if (upper === 'III' || upper === '3') return 'III';
+  if (upper === 'IV' || upper === '4') return 'IV';
+  if (upper === 'V' || upper === '5') return 'V';
+  if (upper === 'VI' || upper === '6') return 'VI';
+  if (upper === 'M.TECH_I' || upper === 'MTECH_I' || upper === 'M.TECH-I' || upper === 'MTECH I') return 'M.Tech_I';
+  if (upper === 'M.TECH_II' || upper === 'MTECH_II' || upper === 'M.TECH-II' || upper === 'MTECH II') return 'M.Tech_II';
+  return trimmed;
 };
 
 const isDuplicateKeyError = (err) =>
@@ -104,7 +108,9 @@ const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
 
 const sec = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
 const DEFAULT_SECTIONS = {
-  I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))]
+  I: sec(19), II: sec(22), III: sec(19), IV: [...sec(19), ...Array.from({ length: 9 }, (_, i) => String(51 + i))],
+  'M.Tech_I': ['1'],
+  'M.Tech_II': ['1']
 };
 
 const getSectionsConfig = async (academicYear, semester) => {
