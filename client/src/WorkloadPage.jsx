@@ -74,6 +74,36 @@ const normalizeCourseTypeKey = (courseType = '') => {
 
 const isRestrictedDeYear = (year = '') => ['I', 'II', 'III'].includes(String(year || '').trim());
 
+// Canonical year normalizer for client
+const normalizeYearFormat = (y) => {
+  if (y === null || y === undefined) return '';
+  const trimmed = String(y).trim();
+  if (!trimmed) return '';
+  const upper = trimmed.toUpperCase();
+
+  if (
+    upper === 'M.TECH_I' || upper === 'MTECH_I' || upper === 'M.TECH-I' ||
+    upper === 'MTECH I' || upper === 'M.TECH 1' || upper === 'MTECH_1'
+  ) {
+    return 'M.Tech_I';
+  }
+  if (
+    upper === 'M.TECH_II' || upper === 'MTECH_II' || upper === 'M.TECH-II' ||
+    upper === 'MTECH II' || upper === 'M.TECH 2' || upper === 'MTECH_2'
+  ) {
+    return 'M.Tech_II';
+  }
+
+  if (upper === '1' || upper === 'I' || upper === '1ST' || upper === '1ST YEAR' || upper === 'YEAR 1') return 'I';
+  if (upper === '2' || upper === 'II' || upper === '2ND' || upper === '2ND YEAR' || upper === 'YEAR 2') return 'II';
+  if (upper === '3' || upper === 'III' || upper === '3RD' || upper === '3RD YEAR' || upper === 'YEAR 3') return 'III';
+  if (upper === '4' || upper === 'IV' || upper === '4TH' || upper === '4TH YEAR' || upper === 'YEAR 4') return 'IV';
+  if (upper === '5' || upper === 'V' || upper === '5TH' || upper === '5TH YEAR' || upper === 'YEAR 5') return 'V';
+  if (upper === '6' || upper === 'VI' || upper === '6TH' || upper === '6TH YEAR' || upper === 'YEAR 6') return 'VI';
+
+  return trimmed;
+};
+
 const emptyForm = {
   empId: '', empName: '', designation: '', mobile: '', facultyRole: 'Main Faculty',
   taAllocationRow: 'R2',

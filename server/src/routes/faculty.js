@@ -27,7 +27,7 @@ const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated,
 const logger = require('../utils/logger');
 const { validateFacultyCreate, validateFacultyUpdate, validatePagination } = require('../middleware/validators');
 const { recalculateCapacity } = require('../utils/capacityUtils');
-const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+const { ADMIN_EMPLOYEE_IDS, isBootstrapAdmin, isAdminEmployeeId } = require('../config/adminConfig');
 const { getDefaultCapacity } = require('../utils/designationUtils');
 const { buildFacultyDateFilter, validateEmploymentDates } = require('../utils/academicPeriodUtils');
 const wsHandler = require('../websocket');
@@ -351,8 +351,14 @@ router.post(
       const doc = createdDocs[0];
 
       // ── Create User account for faculty with mobile as default password ──
+      const existingUser = await User.findOne({ empId: safeEmpId }).session(session);
+      const isUserAdmin = Boolean(
+        existingUser?.role === 'admin' ||
+        existingUser?.canAccessAdmin ||
+        isBootstrapAdmin(safeEmpId)
+      );
       const defaultPassword = safeMobile ? safeMobile : safeEmpId;
-      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      const passwordHash = existingUser?.passwordHash || (await bcrypt.hash(defaultPassword, 10));
 
       await User.findOneAndUpdate(
         { empId: safeEmpId },
@@ -363,9 +369,9 @@ router.post(
             mobile: safeMobile,
             email: safeEmail,
             passwordHash,
-            role: isAdminEmployeeId(safeEmpId) ? 'admin' : 'faculty',
-            canAccessAdmin: isAdminEmployeeId(safeEmpId),
-            forcePasswordChange: true,
+            role: isUserAdmin ? 'admin' : 'faculty',
+            canAccessAdmin: isUserAdmin,
+            forcePasswordChange: existingUser ? existingUser.forcePasswordChange : true,
             joiningDate: joiningDate || null,
             relievingDate: relievingDate || null,
             isDeleted: false,
@@ -553,6 +559,7 @@ router.put(
             if (facultyDoc) {
               const defaultPassword = String(allowedUpdates.mobile || facultyDoc.mobile || empId).trim();
               const passwordHash = await bcrypt.hash(defaultPassword, 10);
+              const isUserAdmin = isBootstrapAdmin(empId);
               await User.create([{
                 empId,
                 name: allowedUpdates.name || facultyDoc.name,
@@ -560,8 +567,8 @@ router.put(
                 mobile: allowedUpdates.mobile !== undefined ? allowedUpdates.mobile : facultyDoc.mobile,
                 email: allowedUpdates.email !== undefined ? allowedUpdates.email : facultyDoc.email,
                 passwordHash,
-                role: isAdminEmployeeId(empId) ? 'admin' : 'faculty',
-                canAccessAdmin: isAdminEmployeeId(empId),
+                role: isUserAdmin ? 'admin' : 'faculty',
+                canAccessAdmin: isUserAdmin,
                 forcePasswordChange: true,
                 joiningDate: allowedUpdates.joiningDate !== undefined ? allowedUpdates.joiningDate : facultyDoc.joiningDate,
                 relievingDate: allowedUpdates.relievingDate !== undefined ? allowedUpdates.relievingDate : facultyDoc.relievingDate,
@@ -827,11 +834,18 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
         email: String(email).trim(),
       }], { session });
 
-      const defaultPassword = String(mobile).trim() ? String(mobile).trim() : String(empId).trim();
-      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+      const normalizedEmpId = String(empId).trim();
+      const existingUser = await User.findOne({ empId: normalizedEmpId }).session(session);
+      const isUserAdmin = Boolean(
+        existingUser?.role === 'admin' ||
+        existingUser?.canAccessAdmin ||
+        isBootstrapAdmin(normalizedEmpId)
+      );
+      const defaultPassword = String(mobile).trim() ? String(mobile).trim() : normalizedEmpId;
+      const passwordHash = existingUser?.passwordHash || (await bcrypt.hash(defaultPassword, 10));
 
       await User.findOneAndUpdate(
-        { empId: String(empId).trim() },
+        { empId: normalizedEmpId },
         {
           $set: {
             name: String(name).trim(),
@@ -839,9 +853,9 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
             mobile: String(mobile).trim(),
             email: String(email).trim(),
             passwordHash,
-            role: isAdminEmployeeId(String(empId).trim()) ? 'admin' : 'faculty',
-            canAccessAdmin: isAdminEmployeeId(String(empId).trim()),
-            forcePasswordChange: true,
+            role: isUserAdmin ? 'admin' : 'faculty',
+            canAccessAdmin: isUserAdmin,
+            forcePasswordChange: existingUser ? existingUser.forcePasswordChange : true,
             isDeleted: false,
           }
         },

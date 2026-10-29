@@ -32,7 +32,7 @@ const requireAuth = async (req, res, next) => {
 
     const Faculty = require('../models/Faculty');
     const [user, facultyDoc] = await Promise.all([
-      User.findOne({ empId: req.user.id }).select('tokenVersion relievingDate isDeleted').lean(),
+      User.findOne({ empId: req.user.id }).select('role canAccessAdmin tokenVersion relievingDate isDeleted').lean(),
       Faculty.findOne({ empId: req.user.id }).select('relievingDate isDeleted').lean()
     ]);
     if (!user) {
@@ -55,6 +55,12 @@ const requireAuth = async (req, res, next) => {
     if (tokenVer < (user.tokenVersion || 0)) {
       return res.status(401).json({ success: false, message: 'Session expired due to password change.' });
     }
+
+    // Dynamic role & admin access synchronization from DB and bootstrap config
+    const { isBootstrapAdmin } = require('../config/adminConfig');
+    const isBootstrap = isBootstrapAdmin(req.user.id);
+    req.user.role = isBootstrap ? 'admin' : (user.role || req.user.role || 'faculty');
+    req.user.canAccessAdmin = isBootstrap || Boolean(user.canAccessAdmin || String(user.role).toLowerCase() === 'admin');
 
     next();
   } catch (err) {

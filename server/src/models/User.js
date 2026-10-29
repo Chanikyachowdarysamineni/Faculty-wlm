@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema(
     // Login tracking for audit logs (multi-session support enabled)
     lastLoginIp: { type: String, default: null },
     lastLoginAt: { type: Date, default: null },
+    passwordChangedAt: { type: Date, default: null },
     joiningDate: { type: Date, default: null },
     relievingDate: { type: Date, default: null },
   },

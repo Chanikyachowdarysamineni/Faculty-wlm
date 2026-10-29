@@ -1,44 +1,69 @@
 const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
 const request = require('supertest');
 const app = require('../../src/index'); 
 const Workload = require('../../src/models/Workload');
 const Course = require('../../src/models/Course');
+const Faculty = require('../../src/models/Faculty');
+const User = require('../../src/models/User');
 const jwt = require('jsonwebtoken');
 
-let mongoServer;
 let adminToken;
 
 jest.setTimeout(120000);
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
-  
-  // Close any existing connection that index.js might have started
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.disconnect();
+  if (mongoose.connection.readyState === 0) {
+    await mongoose.connect(process.env.MONGO_URI);
   }
-  
-  await mongoose.connect(uri);
+
+  // Seed test faculty members
+  await Promise.all([
+    Faculty.findOneAndUpdate(
+      { empId: 'emp01' },
+      { $set: { name: 'First Main', designation: 'Assistant Professor', department: 'CSE' } },
+      { upsert: true }
+    ),
+    Faculty.findOneAndUpdate(
+      { empId: 'emp02' },
+      { $set: { name: 'Second Main', designation: 'Assistant Professor', department: 'CSE' } },
+      { upsert: true }
+    ),
+    User.findOneAndUpdate(
+      { empId: 'admin-id' },
+      {
+        $set: {
+          name: 'Admin User',
+          passwordHash: 'dummyHash',
+          role: 'admin',
+          canAccessAdmin: true,
+        }
+      },
+      { upsert: true }
+    ),
+  ]);
 
   // Generate a dummy admin token using the strict HS256 config
   adminToken = jwt.sign(
-    { id: 'admin-id', role: 'admin', empId: 'admin' }, 
+    { id: 'admin-id', role: 'admin', empId: 'admin-id' }, 
     process.env.JWT_SECRET || 'test-secret', 
     { expiresIn: '1h', algorithm: 'HS256' }
   );
 }, 120000);
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
+  try {
+    await Promise.all([
+      User.deleteOne({ empId: 'admin-id' }),
+      Faculty.deleteMany({ empId: { $in: ['emp01', 'emp02'] } }),
+      Course.deleteOne({ courseId: '100' }),
+      Workload.deleteMany({ courseId: '100' }),
+    ]);
+    await mongoose.disconnect();
+  } catch {}
 });
 
 afterEach(async () => {
-  if (!mongoServer || (mongoose.connection && mongoose.connection.host && mongoose.connection.host.includes('mongodb.net'))) {
+  if (typeof mongoServer === 'undefined' || !mongoServer || (mongoose.connection && mongoose.connection.host && mongoose.connection.host.includes('mongodb.net'))) {
     return;
   }
   await Workload.deleteMany({});
@@ -71,6 +96,10 @@ describe('Critical Paths: Workload Validation & Concurrency', () => {
     const course = await Course.create({
       courseId: '100',
       courseName: 'Test Course',
+      shortName: 'TC',
+      subjectCode: 'CS100',
+      subjectName: 'Test Course',
+      academicYear: '2025-2026',
       program: 'B.Tech',
       year: 'I',
       courseType: 'Mandatory',
@@ -83,6 +112,8 @@ describe('Critical Paths: Workload Validation & Concurrency', () => {
       empId: 'emp01',
       empName: 'First Main',
       courseId: course.courseId,
+      academicYear: '2025-2026',
+      semester: 'ODD',
       year: 'I',
       section: '1',
       facultyRole: 'Main Faculty',
@@ -98,6 +129,8 @@ describe('Critical Paths: Workload Validation & Concurrency', () => {
         empId: 'emp02',
         empName: 'Second Main',
         courseId: course.courseId,
+        academicYear: '2025-2026',
+        semester: 'ODD',
         year: 'I',
         section: '1',
         facultyRole: 'Main Faculty',

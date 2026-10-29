@@ -4,7 +4,6 @@
  */
 
 const WebSocket = require('ws');
-const url = require('url');
 const logger = require('./utils/logger');
 
 class WebSocketHandler {
@@ -27,8 +26,8 @@ class WebSocketHandler {
     // Handle new connections
     this.wss.on('connection', async (ws, req) => {
       const clientIp = req.socket.remoteAddress;
-      const parsedUrl = url.parse(req.url, true);
-      const token = parsedUrl.query.token;
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      const token = parsedUrl.searchParams.get('token');
 
       if (!token) {
         logger.warn(`WebSocket connection rejected (No token) from ${clientIp}`);

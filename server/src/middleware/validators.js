@@ -3,6 +3,7 @@
 const { body, validationResult, param, query } = require('express-validator');
 const { isValidConfigValue } = require('../utils/configManager');
 const Designation = require('../models/Designation');
+const { matchTaDesignation } = require('../utils/designationUtils');
 const logger = require('../utils/logger');
 
 const { sendError } = require('../utils/response');
@@ -195,7 +196,17 @@ const validateFacultyCreate = [
     .withMessage('Designation is required')
     .custom(async (value) => {
       const escaped = String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const valid = await Designation.findOne({ name: new RegExp(`^${escaped}$`, 'i'), isEnabled: true });
+      let valid = await Designation.findOne({ name: new RegExp(`^${escaped}$`, 'i'), isEnabled: true });
+      if (!valid) {
+        const matchedTa = matchTaDesignation(value);
+        if (matchedTa) {
+          valid = await Designation.findOneAndUpdate(
+            { name: matchedTa },
+            { $setOnInsert: { name: matchedTa, isEnabled: true, order: 99 } },
+            { upsert: true, new: true }
+          );
+        }
+      }
       if (!valid) throw new Error('Invalid designation.');
       return true;
     }),
@@ -261,7 +272,23 @@ const validateFacultyUpdate = [
     .trim()
     .if((value) => value && String(value).trim() !== '')
     .isLength({ min: 2, max: 100 })
-    .withMessage('Designation must be 2-100 characters'),
+    .withMessage('Designation must be 2-100 characters')
+    .custom(async (value) => {
+      const escaped = String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let valid = await Designation.findOne({ name: new RegExp(`^${escaped}$`, 'i'), isEnabled: true });
+      if (!valid) {
+        const matchedTa = matchTaDesignation(value);
+        if (matchedTa) {
+          valid = await Designation.findOneAndUpdate(
+            { name: matchedTa },
+            { $setOnInsert: { name: matchedTa, isEnabled: true, order: 99 } },
+            { upsert: true, new: true }
+          );
+        }
+      }
+      if (!valid) throw new Error('Invalid designation.');
+      return true;
+    }),
 
   body('department')
     .optional({ checkFalsy: true })
@@ -455,14 +482,22 @@ const validateLogin = [
 ];
 
 const validatePasswordReset = [
-  body('token')
-    .trim()
-    .isLength({ min: 32 })
-    .withMessage('Valid reset token is required'),
-
   body('newPassword')
     .isLength({ min: 8 })
     .withMessage('New password must be at least 8 characters'),
+
+  body().custom((val, { req }) => {
+    const b = req.body || {};
+    const hasToken = typeof b.token === 'string' && b.token.trim().length >= 16;
+    const hasCodeAndEmp = typeof b.code === 'string' && b.code.trim().length >= 6 && typeof b.employeeId === 'string' && b.employeeId.trim().length > 0;
+    if (!hasToken && !hasCodeAndEmp) {
+      throw new Error('Valid reset token or employee ID with verification code is required');
+    }
+    if (b.confirmPassword && b.confirmPassword !== b.newPassword) {
+      throw new Error('New password and confirm password do not match');
+    }
+    return true;
+  }),
 
   handleValidationErrors,
 ];
@@ -478,6 +513,9 @@ const validateChangePassword = [
     .custom((value, { req }) => {
       if (value === req.body.currentPassword) {
         throw new Error('New password must be different from current password');
+      }
+      if (req.body.confirmPassword && req.body.confirmPassword !== value) {
+        throw new Error('New password and confirm password do not match');
       }
       return true;
     }),

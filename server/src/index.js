@@ -72,7 +72,7 @@ const courseLoadsRoutes = require('./routes/courseLoads');
 const WebSocketHandler  = require('./websocket');
 
 // ── DB (Mongoose) ────────────────────────────────────────────
-const { connect } = require('./db');
+const { connect, mongoose } = require('./db');
 const Setting     = require('./models/Setting');
 const Workload    = require('./models/Workload');
 const Course      = require('./models/Course');
@@ -104,41 +104,47 @@ const DEFAULT_SECTIONS = {
 // L-3 FIX: normalizeCourseTypeKey removed (now imported from courseUtils)
 
 const backfillWorkloadCourseTypeKeys = async () => {
-  const docs = await Workload.find(
-    {
-      $or: [
-        { courseTypeKey: { $exists: false } },
-        { courseTypeKey: null },
-        { courseTypeKey: '' },
-      ],
-    },
-    { _id: 1, courseType: 1 }
-  ).lean();
+  try {
+    const docs = await Workload.find(
+      {
+        $or: [
+          { courseTypeKey: { $exists: false } },
+          { courseTypeKey: null },
+          { courseTypeKey: '' },
+        ],
+      },
+      { _id: 1, courseType: 1 }
+    ).lean();
 
-  if (!docs.length) return;
+    if (!docs.length) return;
 
-  let updated = 0;
-  let skipped = 0;
+    let updated = 0;
+    let skipped = 0;
 
-  for (const doc of docs) {
-    const courseTypeKey = normalizeCourseTypeKey(doc.courseType);
-    try {
-      const result = await Workload.updateOne(
-        { _id: doc._id },
-        { $set: { courseTypeKey } }
-      );
-      if (result.modifiedCount > 0) updated += 1;
-    } catch (err) {
-      // If this collides with the DE unique index, keep the row unchanged and continue.
-      if (Number(err?.code) === 11000) {
-        skipped += 1;
-        continue;
+    for (const doc of docs) {
+      const courseTypeKey = normalizeCourseTypeKey(doc.courseType);
+      try {
+        const result = await Workload.updateOne(
+          { _id: doc._id },
+          { $set: { courseTypeKey } }
+        );
+        if (result.modifiedCount > 0) updated += 1;
+      } catch (err) {
+        // If this collides with the DE unique index, keep the row unchanged and continue.
+        if (Number(err?.code) === 11000) {
+          skipped += 1;
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
-  }
 
-  console.log(`ℹ️  Workload courseTypeKey backfill: updated=${updated}, skipped=${skipped}`);
+    console.log(`ℹ️  Workload courseTypeKey backfill: updated=${updated}, skipped=${skipped}`);
+  } catch (err) {
+    // Non-blocking: skip if connection is closed or not ready
+    if (err?.name === 'MongoNotConnectedError' || mongoose?.connection?.readyState === 0) return;
+    console.warn(`⚠️  Workload courseTypeKey backfill warning: ${err.message}`);
+  }
 };
 
 // ── App ────────────────────────────────────────────────────
@@ -308,6 +314,16 @@ app.get('/deva/health', (_req, res) => {
 // L-1 FIX: Removed duplicate app.use(helmet()) which was overriding the configured helmet above
 app.use(compression());
 
+// Normalize /csefaculty/deva and /api requests to /deva
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/csefaculty/deva')) {
+    req.url = req.url.slice('/csefaculty'.length);
+  } else if (req.url.startsWith('/api/')) {
+    req.url = '/deva/' + req.url.slice('/api/'.length);
+  }
+  next();
+});
+
 // ── API routes ─────────────────────────────────────────────
 app.use('/deva/auth',                  authRoutes);
 app.use('/deva/designations',          designationsRoutes);
@@ -377,7 +393,8 @@ process.on('uncaughtException', (err) => {
 });
 
 // ── Start — connect to MongoDB first, then listen ──────────
-(async () => {
+if (process.env.NODE_ENV !== 'test') {
+  (async () => {
   await connect();
 
   const dropIndexSafe = async (model, indexName) => {
@@ -411,6 +428,10 @@ process.on('uncaughtException', (err) => {
 
       if (Number(err?.code) === 11000) {
         console.warn(`⚠️  Skipping index build for ${model?.modelName} due to existing duplicate keys: ${errMsg}`);
+        return;
+      }
+
+      if (err?.name === 'MongoNotConnectedError' || mongoose.connection.readyState === 0) {
         return;
       }
 
@@ -534,7 +555,8 @@ process.on('uncaughtException', (err) => {
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
-})();
+  })();
+}
 
 module.exports = app;
 

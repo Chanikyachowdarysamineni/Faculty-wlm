@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './ProfilePage.css';
 import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
@@ -34,6 +34,100 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
   const [editForm, setEditForm] = useState({ mobile: '', email: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState({ text: '', ok: false });
+
+  // ── Change Password State ──
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [changeLoading, setChangeLoading] = useState(false);
+  const [changeError, setChangeError] = useState('');
+  const [changeSuccessModal, setChangeSuccessModal] = useState(null); // { account, changedAt, savedPassword }
+  const [copiedSuccessPassword, setCopiedSuccessPassword] = useState(false);
+  const [showModalPassword, setShowModalPassword] = useState(true);
+
+  // Password strength calculation
+  const newPassStrength = useMemo(() => {
+    if (!newPassword) return { score: 0, label: '', color: '#94a3b8', width: '0%' };
+    let score = 0;
+    if (newPassword.length >= 8) score += 1;
+    if (newPassword.length >= 12) score += 1;
+    if (/[0-9]/.test(newPassword)) score += 1;
+    if (/[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(newPassword)) score += 1;
+
+    if (score <= 2) return { score, label: 'Weak', color: '#ef4444', width: '33%' };
+    if (score <= 3) return { score, label: 'Moderate', color: '#f59e0b', width: '66%' };
+    return { score, label: 'Strong', color: '#10b981', width: '100%' };
+  }, [newPassword]);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setChangeError('');
+
+    if (!currentPassword) {
+      setChangeError('Please enter your current password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setChangeError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setChangeError('New password must be different from your current password.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangeError('New password and confirm password do not match.');
+      return;
+    }
+
+    setChangeLoading(true);
+    try {
+      const res = await fetch(`${API}/deva/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+          ...authHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setChangeError(data.message || (data.errors && data.errors[0]?.message) || 'Failed to change password.');
+      } else {
+        if (data.data?.token) {
+          localStorage.setItem('wlm_token', data.data.token);
+        }
+        if (data.data?.user) {
+          localStorage.setItem('wlm_user', JSON.stringify(data.data.user));
+        }
+
+        // Show the confirmation & screenshot screen
+        setChangeSuccessModal({
+          account: data.data?.account || userId,
+          changedAt: data.data?.changedAt || new Date().toISOString(),
+          savedPassword: newPassword,
+        });
+
+        // Reset sensitive inputs
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch {
+      setChangeError('Network error. Could not reach the authentication server.');
+    } finally {
+      setChangeLoading(false);
+    }
+  };
 
   const authHeaders = useCallback(() => ({ ...authJsonHeaders() }), []);
 
@@ -526,6 +620,195 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
 
 
 
+        {/* ── Change Password Section ─────────────────── */}
+        <section className="pp-section">
+          <h2 className="pp-sec-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Change Password
+          </h2>
+          <p style={{ marginBottom: '20px', fontSize: '13.5px', color: '#64748b', lineHeight: 1.5 }}>
+            Update your account password securely.
+            <span style={{ display: 'block', marginTop: '4px', color: '#4f46e5', fontWeight: 500 }}>
+              💡 If you have not set a personal password yet, your current password is your registered mobile number.
+            </span>
+          </p>
+
+          <form onSubmit={handleChangePassword} style={{ maxWidth: 520 }}>
+            {changeError && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                background: '#fee2e2',
+                color: '#991b1b',
+                fontSize: '13px',
+                fontWeight: 500,
+                border: '1px solid #fecaca',
+              }}>
+                ⚠️ {changeError}
+              </div>
+            )}
+
+            {/* Current Password */}
+            <div className="pp-form-group" style={{ marginBottom: '16px' }}>
+              <label className="pp-dc-label" style={{ fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                Current Password <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showCurrent ? 'text' : 'password'}
+                  className="pp-input"
+                  style={{ width: '100%', paddingRight: '40px', background: '#fff', borderColor: '#cbd5e1' }}
+                  placeholder="Enter current password or mobile number"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(s => !s)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '4px',
+                  }}
+                  tabIndex={-1}
+                  aria-label={showCurrent ? 'Hide current password' : 'Show current password'}
+                >
+                  {showCurrent ? '👁️' : '🔒'}
+                </button>
+              </div>
+            </div>
+
+            {/* New Password */}
+            <div className="pp-form-group" style={{ marginBottom: '16px' }}>
+              <label className="pp-dc-label" style={{ fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                New Password <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showNew ? 'text' : 'password'}
+                  className="pp-input"
+                  style={{ width: '100%', paddingRight: '40px', background: '#fff', borderColor: '#cbd5e1' }}
+                  placeholder="Enter new password (minimum 8 characters)"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(s => !s)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '4px',
+                  }}
+                  tabIndex={-1}
+                  aria-label={showNew ? 'Hide new password' : 'Show new password'}
+                >
+                  {showNew ? '👁️' : '🔒'}
+                </button>
+              </div>
+
+              {/* Password strength indicator */}
+              {newPassword && (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748b' }}>Strength:</span>
+                    <strong style={{ color: newPassStrength.color }}>{newPassStrength.label}</strong>
+                  </div>
+                  <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: newPassStrength.width, height: '100%', background: newPassStrength.color, transition: 'all 0.3s' }} />
+                  </div>
+                  <ul style={{ margin: '6px 0 0 18px', padding: 0, fontSize: '11.5px', color: '#64748b', lineHeight: 1.5 }}>
+                    <li style={{ color: newPassword.length >= 8 ? '#10b981' : '#64748b' }}>At least 8 characters</li>
+                    <li style={{ color: (/[0-9]/.test(newPassword) && /[a-zA-Z]/.test(newPassword)) ? '#10b981' : '#64748b' }}>Letters and numbers</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm New Password */}
+            <div className="pp-form-group" style={{ marginBottom: '20px' }}>
+              <label className="pp-dc-label" style={{ fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                Confirm New Password <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  className="pp-input"
+                  style={{ width: '100%', paddingRight: '40px', background: '#fff', borderColor: '#cbd5e1' }}
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(s => !s)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '4px',
+                  }}
+                  tabIndex={-1}
+                  aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
+                >
+                  {showConfirm ? '👁️' : '🔒'}
+                </button>
+              </div>
+
+              {confirmPassword && (
+                <div style={{ marginTop: '6px', fontSize: '12px' }}>
+                  {newPassword === confirmPassword ? (
+                    <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Passwords match</span>
+                  ) : (
+                    <span style={{ color: '#ef4444', fontWeight: 600 }}>✕ Passwords do not match</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="pp-btn-save"
+              disabled={changeLoading || !currentPassword || !newPassword || !confirmPassword}
+              style={{
+                background: '#4f46e5',
+                color: '#fff',
+                padding: '10px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: changeLoading ? 'default' : 'pointer',
+                opacity: (changeLoading || !currentPassword || !newPassword || !confirmPassword) ? 0.7 : 1,
+              }}
+            >
+              {changeLoading ? 'Updating Password…' : 'Change Password'}
+            </button>
+          </form>
+        </section>
+
         {/* ── Logout ──────────────────────────────────── */}
         <section className="pp-section">
           <h2 className="pp-sec-title">
@@ -677,6 +960,132 @@ const ProfilePage = ({ user, submissions = [], onLogout }) => {
                 disabled={editSaving}
               >
                 {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Password Change Screenshot & Confirmation Modal ── */}
+      {changeSuccessModal && (
+        <div className="pp-modal-overlay">
+          <div className="pp-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="pp-modal-header" style={{ borderBottom: '1px solid #e2e8f0', background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)', color: '#fff', borderRadius: '14px 14px 0 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '20px' }}>🔐</span>
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px' }}>Password Changed Successfully</h3>
+              </div>
+            </div>
+
+            <div className="pp-modal-body" style={{ padding: '22px 24px' }}>
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                fontSize: '13.5px',
+                color: '#334155',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: '#64748b', fontWeight: 600 }}>Account Identifier:</span>
+                  <strong style={{ color: '#0f172a' }}>{changeSuccessModal.account}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b', fontWeight: 600 }}>Changed At:</span>
+                  <span style={{ color: '#0f172a' }}>{new Date(changeSuccessModal.changedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</span>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  Your New Password:
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#f1f5f9',
+                  border: '2px solid #cbd5e1',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  gap: '8px',
+                }}>
+                  <input
+                    type={showModalPassword ? 'text' : 'password'}
+                    readOnly
+                    value={changeSuccessModal.savedPassword}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      background: 'transparent',
+                      fontFamily: 'monospace',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowModalPassword(s => !s)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '16px' }}
+                    title={showModalPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showModalPassword ? '👁️' : '🔒'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(changeSuccessModal.savedPassword);
+                      setCopiedSuccessPassword(true);
+                      setTimeout(() => setCopiedSuccessPassword(false), 2000);
+                    }}
+                    style={{
+                      background: copiedSuccessPassword ? '#10b981' : '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    {copiedSuccessPassword ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{
+                background: '#fffbeb',
+                borderLeft: '4px solid #f59e0b',
+                padding: '12px 14px',
+                borderRadius: '6px',
+                color: '#92400e',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+              }}>
+                <strong>Important:</strong> Please take a screenshot of your new password for future logins and store it securely, or save it in your password manager.
+              </div>
+
+              <p style={{ fontSize: '12.5px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                ✉️ A confirmation email has been sent to your registered email address linked with Department of CSE, VFSTR.
+              </p>
+            </div>
+
+            <div className="pp-modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '14px 24px' }}>
+              <button
+                type="button"
+                className="pp-btn-save"
+                onClick={() => {
+                  setChangeSuccessModal(null);
+                  setCopiedSuccessPassword(false);
+                }}
+                style={{ width: '100%', padding: '10px 16px', fontSize: '14px', fontWeight: 600, background: '#1e3a8a' }}
+              >
+                I Have Saved / Screenshotted My Password
               </button>
             </div>
           </div>

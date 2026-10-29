@@ -47,7 +47,12 @@ class WebSocketClient {
    * Connect to WebSocket server
    */
   connect() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    const token = localStorage.getItem('wlm_token') || localStorage.getItem('token');
+    if (!token) {
       return;
     }
 
@@ -80,9 +85,11 @@ class WebSocketClient {
         this.emit('error', error);
       };
 
-      this.ws.onclose = () => {
-
+      this.ws.onclose = (event) => {
         this.emit('disconnect');
+        if (event && event.code === 1008) {
+          return;
+        }
         this.attemptReconnect();
       };
     } catch (error) {
@@ -96,6 +103,11 @@ class WebSocketClient {
    * Attempt to reconnect with exponential backoff
    */
   attemptReconnect() {
+    const token = localStorage.getItem('wlm_token') || localStorage.getItem('token');
+    if (!token) {
+      return;
+    }
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('✗ Max reconnection attempts reached');
       this.emit('maxReconnectAttemptsReached');

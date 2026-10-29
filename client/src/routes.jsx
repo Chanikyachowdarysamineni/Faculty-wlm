@@ -79,6 +79,7 @@ const CourseLoadsPageWrapper = () => {
 
 export const publicRoutes = [
   { path: '/login', element: <LoginPageWrapper />, title: 'Login' },
+  { path: '/reset-password', element: <LoginPageWrapper />, title: 'Reset Password' },
   { path: '/', element: <Navigate to="/login" replace />, title: 'Home' },
 ];
 

@@ -4,14 +4,13 @@
  * Centralized admin access configuration
  * ⚠️ SECURITY: Role assignment happens ONLY on backend, not frontend
  * 
- * Admin employee IDs are checked during login and role is embedded in JWT.
- * Frontend cannot modify role without valid JWT from authenticated backend.
+ * Database-driven administrator assignments managed via Admin Management.
+ * System bootstrap admin account (from environment) prevents system lockout.
  */
 
 'use strict';
 
-// H-7 FIX: Support admin IDs from environment variable to avoid committing sensitive IDs to source code
-// In production, set ADMIN_EMPLOYEE_IDS=189,675 (comma-separated) in your .env file
+// Support admin IDs from environment variable for initial system bootstrap & recovery
 const ENV_ADMIN_IDS = (process.env.ADMIN_EMPLOYEE_IDS || '')
   .split(',')
   .map(s => s.trim())
@@ -19,24 +18,30 @@ const ENV_ADMIN_IDS = (process.env.ADMIN_EMPLOYEE_IDS || '')
 
 const defaultAdminId = (process.env.ADMIN_ID || 'admin').trim();
 
-// List of employee IDs that should have admin access.
-// B-7 FIX: Do NOT hardcode faculty employee IDs in source code.
-// All admin IDs MUST be configured via ADMIN_EMPLOYEE_IDS environment variable.
-// The ADMIN_ID env var still provides the primary system admin account fallback.
+// Bootstrap / recovery administrator IDs to prevent system lockout
 const ADMIN_EMPLOYEE_IDS = Array.from(new Set([
   defaultAdminId,
-  ...(ENV_ADMIN_IDS.length > 0 ? ENV_ADMIN_IDS : []) // No hardcoded IDs — use env var
+  ...(ENV_ADMIN_IDS.length > 0 ? ENV_ADMIN_IDS : [])
 ])).filter(Boolean);
 
 /**
- * Check if an employee ID should have admin access
+ * Check if an employee ID is a system bootstrap/recovery administrator
  * @param {string} empId - Employee ID to check
- * @returns {boolean} true if employee should be admin
+ * @returns {boolean} true if employee is bootstrap admin
  */
-const isAdminEmployeeId = (empId) => {
+const isBootstrapAdmin = (empId) => {
   if (!empId) return false;
   const normalizedId = String(empId).trim();
   return ADMIN_EMPLOYEE_IDS.includes(normalizedId);
+};
+
+/**
+ * Check if an employee ID should have admin access (alias for backward compatibility)
+ * @param {string} empId - Employee ID to check
+ * @returns {boolean} true if employee is bootstrap admin
+ */
+const isAdminEmployeeId = (empId) => {
+  return isBootstrapAdmin(empId);
 };
 
 /**
@@ -51,6 +56,7 @@ const getAdminConfig = () => ({
 
 module.exports = {
   ADMIN_EMPLOYEE_IDS,
+  isBootstrapAdmin,
   isAdminEmployeeId,
   getAdminConfig,
 };

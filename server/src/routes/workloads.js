@@ -28,7 +28,7 @@ const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendPaginated, sendCreated, sendConflict, sendNotFound } = require('../utils/response');
 const logger = require('../utils/logger');
 const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, validatePagination } = require('../middleware/validators');
-const { normalizeCourseTypeKey } = require('../utils/courseUtils');
+const { normalizeCourseTypeKey, normalizeYear, deriveYearFromCode, resolveCourseYear } = require('../utils/courseUtils');
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { isTADesignation } = require('../utils/designationUtils');
@@ -49,7 +49,7 @@ const DE_SECTION_DUPLICATE_MSG = EXACT_DUPLICATE_MSG;
 const DE_COURSE_TYPE_REGEX = /^\s*(de|department\s+elective)\s*$/i;
 
 // CRITICAL: Normalize year format (numeric or Roman numeral) to canonical form
-const normalizeYear = (year) => {
+const _legacyNormalizeYear = (year) => {
   const trimmed = String(year || '').trim();
   const upper = trimmed.toUpperCase();
   if (upper === 'I' || upper === '1') return 'I';
@@ -1097,9 +1097,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       };
 
       // CRITICAL: Validate that the selected year matches the course's year
-      if (course && course.year) {
+      if (course) {
         // Course has an explicit year - validate it matches the submitted year
-        const courseYear = normalizeYear(course.year);
+        const courseYear = resolveCourseYear(course);
         if (courseYear !== normalizedYear) {
           logger.warn('Year mismatch for course', { 
             courseId, 
@@ -1432,9 +1432,9 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
     }
 
     // CRITICAL: Validate that the selected year matches the course's year
-    if (course && course.year) {
+    if (course) {
       // Course has an explicit year - validate it matches the submitted year
-      const courseYear = normalizeYear(course.year);
+      const courseYear = resolveCourseYear(course);
       const normalizedUpdateYear = normalizeYear(nextYear);
       if (courseYear !== normalizedUpdateYear) {
         logger.warn('Year mismatch for course in update', { 

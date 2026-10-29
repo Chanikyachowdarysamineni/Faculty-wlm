@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
@@ -63,7 +64,7 @@ router.post('/toggle-admin', requireAuth, requireAdmin, async (req, res, next) =
     if (!empId) return sendError(res, 'Employee ID is required', 400);
     
     // Prevent removing self or system admin
-    if (!makeAdmin && empId === req.user.empId) {
+    if (!makeAdmin && (empId === req.user.empId || empId === req.user.id)) {
       return sendError(res, 'You cannot remove your own admin privileges', 400);
     }
     
@@ -76,13 +77,18 @@ router.post('/toggle-admin', requireAuth, requireAdmin, async (req, res, next) =
     if (!user) {
       const faculty = await Faculty.findOne({ empId });
       if (!faculty) return sendError(res, 'Faculty member not found', 404);
+      const defaultPassword = String(faculty.mobile || faculty.empId || '').trim();
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
       user = await User.create({
         empId: faculty.empId,
         name: faculty.name,
         email: faculty.email || `${faculty.empId}@vignan.ac.in`,
+        mobile: faculty.mobile || '',
         designation: faculty.designation,
+        passwordHash,
         role: roleToSet,
         canAccessAdmin: Boolean(makeAdmin),
+        forcePasswordChange: true,
       });
     } else {
       await User.updateOne(

@@ -74,6 +74,7 @@ const toClient = (doc) => {
 
   return {
     id: String(doc.courseId || 0),
+    courseId: Number(doc.courseId || 0),
     program: String(doc.program || '').trim() || 'N/A',
     courseType: String(doc.courseType || '').trim() || 'OTHER',
     year: year,

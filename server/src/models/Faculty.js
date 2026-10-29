@@ -20,7 +20,7 @@ const facultySchema = new mongoose.Schema(
       type: Number, 
       default: function() {
         const { getDefaultCapacity } = require('../utils/designationUtils');
-        return getDefaultCapacity(this.designation);
+        return getDefaultCapacity(this?.designation || '');
       },
       min: [1, 'Capacity must be at least 1'], 
       max: [60, 'Capacity cannot exceed 60'],
@@ -33,7 +33,7 @@ const facultySchema = new mongoose.Schema(
     remaining: { 
       type: Number, 
       default: function() {
-        return this.capacity || 18;
+        return this?.capacity || 18;
       }
     },
     workloadPercentage: { type: Number, default: 0 },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import API from './config';
 import './LoginPage.css';
 
@@ -37,6 +37,169 @@ const LoginPage = ({ onLogin }) => {
   const [resendCooldown, setResendCooldown] = useState(0); // seconds
   const otpRefs = useRef([]);
   const cooldownTimer = useRef(null);
+
+  // ── Forgot Password State: 'request' | 'reset' | 'success'
+  const [forgotStep, setForgotStep] = useState('request');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccessMsg, setForgotSuccessMsg] = useState('');
+  const [forgotMaskedEmail, setForgotMaskedEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [showNewResetPassword, setShowNewResetPassword] = useState(false);
+  const [showConfirmResetPassword, setShowConfirmResetPassword] = useState(false);
+  const [resetSuccessInfo, setResetSuccessInfo] = useState(null); // { account, changedAt, savedPassword }
+  const [copiedResetPassword, setCopiedResetPassword] = useState(false);
+  const [showSuccessResetPassword, setShowSuccessResetPassword] = useState(true);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
+  const forgotTimer = useRef(null);
+
+  // Check URL query parameters for reset token on mount (direct email link)
+  useEffect(() => {
+    try {
+      const search = window.location.search;
+      if (search) {
+        const params = new URLSearchParams(search);
+        const tok = params.get('token');
+        const emp = params.get('empId');
+        if (tok) {
+          setAuthMode('forgot');
+          setForgotStep('reset');
+          setResetToken(tok);
+          if (emp) setEmployeeId(emp);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Countdown timer for forgot password resend cooldown
+  useEffect(() => {
+    if (forgotCooldown <= 0) return;
+    forgotTimer.current = setTimeout(() => setForgotCooldown(c => c - 1), 1000);
+    return () => clearTimeout(forgotTimer.current);
+  }, [forgotCooldown]);
+
+  // Password strength calculation for new reset password
+  const resetPassStrength = useMemo(() => {
+    if (!newResetPassword) return { score: 0, label: '', color: '#94a3b8', width: '0%' };
+    let score = 0;
+    if (newResetPassword.length >= 8) score += 1;
+    if (newResetPassword.length >= 12) score += 1;
+    if (/[0-9]/.test(newResetPassword)) score += 1;
+    if (/[a-z]/.test(newResetPassword) && /[A-Z]/.test(newResetPassword)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(newResetPassword)) score += 1;
+
+    if (score <= 2) return { score, label: 'Weak', color: '#ef4444', width: '33%' };
+    if (score <= 3) return { score, label: 'Moderate', color: '#f59e0b', width: '66%' };
+    return { score, label: 'Strong', color: '#10b981', width: '100%' };
+  }, [newResetPassword]);
+
+  // ── Forgot Password: Step 1 (Request Reset Code / Link) ──
+  const handleRequestReset = async (e) => {
+    e.preventDefault();
+    if (forgotLoading) return;
+    setForgotError('');
+    setForgotSuccessMsg('');
+
+    const trimmedId = employeeId.trim();
+    if (!trimmedId) {
+      setForgotError('Please enter your Employee ID or registered Email.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const res = await fetch(`${API}/deva/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId: trimmedId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setForgotError(data.message || 'Failed to send password reset code. Please try again.');
+      } else {
+        setForgotMaskedEmail(data.data?.maskedEmail || 'your registered email');
+        setForgotSuccessMsg(data.message || 'Password reset code sent to your registered email.');
+        setForgotCooldown(60);
+        setForgotStep('reset');
+      }
+    } catch {
+      setForgotError('Could not reach server. Please check your connection.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // ── Forgot Password: Step 2 (Submit New Password + 6-digit Code or Token) ──
+  const handleConfirmReset = async (e) => {
+    e.preventDefault();
+    if (forgotLoading) return;
+    setForgotError('');
+
+    if (!resetToken && (!resetCode || resetCode.trim().length < 6)) {
+      setForgotError('Please enter the 6-digit verification code sent to your email.');
+      return;
+    }
+    if (newResetPassword.length < 8) {
+      setForgotError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newResetPassword !== confirmResetPassword) {
+      setForgotError('New password and confirm password do not match.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const payload = {
+        employeeId: employeeId.trim(),
+        newPassword: newResetPassword,
+        confirmPassword: confirmResetPassword,
+      };
+      if (resetToken) {
+        payload.token = resetToken.trim();
+      } else {
+        payload.code = resetCode.trim();
+      }
+
+      const res = await fetch(`${API}/deva/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setForgotError(data.message || (data.errors && data.errors[0]?.message) || 'Failed to reset password. Please check your verification code.');
+      } else {
+        setResetSuccessInfo({
+          account: data.data?.account || employeeId.trim(),
+          changedAt: data.data?.changedAt || new Date().toISOString(),
+          savedPassword: newResetPassword,
+        });
+        setForgotStep('success');
+      }
+    } catch {
+      setForgotError('Could not reach server. Please check your connection.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // ── Finish Reset and Proceed to Login ──
+  const handleFinishReset = () => {
+    setNewResetPassword('');
+    setConfirmResetPassword('');
+    setResetCode('');
+    setResetToken('');
+    setResetSuccessInfo(null);
+    setForgotStep('request');
+    setAuthMode('password');
+    setLoginError('');
+  };
 
   const [logoLoaded, setLogoLoaded] = useState(false);
   const pub = process.env.PUBLIC_URL || '';
@@ -406,6 +569,18 @@ const LoginPage = ({ onLogin }) => {
               </svg>
               OTP via Email
             </button>
+            {authMode === 'forgot' && (
+              <button
+                type="button"
+                className="wlm-auth-tab active"
+                style={{ background: 'rgba(245, 158, 11, 0.25)', borderColor: '#f59e0b' }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 2l-2 2m-1-1l-3 3m2-2l-3 3m2-2l-3 3M7 11a5 5 0 1 1 5 5H7v-5z"/>
+                </svg>
+                Reset Password
+              </button>
+            )}
           </div>
 
           {/* ════════════════════════════════════════════════
@@ -486,14 +661,25 @@ const LoginPage = ({ onLogin }) => {
                   <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)' }}>
                     Default Password: <b style={{ color: '#a5b4fc' }}>Registered Mobile No</b>
                   </span>
-                  <button
-                    type="button"
-                    className="wlm-forgot-link"
-                    style={{ fontSize: '11.5px', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                    onClick={() => { setAuthMode('otp'); setStep('id'); }}
-                  >
-                    Use OTP instead
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="wlm-forgot-link"
+                      style={{ fontSize: '11.5px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#fcd34d', fontWeight: 600 }}
+                      onClick={() => { setAuthMode('forgot'); setForgotStep('request'); setForgotError(''); }}
+                    >
+                      Forgot Password?
+                    </button>
+                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>|</span>
+                    <button
+                      type="button"
+                      className="wlm-forgot-link"
+                      style={{ fontSize: '11.5px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      onClick={() => { setAuthMode('otp'); setStep('id'); }}
+                    >
+                      Use OTP
+                    </button>
+                  </div>
                 </div>
 
                 <button type="submit" className="wlm-login-btn" disabled={loginLoading} style={{ marginTop: '8px' }}>
@@ -629,6 +815,317 @@ const LoginPage = ({ onLogin }) => {
                   {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
                 </button>
               </div>
+            </>
+          )}
+
+          {/* ════════════════════════════════════════════════
+              MODE C: FORGOT / RESET PASSWORD
+             ════════════════════════════════════════════════ */}
+          {authMode === 'forgot' && forgotStep === 'request' && (
+            <>
+              <h2 className="wlm-title">Reset Password</h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginBottom: '18px', lineHeight: 1.5 }}>
+                Enter your <strong style={{ color: '#fff' }}>Employee ID</strong> or <strong style={{ color: '#fff' }}>registered Email</strong> to receive a 6-digit verification code.
+              </p>
+
+              <form className="wlm-form" onSubmit={handleRequestReset}>
+                <div className="wlm-input-group">
+                  <span className="wlm-input-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Employee ID or Registered Email"
+                    value={employeeId}
+                    onChange={e => setEmployeeId(e.target.value)}
+                    className="wlm-input"
+                    required
+                    autoFocus
+                    autoComplete="username"
+                  />
+                </div>
+
+                <button type="submit" className="wlm-login-btn" disabled={forgotLoading} style={{ marginTop: '8px' }}>
+                  {forgotLoading
+                    ? <><span className="wlm-btn-spinner" /> SENDING CODE…</>
+                    : 'SEND RESET CODE'}
+                </button>
+
+                {forgotError && <p className="wlm-error">{forgotError}</p>}
+
+                <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                  <button
+                    type="button"
+                    className="wlm-forgot-link"
+                    style={{ fontSize: '12px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    onClick={() => { setAuthMode('password'); }}
+                  >
+                    ← Back to Password Login
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+
+          {authMode === 'forgot' && forgotStep === 'reset' && (
+            <>
+              <h2 className="wlm-title">Set New Password</h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginBottom: '6px', lineHeight: 1.5 }}>
+                {resetToken ? 'Resetting password via authorized link for:' : 'Enter the 6-digit verification code sent to:'}
+              </p>
+              <p style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: 600, marginBottom: '16px', wordBreak: 'break-all' }}>
+                {forgotMaskedEmail || employeeId}
+              </p>
+
+              <form className="wlm-form" onSubmit={handleConfirmReset}>
+                {!resetToken && (
+                  <div className="wlm-input-group" style={{ marginBottom: '12px' }}>
+                    <span className="wlm-input-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                      </svg>
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="6-Digit Verification Code"
+                      value={resetCode}
+                      onChange={e => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="wlm-input"
+                      maxLength={6}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {/* New Password */}
+                <div className="wlm-input-group" style={{ marginBottom: '12px' }}>
+                  <span className="wlm-input-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </span>
+                  <input
+                    type={showNewResetPassword ? 'text' : 'password'}
+                    placeholder="New Password (min 8 characters)"
+                    value={newResetPassword}
+                    onChange={e => setNewResetPassword(e.target.value)}
+                    className="wlm-input"
+                    required
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="wlm-eye-btn"
+                    onClick={() => setShowNewResetPassword(p => !p)}
+                    tabIndex={-1}
+                  >
+                    {showNewResetPassword ? '👁️' : '🔒'}
+                  </button>
+                </div>
+
+                {/* Password Strength Indicator */}
+                {newResetPassword && (
+                  <div style={{ marginBottom: '12px', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.7)' }}>Strength:</span>
+                      <strong style={{ color: resetPassStrength.color }}>{resetPassStrength.label}</strong>
+                    </div>
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: resetPassStrength.width, height: '100%', background: resetPassStrength.color, transition: 'all 0.3s' }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirm Password */}
+                <div className="wlm-input-group" style={{ marginBottom: '12px' }}>
+                  <span className="wlm-input-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </span>
+                  <input
+                    type={showConfirmResetPassword ? 'text' : 'password'}
+                    placeholder="Confirm New Password"
+                    value={confirmResetPassword}
+                    onChange={e => setConfirmResetPassword(e.target.value)}
+                    className="wlm-input"
+                    required
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="wlm-eye-btn"
+                    onClick={() => setShowConfirmResetPassword(p => !p)}
+                    tabIndex={-1}
+                  >
+                    {showConfirmResetPassword ? '👁️' : '🔒'}
+                  </button>
+                </div>
+
+                {confirmResetPassword && (
+                  <div style={{ fontSize: '11px', marginBottom: '10px' }}>
+                    {newResetPassword === confirmResetPassword ? (
+                      <span style={{ color: '#86efac' }}>✓ Passwords match</span>
+                    ) : (
+                      <span style={{ color: '#fca5a5' }}>✕ Passwords do not match</span>
+                    )}
+                  </div>
+                )}
+
+                <button type="submit" className="wlm-login-btn" disabled={forgotLoading} style={{ marginTop: '8px' }}>
+                  {forgotLoading
+                    ? <><span className="wlm-btn-spinner" /> UPDATING PASSWORD…</>
+                    : 'RESET PASSWORD'}
+                </button>
+
+                {forgotError && <p className="wlm-error">{forgotError}</p>}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
+                  <button
+                    type="button"
+                    className="wlm-forgot-link"
+                    style={{ fontSize: '12px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    onClick={() => { setForgotStep('request'); }}
+                  >
+                    ← Change ID
+                  </button>
+                  <button
+                    type="button"
+                    className="wlm-forgot-link"
+                    style={{ fontSize: '12px', opacity: forgotCooldown > 0 ? 0.5 : 1, cursor: forgotCooldown > 0 ? 'default' : 'pointer', background: 'transparent', border: 'none' }}
+                    onClick={handleRequestReset}
+                    disabled={forgotCooldown > 0 || forgotLoading}
+                  >
+                    {forgotCooldown > 0 ? `Resend Code in ${forgotCooldown}s` : 'Resend Code'}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+
+          {authMode === 'forgot' && forgotStep === 'success' && resetSuccessInfo && (
+            <>
+              <h2 className="wlm-title" style={{ color: '#86efac' }}>Password Reset!</h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', marginBottom: '16px', lineHeight: 1.5 }}>
+                Your account password has been successfully reset.
+              </p>
+
+              <div style={{
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                fontSize: '12.5px',
+                color: '#e2e8f0',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>Account:</span>
+                  <strong style={{ color: '#fff' }}>{resetSuccessInfo.account}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>Date & Time:</span>
+                  <span style={{ color: '#a5b4fc' }}>{new Date(resetSuccessInfo.changedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</span>
+                </div>
+              </div>
+
+              {/* Secure Password Reveal & Copy Box */}
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px' }}>
+                  Your New Password:
+                </span>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  gap: '8px',
+                }}>
+                  <input
+                    type={showSuccessResetPassword ? 'text' : 'password'}
+                    readOnly
+                    value={resetSuccessInfo.savedPassword}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      background: 'transparent',
+                      fontFamily: 'monospace',
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSuccessResetPassword(s => !s)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', padding: '2px', fontSize: '14px' }}
+                    title={showSuccessResetPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showSuccessResetPassword ? '👁️' : '🔒'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(resetSuccessInfo.savedPassword);
+                      setCopiedResetPassword(true);
+                      setTimeout(() => setCopiedResetPassword(false), 2000);
+                    }}
+                    style={{
+                      background: copiedResetPassword ? '#10b981' : '#4f46e5',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '5px 10px',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    {copiedResetPassword ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Requirement 3 Important Alert Box */}
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.15)',
+                borderLeft: '4px solid #f59e0b',
+                padding: '10px 14px',
+                borderRadius: '6px',
+                color: '#fef3c7',
+                fontSize: '12.5px',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+                textAlign: 'left',
+              }}>
+                <strong>Important:</strong> Please take a screenshot of your new password for future logins and store it securely, or save it in your password manager.
+              </div>
+
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', marginBottom: '18px', lineHeight: 1.4 }}>
+                ✉️ A confirmation email has been sent to your registered institutional email address linked with Department of CSE, VFSTR.
+              </p>
+
+              <button
+                type="button"
+                className="wlm-login-btn"
+                onClick={handleFinishReset}
+                style={{ width: '100%', background: '#2563eb' }}
+              >
+                PROCEED TO SIGN IN
+              </button>
             </>
           )}
 

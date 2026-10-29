@@ -44,6 +44,8 @@ const syncAuthAndRBAC = async () => {
       'Teaching Associate',
       'Teaching Instructor',
       'Teaching Assistant',
+      'Teaching Assistant-I',
+      'Teaching Assistant-II',
     ];
     for (let i = 0; i < defaultDesignations.length; i++) {
       await Designation.findOneAndUpdate(

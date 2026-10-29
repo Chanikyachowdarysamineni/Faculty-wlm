@@ -10,29 +10,42 @@ let mongoServer;
 jest.setTimeout(120000);
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
-  
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.disconnect();
+  try {
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+    await mongoose.connect(uri);
+  } catch (err) {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.MONGO_URI);
+    }
   }
-  
-  await mongoose.connect(uri);
 
-  // Seed a valid user for auth checks
-  await User.create({
-    empId: 'test-admin',
-    name: 'Admin User',
-    password: 'Password123!',
-    role: 'admin'
-  });
+  // Seed or upsert a valid user for auth checks
+  await User.findOneAndUpdate(
+    { empId: 'test-admin' },
+    {
+      $set: {
+        name: 'Admin User',
+        passwordHash: 'dummyHashedPassword',
+        role: 'admin',
+        canAccessAdmin: true,
+      }
+    },
+    { upsert: true }
+  );
 }, 120000);
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
+  try {
+    await User.deleteOne({ empId: 'test-admin' });
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
+    await mongoose.disconnect();
+  } catch {}
 });
 
 describe('Critical Paths: Auth & JWT Security', () => {

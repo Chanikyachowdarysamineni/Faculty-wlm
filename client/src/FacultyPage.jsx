@@ -205,7 +205,9 @@ const FacultyPage = () => {
       'Assistant Professor': 4,
       'Teaching Associate': 5,
       'Teaching Instructor': 6,
-      'Teaching Assistant': 7
+      'Teaching Assistant-I': 7,
+      'Teaching Assistant-II': 8,
+      'Teaching Assistant': 9
     };
     const getRank = (desig) => {
       if (!desig) return 99;

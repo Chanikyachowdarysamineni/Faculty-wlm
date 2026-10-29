@@ -96,11 +96,13 @@ export const fetchFacultyPreferences = async (empId, semester, academicYear) => 
  * @param {string} courseType - (optional) Filter by course type
  * @returns {Promise} { empId, hasPreferences, preferredCourseIds, courses, totalCount, message }
  */
-export const fetchFilteredCourses = async (empId, year = '', courseType = '') => {
+export const fetchFilteredCourses = async (empId, year = '', courseType = '', semester = '', academicYear = '') => {
   try {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (courseType) params.append('courseType', courseType);
+    if (semester) params.append('semester', semester);
+    if (academicYear) params.append('academicYear', academicYear);
 
     const url = `${API}/deva/faculty-preferences/${encodeURIComponent(empId)}/courses${params.toString() ? `?${params}` : ''}`;
 
