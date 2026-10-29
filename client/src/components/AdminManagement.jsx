@@ -64,31 +64,40 @@ const AdminManagement = ({ user }) => {
 
   const filteredUsers = users.filter(u => 
     String(u.empId || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-    String(u.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    String(u.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(u.designation || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(u.department || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div style={{ background: '#fff', color: '#1e293b', padding: '24px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-      <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#1e293b' }}>Admin Management</h2>
-      <p style={{ color: '#64748b', marginBottom: '24px' }}>
-        Manage system administrators. 
-        <br/>
-        <strong>Note:</strong> Some admins are configured in the system environment (like 189) and cannot be removed here.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ margin: 0, color: '#1e293b', fontSize: '20px', fontWeight: '700' }}>Admin Management</h2>
+          <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>
+            Manage system administrator privileges for active faculty members.
+          </p>
+        </div>
+        {!loading && (
+          <div style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '500' }}>
+            Total Faculty: <strong>{filteredUsers.length}</strong>{filteredUsers.length !== users.length && ` (of ${users.length})`}
+          </div>
+        )}
+      </div>
 
       {loading ? (
-        <p>Loading...</p>
+        <p style={{ color: '#64748b' }}>Loading faculty records...</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <div style={{ marginBottom: '16px' }}>
             <input
               type="text"
-              placeholder="Search by Employee ID or Name..."
+              placeholder="Search by S.No, Emp ID, Name, Designation, or Dept..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 width: '100%',
-                maxWidth: '400px',
+                maxWidth: '440px',
                 padding: '10px 14px',
                 borderRadius: '6px',
                 border: '1px solid #cbd5e1',
@@ -99,55 +108,67 @@ const AdminManagement = ({ user }) => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0', width: '60px' }}>S.No.</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0' }}>Emp ID</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0' }}>Name</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0' }}>Name of the Faculty</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0' }}>Designation</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0' }}>Department</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>Admin Status</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map(u => (
-                <tr key={u.empId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px', fontWeight: '500' }}>{u.empId}</td>
-                  <td style={{ padding: '12px' }}>{u.name}</td>
-                  <td style={{ padding: '12px', color: '#64748b' }}>{u.designation}</td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    {u.isEffectiveAdmin ? (
-                      <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>
-                        Admin
-                      </span>
-                    ) : (
-                      <span style={{ background: '#f1f5f9', color: '#64748b', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>
-                        Faculty
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    {u.isEnvAdmin ? (
-                      <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>System Configured</span>
-                    ) : (user && u.empId === (user.id || user.empId)) ? (
-                      <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Current User</span>
-                    ) : (
-                      <button
-                        onClick={() => handleToggleAdmin(u.empId, u.isEffectiveAdmin)}
-                        style={{
-                          background: u.isEffectiveAdmin ? '#ef4444' : '#3b82f6',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '6px 12px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '500'
-                        }}
-                      >
-                        {u.isEffectiveAdmin ? 'Remove Admin' : 'Make Admin'}
-                      </button>
-                    )}
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                    No faculty records found matching &quot;{searchTerm}&quot;.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredUsers.map((u, idx) => (
+                  <tr key={u.empId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '12px', color: '#64748b' }}>{u.slNo || idx + 1}</td>
+                    <td style={{ padding: '12px', fontWeight: '600', color: '#334155' }}>{u.empId}</td>
+                    <td style={{ padding: '12px', fontWeight: '500' }}>{u.name}</td>
+                    <td style={{ padding: '12px', color: '#64748b' }}>{u.designation}</td>
+                    <td style={{ padding: '12px', color: '#64748b' }}>{u.department || 'CSE'}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      {u.isEffectiveAdmin ? (
+                        <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>
+                          Admin
+                        </span>
+                      ) : (
+                        <span style={{ background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}>
+                          Faculty
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      {u.isEnvAdmin ? (
+                        <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>System Configured</span>
+                      ) : (user && u.empId === (user.id || user.empId)) ? (
+                        <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Current User</span>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleAdmin(u.empId, u.isEffectiveAdmin)}
+                          style={{
+                            background: u.isEffectiveAdmin ? '#ef4444' : '#3b82f6',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          {u.isEffectiveAdmin ? 'Remove Admin' : 'Make Admin'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

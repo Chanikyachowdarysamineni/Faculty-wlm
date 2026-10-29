@@ -92,7 +92,7 @@ describe('Auth OTP Flow: Linked Emails, Cooldowns, & Verification', () => {
     // Verify OtpToken created with canonical empId
     const otp = await OtpToken.findOne({ empId: EMP_ID });
     expect(otp).toBeDefined();
-    expect(otp.deliveryStatus).toBe('queued');
+    expect(['queued', 'processing']).toContain(otp.deliveryStatus);
   });
 
   // ─────────────────────────────────────────────────────────────

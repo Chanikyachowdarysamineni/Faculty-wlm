@@ -117,7 +117,7 @@ const syncAuthAndRBAC = async () => {
                 mobile: faculty.mobile,
                 email: faculty.email,
                 passwordHash: passwordHash,
-                role: isAdmin ? 'Admin' : 'Faculty',
+                role: isAdmin ? 'admin' : 'faculty',
                 canAccessAdmin: isAdmin,
                 forcePasswordChange: true
               });
@@ -139,7 +139,17 @@ const syncAuthAndRBAC = async () => {
               const normalizedRole = String(user.role || '').toLowerCase();
               if (!user.role || (normalizedRole !== 'admin' && normalizedRole !== 'faculty')) {
                 const isAdmin = isAdminEmployeeId(faculty.empId) || user.canAccessAdmin;
-                updatePayload.role = isAdmin ? 'Admin' : 'Faculty';
+                updatePayload.role = isAdmin ? 'admin' : 'faculty';
+                needsUpdate = true;
+              }
+
+              // Keep mobile in sync and update passwordHash if using default password
+              const facMobile = String(faculty.mobile || '').trim();
+              if (facMobile && facMobile !== String(user.mobile || '').trim()) {
+                updatePayload.mobile = facMobile;
+                if (user.forcePasswordChange) {
+                  updatePayload.passwordHash = passwordHash;
+                }
                 needsUpdate = true;
               }
 

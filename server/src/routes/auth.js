@@ -25,7 +25,7 @@ const emailQueue = require('../services/emailQueue');
 const getIp = (req) => req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 const { sendSuccess, sendError, sendUnauthorized, sendValidationError } = require('../utils/response');
 const logger = require('../utils/logger');
-const { validateLogin } = require('../middleware/validators');
+const { validateLogin, validateChangePassword } = require('../middleware/validators');
 const { loginLimiter, otpLimiter, otpIpLimiter } = require('../middleware/rateLimiters');
 const { isAdminEmployeeId } = require('../config/adminConfig');
 
@@ -96,6 +96,8 @@ const maskEmail = (email = '') => {
  */
 const findUserAndFaculty = async (identifier) => {
   const trimmed = String(identifier || '').trim();
+  if (!trimmed) return { user: null, facultyData: null, isEmail: false, resolvedEmpId: null };
+
   const isEmail = trimmed.includes('@');
 
   if (isEmail) {
@@ -116,13 +118,32 @@ const findUserAndFaculty = async (identifier) => {
     return { user, facultyData, isEmail: true, resolvedEmpId };
   }
 
-  // Standard Employee ID lookup
-  const [user, facultyData] = await Promise.all([
-    User.findOne({ empId: trimmed }),
-    Faculty.findOne({ empId: trimmed }).lean(),
-  ]);
+  // Support system admin lookup using 'admin' or configured ADMIN_ID
+  const adminIds = ['admin'];
+  if (process.env.ADMIN_ID) adminIds.push(process.env.ADMIN_ID.trim());
 
-  return { user, facultyData, isEmail: false, resolvedEmpId: trimmed };
+  let user = null;
+  let facultyData = null;
+
+  if (adminIds.map(id => id.toLowerCase()).includes(trimmed.toLowerCase())) {
+    user = await User.findOne({ empId: { $in: adminIds } });
+    facultyData = await Faculty.findOne({ empId: { $in: adminIds } }).lean();
+  } else {
+    [user, facultyData] = await Promise.all([
+      User.findOne({ empId: trimmed }),
+      Faculty.findOne({ empId: trimmed }).lean(),
+    ]);
+  }
+
+  // Cross-reference if needed
+  if (user && !facultyData) {
+    facultyData = await Faculty.findOne({ empId: user.empId }).lean();
+  } else if (!user && facultyData) {
+    user = await User.findOne({ empId: facultyData.empId });
+  }
+
+  const resolvedEmpId = user?.empId || facultyData?.empId || trimmed;
+  return { user, facultyData, isEmail: false, resolvedEmpId };
 };
 
 /**
@@ -218,6 +239,148 @@ VFSTR.`;
 };
 
 // ─────────────────────────────────────────────────────────
+//  POST /api/auth/login  — password login (using registered mobile number as default password)
+// ─────────────────────────────────────────────────────────
+router.post(
+  '/login',
+  loginLimiter,
+  validateLogin,
+  async (req, res, next) => {
+    try {
+      const rawIdentifier = String(req.body.employeeId || '').trim();
+      const rawPassword = String(req.body.password || '');
+
+      let { user, facultyData, isEmail } = await findUserAndFaculty(rawIdentifier);
+
+      // Auto-provision User account if faculty exists in Faculty list but lacks User record
+      if (!user && facultyData) {
+        const defaultPassword = String(facultyData.mobile || facultyData.empId || '').trim();
+        const initialHash = await bcrypt.hash(defaultPassword, 10);
+        const isAdmin = isAdminEmployeeId(facultyData.empId);
+        user = await User.create({
+          empId: facultyData.empId,
+          name: facultyData.name,
+          designation: facultyData.designation,
+          mobile: facultyData.mobile || '',
+          email: facultyData.email || '',
+          passwordHash: initialHash,
+          role: isAdmin ? 'admin' : 'faculty',
+          canAccessAdmin: isAdmin,
+          forcePasswordChange: true,
+          joiningDate: facultyData.joiningDate || null,
+          relievingDate: facultyData.relievingDate || null,
+        });
+        logger.info('Auto-provisioned User account during password login', { empId: facultyData.empId });
+      }
+
+      if (!user) {
+        logger.warn('Password login attempted for non-existent account', { identifier: rawIdentifier, ip: getIp(req) });
+        return sendError(res, isEmail ? 'Registered email address not found.' : 'Employee ID not found.', 401);
+      }
+
+      const empId = user.empId;
+
+      // Check if faculty is deleted or relieved
+      if (user.isDeleted || facultyData?.isDeleted) {
+        return sendError(res, 'Account deactivated.', 403);
+      }
+      const relDateVal = user.relievingDate || facultyData?.relievingDate;
+      if (relDateVal) {
+        const relievingDate = new Date(relDateVal);
+        relievingDate.setHours(23, 59, 59, 999);
+        if (new Date() > relievingDate) {
+          return sendError(res, 'Account deactivated (Faculty Relieved).', 403);
+        }
+      }
+
+      // Check account lock
+      if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+        const minutesLeft = Math.ceil((new Date(user.lockUntil) - Date.now()) / 60000);
+        return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
+      }
+
+      // ── Password Verification ──
+      // 1. Compare against user.passwordHash
+      let isMatch = false;
+      if (user.passwordHash) {
+        isMatch = bcrypt.compareSync(rawPassword, user.passwordHash);
+      }
+
+      // 2. Dynamic mobile number fallback & auto-sync:
+      // If user.passwordHash did not match, check if entered password matches the registered
+      // mobile number dynamically fetched from the database (Faculty List).
+      const registeredMobile = String(facultyData?.mobile || user.mobile || '').trim();
+      if (!isMatch && registeredMobile && rawPassword.trim() === registeredMobile) {
+        const newHash = await bcrypt.hash(registeredMobile, 10);
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $set: {
+              passwordHash: newHash,
+              mobile: registeredMobile,
+            }
+          }
+        );
+        user.passwordHash = newHash;
+        isMatch = true;
+        logger.info('Dynamically synchronized passwordHash from registered mobile number', { empId });
+      }
+
+      if (!isMatch) {
+        const newAttempts = (user.failedLoginAttempts || 0) + 1;
+        if (newAttempts >= 5) {
+          await User.updateOne(
+            { _id: user._id },
+            {
+              $set: {
+                failedLoginAttempts: newAttempts,
+                lockUntil: new Date(Date.now() + 15 * 60 * 1000)
+              }
+            }
+          );
+          logger.warn('Account locked due to consecutive failed password attempts', { empId, ip: getIp(req) });
+          return sendError(res, 'Too many failed login attempts. Account locked for 15 minutes.', 429);
+        }
+
+        await User.updateOne({ _id: user._id }, { $set: { failedLoginAttempts: newAttempts } });
+        logger.warn('Failed login attempt', { empId, attempts: newAttempts, ip: getIp(req) });
+        return sendError(res, `Invalid password. ${5 - newAttempts} attempt(s) remaining.`, 401);
+      }
+
+      // Reset failed login attempts on success
+      if (user.failedLoginAttempts || user.lockUntil) {
+        await User.updateOne({ _id: user._id }, { $set: { failedLoginAttempts: 0, lockUntil: null } });
+      }
+
+      const isAdminUser = isAdminEmployeeId(user.empId) || Boolean(user.canAccessAdmin);
+      const userRole = isAdminUser ? 'admin' : (user.role || 'faculty');
+
+      const payload = {
+        id:             user.empId,
+        empId:          user.empId,
+        role:           userRole,
+        name:           user.name,
+        canAccessAdmin: Boolean(user.canAccessAdmin || isAdminUser),
+        forcePasswordChange: Boolean(user.forcePasswordChange),
+        tokenVersion:   user.tokenVersion || 0,
+      };
+      const token = signToken(payload);
+
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { lastLoginIp: getIp(req), lastLoginAt: new Date() } }
+      );
+
+      logger.info('Password login successful', { empId: user.empId, role: userRole, ip: getIp(req) });
+      return sendSuccess(res, { token, user: payload }, 200, { message: 'Login successful' });
+    } catch (err) {
+      logger.error('Login error', { error: err.message });
+      next(err);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────
 //  POST /api/auth/send-otp   — faculty enters empId OR linked email → OTP queued
 // ─────────────────────────────────────────────────────────
 router.post(
@@ -279,6 +442,22 @@ router.post(
       if (!email) {
         logger.warn('OTP requested but no email on file', { empId });
         return sendError(res, 'No verified email address found for this account. Please contact the administrator.', 400);
+      }
+
+      // Pre-validate deliverability & block placeholder domains (.local, .test, etc.)
+      const trimmedEmail = email.trim().toLowerCase();
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+      const emailDomain = trimmedEmail.split('@')[1] || '';
+      const isPlaceholder = ['wlm.local', 'localhost', 'example.com', 'test.com'].includes(emailDomain) ||
+        emailDomain.endsWith('.local') || emailDomain.endsWith('.test') || emailDomain.endsWith('.invalid');
+
+      if (!emailRegex.test(trimmedEmail) || isPlaceholder) {
+        logger.warn('OTP requested for unrouteable or placeholder email', { empId, email: trimmedEmail });
+        return sendError(
+          res,
+          `The registered email address for this account (${maskEmail(trimmedEmail)}) is not a valid deliverable mailbox. Please contact the administrator to update your official email address.`,
+          400
+        );
       }
 
       // Enforce 60-second server-side resend cooldown per canonical employee ID
@@ -426,12 +605,12 @@ router.post(
         return sendError(res, `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 429);
       }
 
-      // Find a valid OTP doc
+      // Find the most recent active OTP doc
       const otpDoc = await OtpToken.findOne({
         empId,
         usedAt: null,
         expiresAt: { $gt: new Date() },
-      });
+      }).sort({ createdAt: -1 });
 
       if (!otpDoc) {
         return sendError(res, 'OTP has expired or was not found. Please request a new OTP.', 400);
@@ -448,7 +627,7 @@ router.post(
         // Increment attempt counter; lock after 5 bad guesses
         const newAttempts = (otpDoc.attempts || 0) + 1;
         if (newAttempts >= 5) {
-          await OtpToken.deleteMany({ empId });
+          await OtpToken.updateMany({ empId, usedAt: null }, { $set: { usedAt: new Date() } });
           await User.updateOne({ _id: user._id }, { $set: { lockUntil: new Date(Date.now() + 15 * 60 * 1000) } });
           return sendError(res, 'Too many wrong OTP attempts. Account locked for 15 minutes.', 429);
         }
@@ -456,8 +635,8 @@ router.post(
         return sendError(res, `Invalid OTP. ${5 - newAttempts} attempt(s) remaining.`, 401);
       }
 
-      // Single-use token: immediately delete OTP tokens for this user to prevent replay
-      await OtpToken.deleteMany({ empId });
+      // Single-use token: invalidate OTP tokens for this user to prevent replay
+      await OtpToken.updateMany({ empId, usedAt: null }, { $set: { usedAt: new Date() } });
 
       // Reset failed login attempts on success
       if (user.failedLoginAttempts || user.lockUntil) {
@@ -506,6 +685,73 @@ router.get('/email-queue/status', requireAuth, requireAdmin, async (req, res, ne
 });
 
 
+
+// ─────────────────────────────────────────────────────────
+//  PUT /api/auth/change-password  (requires auth)
+// ─────────────────────────────────────────────────────────
+router.put(
+  '/change-password',
+  requireAuth,
+  validateChangePassword,
+  async (req, res, next) => {
+    try {
+      const empId = req.user.id || req.user.empId;
+      const { user, facultyData } = await findUserAndFaculty(empId);
+      if (!user) {
+        return sendError(res, 'User not found.', 404);
+      }
+
+      // Check current password against passwordHash or dynamic mobile number
+      let isMatch = false;
+      if (user.passwordHash) {
+        isMatch = bcrypt.compareSync(req.body.currentPassword, user.passwordHash);
+      }
+      if (!isMatch && facultyData?.mobile) {
+        isMatch = req.body.currentPassword.trim() === facultyData.mobile.trim();
+      }
+
+      if (!isMatch) {
+        return sendError(res, 'Current password is incorrect.', 401);
+      }
+
+      const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10);
+      const passwordHash = await bcrypt.hash(req.body.newPassword, BCRYPT_ROUNDS);
+      const nextTokenVersion = (user.tokenVersion || 0) + 1;
+
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            passwordHash,
+            forcePasswordChange: false,
+            failedLoginAttempts: 0,
+            lockUntil: null,
+            tokenVersion: nextTokenVersion,
+          }
+        }
+      );
+
+      const isAdminUser = isAdminEmployeeId(user.empId) || Boolean(user.canAccessAdmin);
+      const userRole = isAdminUser ? 'admin' : (user.role || 'faculty');
+      const updatedUserPayload = {
+        id: user.empId,
+        empId: user.empId,
+        role: userRole,
+        name: user.name,
+        canAccessAdmin: Boolean(user.canAccessAdmin || isAdminUser),
+        forcePasswordChange: false,
+        tokenVersion: nextTokenVersion,
+      };
+      const newToken = signToken(updatedUserPayload);
+
+      logger.info('Password changed successfully', { empId: user.empId });
+      return sendSuccess(res, { token: newToken, user: updatedUserPayload }, 200, { message: 'Password changed successfully.' });
+    } catch (err) {
+      logger.error('Change password error', { error: err.message });
+      next(err);
+    }
+  }
+);
 
 // ─────────────────────────────────────────────────────────
 //  GET /api/auth/me

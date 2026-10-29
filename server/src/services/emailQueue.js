@@ -16,6 +16,8 @@ const STALE_LOCK_TIMEOUT_MS = 120000; // 2 minutes
 class EmailQueueService {
   constructor() {
     this.mailTransport = null;
+    this.fallbackTransport = null;
+    this.autoTestMockTransport = null;
     this.workerRunning = false;
     this.isProcessing = false;
     this.activeWorkers = 0;
@@ -26,11 +28,45 @@ class EmailQueueService {
   }
 
   /**
+   * Parse configured sender details from environment
+   */
+  getFromAddress() {
+    let fromName = process.env.MAIL_FROM_NAME || 'Faculty Workload Management';
+    let fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || 'no-reply@vignan.ac.in';
+
+    // Parse SMTP_FROM if formatted as "Name" <email@domain.com>
+    if (process.env.SMTP_FROM) {
+      const match = process.env.SMTP_FROM.match(/^(?:"?([^"]*)"?\s)?<?([^>]+)>?$/);
+      if (match) {
+        if (match[1]) fromName = match[1].trim();
+        if (match[2]) fromEmail = match[2].trim();
+      }
+    }
+
+    return {
+      fromName,
+      fromEmail,
+      formatted: `"${fromName}" <${fromEmail}>`,
+    };
+  }
+
+  /**
    * Return or initialize pooled Nodemailer transport
    */
   getTransport() {
     if (this.mockTransport) {
       return this.mockTransport;
+    }
+
+    // Protect live production SMTP quota from being consumed by automated test runs
+    if (process.env.NODE_ENV === 'test' && !process.env.FORCE_REAL_SMTP_TEST) {
+      if (!this.autoTestMockTransport) {
+        this.autoTestMockTransport = {
+          sendMail: async () => ({ messageId: `mock-test-${Date.now()}` }),
+          verify: (cb) => cb(null, true),
+        };
+      }
+      return this.autoTestMockTransport;
     }
 
     if (this.mailTransport) {
@@ -84,6 +120,42 @@ class EmailQueueService {
   }
 
   /**
+   * Return fallback SMTP transport if configured in .env
+   */
+  getFallbackTransport() {
+    if (this.fallbackTransport) {
+      return this.fallbackTransport;
+    }
+
+    if (!process.env.SMTP_FALLBACK_HOST || !process.env.SMTP_FALLBACK_USER) {
+      return null;
+    }
+
+    const port = Number(process.env.SMTP_FALLBACK_PORT || 587);
+    const secure = process.env.SMTP_FALLBACK_SECURE === 'true' || port === 465;
+
+    this.fallbackTransport = nodemailer.createTransport({
+      host: process.env.SMTP_FALLBACK_HOST,
+      port,
+      secure,
+      auth: {
+        user: process.env.SMTP_FALLBACK_USER,
+        pass: process.env.SMTP_FALLBACK_PASS,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
+
+    logger.info('Fallback SMTP transport initialized', {
+      host: process.env.SMTP_FALLBACK_HOST,
+      port,
+    });
+
+    return this.fallbackTransport;
+  }
+
+  /**
    * Set mock transport for test suites
    */
   setMockTransport(transport) {
@@ -91,38 +163,176 @@ class EmailQueueService {
   }
 
   /**
-   * Classify whether an SMTP/network error is permanent or transient
+   * Classify whether an SMTP/network error is permanent or transient,
+   * distinguishing quota limits, invalid recipients, policy blocks, and credentials.
    */
   classifyError(err) {
-    if (!err) return { isPermanent: false, reason: 'unknown' };
-
-    const msg = (err.message || '').toLowerCase();
-    const code = String(err.responseCode || err.code || '');
-
-    // Permanent 5xx errors (RFC 5321)
-    if (code.startsWith('5') || [550, 551, 552, 553, 554, 501, 502, 503].includes(Number(code))) {
-      return { isPermanent: true, reason: `Permanent SMTP failure (${code})` };
+    if (!err) {
+      return {
+        isPermanent: false,
+        isQuotaExceeded: false,
+        category: 'UNKNOWN',
+        enhancedCode: null,
+        responseCode: null,
+        reason: 'Unknown error',
+        userMessage: 'An unexpected error occurred while delivering email.',
+        adminAction: null,
+      };
     }
 
-    // Invalid email / recipient errors
+    const msg = String(err.message || '').toLowerCase();
+    const response = String(err.response || '').toLowerCase();
+    const combined = `${msg} ${response}`;
+    const responseCode = err.responseCode ? Number(err.responseCode) : null;
+    const code = String(err.code || '');
+
+    // Extract RFC 3463 Enhanced Status Code if present (e.g. 5.4.5, 5.1.1, 5.7.1)
+    const enhancedMatch = `${err.response || ''} ${err.message || ''}`.match(/\b([45]\.\d{1,3}\.\d{1,3})\b/);
+    const enhancedCode = enhancedMatch ? enhancedMatch[1] : null;
+
+    // 1. PROVIDER DAILY SENDING LIMIT / QUOTA EXCEEDED
+    // Gmail: 550 5.4.5 Daily user sending limit exceeded
+    // Other providers: 452 4.5.3, 550 5.4.5, "quota exceeded", "sending limits", "rate limit"
     if (
-      code === 'EENVELOPE' ||
-      msg.includes('invalid recipient') ||
-      msg.includes('user not found') ||
-      msg.includes('no such user') ||
-      msg.includes('recipient address rejected') ||
-      msg.includes('mailbox unavailable')
+      enhancedCode === '5.4.5' ||
+      enhancedCode === '4.5.3' ||
+      combined.includes('daily user sending limit exceeded') ||
+      combined.includes('daily user sending quota exceeded') ||
+      combined.includes('quota exceeded') ||
+      combined.includes('daily sending limit') ||
+      combined.includes('sending limits go to') ||
+      combined.includes('too many messages') ||
+      combined.includes('rate limit exceeded')
     ) {
-      return { isPermanent: true, reason: 'Invalid or rejected recipient address' };
+      return {
+        isPermanent: false,
+        isQuotaExceeded: true,
+        category: 'PROVIDER_QUOTA_EXCEEDED',
+        enhancedCode: enhancedCode || '5.4.5',
+        responseCode: responseCode || 550,
+        reason: 'Email provider daily sending limit or quota exceeded (SMTP 550 5.4.5)',
+        userMessage: 'Email delivery temporarily unavailable due to email service sending limits. Please contact system administrator.',
+        adminAction: 'The SMTP provider (e.g. Gmail) daily sending quota was exhausted. Provider requires waiting for 24h rolling quota reset or configuring SMTP_FALLBACK in .env.',
+      };
     }
 
-    // Authentication failures on server credentials
-    if (code === 'EAUTH' || msg.includes('authentication failed') || msg.includes('bad credentials')) {
-      return { isPermanent: true, reason: 'SMTP Authentication failure' };
+    // 2. INVALID RECIPIENT / MAILBOX NOT FOUND
+    if (
+      enhancedCode === '5.1.1' ||
+      enhancedCode === '5.1.2' ||
+      enhancedCode === '5.1.3' ||
+      combined.includes('user unknown') ||
+      combined.includes('mailbox not found') ||
+      combined.includes('recipient address rejected') ||
+      combined.includes('does not exist') ||
+      combined.includes('no such user') ||
+      combined.includes('invalid recipient') ||
+      combined.includes('mailbox unavailable')
+    ) {
+      return {
+        isPermanent: true,
+        isQuotaExceeded: false,
+        category: 'INVALID_RECIPIENT',
+        enhancedCode: enhancedCode || '5.1.1',
+        responseCode: responseCode || 550,
+        reason: `Recipient address rejected by mail server (${enhancedCode || '5.1.1'})`,
+        userMessage: 'Registered email address was rejected by the mail server. Please contact administrator to update your email.',
+        adminAction: 'Check the faculty member email in database. Ensure the mailbox is active on the institutional mail domain.',
+      };
     }
 
-    // Transient errors: 4xx SMTP codes, 429 rate limit, timeouts, connection resets
-    return { isPermanent: false, reason: 'Transient network/provider error' };
+    // 3. SENDER AUTHENTICATION / SPF / DKIM / DMARC / RELAY RESTRICTIONS
+    if (
+      enhancedCode === '5.7.1' ||
+      enhancedCode === '5.7.26' ||
+      enhancedCode === '5.7.0' ||
+      combined.includes('relay access denied') ||
+      combined.includes('relay not permitted') ||
+      combined.includes('spf') ||
+      combined.includes('dkim') ||
+      combined.includes('dmarc') ||
+      combined.includes('sender rejected') ||
+      combined.includes('not authorized to send')
+    ) {
+      return {
+        isPermanent: true,
+        isQuotaExceeded: false,
+        category: 'POLICY_REJECTION',
+        enhancedCode: enhancedCode || '5.7.1',
+        responseCode: responseCode || 550,
+        reason: `Sender domain policy or SPF/DKIM/DMARC restriction (${enhancedCode || '5.7.1'})`,
+        userMessage: 'Email rejected due to sender domain policy (SPF/DKIM). Please contact system administrator.',
+        adminAction: 'Verify that MAIL_FROM_EMAIL matches SMTP_USER or has authorized sender permissions with SPF/DKIM in DNS.',
+      };
+    }
+
+    // 4. SMTP SERVER AUTHENTICATION (BAD USER/PASS)
+    if (
+      code === 'EAUTH' ||
+      enhancedCode === '5.7.8' ||
+      enhancedCode === '5.5.1' ||
+      combined.includes('authentication failed') ||
+      combined.includes('bad credentials') ||
+      combined.includes('invalid credentials') ||
+      combined.includes('username and password not accepted')
+    ) {
+      return {
+        isPermanent: true,
+        isQuotaExceeded: false,
+        category: 'AUTH_FAILURE',
+        enhancedCode: enhancedCode || '5.7.8',
+        responseCode: responseCode || 535,
+        reason: 'SMTP Authentication failure - credentials rejected by mail server',
+        userMessage: 'Email server authentication failed. Administrator must update SMTP credentials.',
+        adminAction: 'Verify SMTP_USER and SMTP_PASS (App Password) in .env file.',
+      };
+    }
+
+    // 5. TRANSIENT NETWORK / THROTTLING ERRORS
+    if (
+      (responseCode && String(responseCode).startsWith('4')) ||
+      enhancedCode?.startsWith('4') ||
+      combined.includes('try again later') ||
+      combined.includes('service temporarily busy') ||
+      ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKET'].includes(code)
+    ) {
+      return {
+        isPermanent: false,
+        isQuotaExceeded: false,
+        category: 'TRANSIENT',
+        enhancedCode: enhancedCode || '4.0.0',
+        responseCode: responseCode || 421,
+        reason: 'Transient network or provider throttling',
+        userMessage: 'Temporary network delay. Delivery is being retried automatically...',
+        adminAction: null,
+      };
+    }
+
+    // 6. OTHER 5XX PERMANENT ERRORS
+    if (responseCode && String(responseCode).startsWith('5')) {
+      return {
+        isPermanent: true,
+        isQuotaExceeded: false,
+        category: 'PERMANENT_SMTP',
+        enhancedCode,
+        responseCode,
+        reason: `Permanent SMTP failure (${responseCode}${enhancedCode ? ` ${enhancedCode}` : ''})`,
+        userMessage: `Email delivery failed (${responseCode}). Please contact system administrator.`,
+        adminAction: `Review SMTP response: ${err.response || err.message}`,
+      };
+    }
+
+    // 7. DEFAULT TRANSIENT
+    return {
+      isPermanent: false,
+      isQuotaExceeded: false,
+      category: 'UNKNOWN',
+      enhancedCode: null,
+      responseCode: null,
+      reason: 'Transient connection error',
+      userMessage: 'Temporary delivery issue. Retrying...',
+      adminAction: null,
+    };
   }
 
   /**
@@ -231,18 +441,37 @@ class EmailQueueService {
   }
 
   /**
-   * Send an individual job through the SMTP transport
+   * Send an individual job through the SMTP transport, with automatic fallback transport if configured
    */
   async processJob(job) {
-    const transport = this.getTransport();
-    if (!transport) {
+    if (!job || !job.to) {
+      return;
+    }
+    const primaryTransport = this.getTransport();
+    if (!primaryTransport) {
       const err = new Error('SMTP environment variables are not configured on the server.');
-      await this.handleJobFailure(job, err, true);
+      const classification = this.classifyError(err);
+      await this.handleJobFailure(job, err, classification);
       return;
     }
 
-    const fromName = process.env.MAIL_FROM_NAME || 'VFSTR Faculty System';
-    const fromEmail = process.env.SMTP_USER || 'no-reply@vignan.ac.in';
+    const { fromName, fromEmail, formatted: fromFormatted } = this.getFromAddress();
+
+    const mailOptions = {
+      from: fromFormatted,
+      replyTo: fromEmail,
+      to: job.to,
+      subject: job.subject,
+      text: job.text,
+      html: job.html,
+      envelope: {
+        from: fromEmail,
+        to: job.to,
+      },
+      headers: {
+        'X-Entity-Ref-ID': String(job._id),
+      },
+    };
 
     try {
       if (job.otpTokenId) {
@@ -252,14 +481,24 @@ class EmailQueueService {
         ).catch(() => {});
       }
 
-      await transport.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        replyTo: fromEmail,
-        to: job.to,
-        subject: job.subject,
-        text: job.text,
-        html: job.html,
-      });
+      let sentInfo;
+      try {
+        sentInfo = await primaryTransport.sendMail(mailOptions);
+      } catch (primaryErr) {
+        const primaryClassification = this.classifyError(primaryErr);
+        // If primary transport fails due to quota limits, transient, or network error, attempt fallback transport
+        const fallbackTransport = this.getFallbackTransport();
+        if (fallbackTransport && (primaryClassification.isQuotaExceeded || !primaryClassification.isPermanent)) {
+          logger.warn('Primary SMTP transport failed; attempting delivery via fallback transport...', {
+            jobId: job._id,
+            primaryError: primaryErr.message,
+          });
+          sentInfo = await fallbackTransport.sendMail(mailOptions);
+          sentInfo = { ...sentInfo, viaFallback: true };
+        } else {
+          throw primaryErr;
+        }
+      }
 
       // Mark job as sent
       const completedAt = new Date();
@@ -272,6 +511,11 @@ class EmailQueueService {
             lockedAt: null,
             lockedBy: null,
             lastError: null,
+            metadata: {
+              ...(job.metadata || {}),
+              messageId: sentInfo?.messageId,
+              viaFallback: !!sentInfo?.viaFallback,
+            },
           },
         }
       );
@@ -294,22 +538,26 @@ class EmailQueueService {
         empId: job.empId,
         toMasked: this.maskEmail(job.to),
         attempts: job.attempts,
+        viaFallback: !!sentInfo?.viaFallback,
       });
     } catch (sendErr) {
-      const { isPermanent, reason } = this.classifyError(sendErr);
-      await this.handleJobFailure(job, sendErr, isPermanent, reason);
+      const classification = this.classifyError(sendErr);
+      await this.handleJobFailure(job, sendErr, classification);
     }
   }
 
   /**
-   * Handle job delivery failures with backoff or permanent marking
+   * Handle job delivery failures with accurate error classification and backoff
    */
-  async handleJobFailure(job, error, isPermanent = false, reason = '') {
+  async handleJobFailure(job, error, classification) {
     const errorMessage = error?.message || String(error);
     const hasExceededAttempts = job.attempts >= job.maxAttempts;
+    const isPermanent = classification ? classification.isPermanent : false;
+    const isQuotaExceeded = classification ? classification.isQuotaExceeded : false;
+    const userMessage = classification?.userMessage || 'Email delivery failed. Please contact system administrator.';
 
-    if (isPermanent || hasExceededAttempts) {
-      // Mark permanently failed
+    if (isPermanent || hasExceededAttempts || isQuotaExceeded) {
+      // Mark failed
       await EmailJob.updateOne(
         { _id: job._id },
         {
@@ -319,6 +567,13 @@ class EmailQueueService {
             lastError: errorMessage,
             lockedAt: null,
             lockedBy: null,
+            metadata: {
+              ...(job.metadata || {}),
+              category: classification?.category,
+              enhancedCode: classification?.enhancedCode,
+              responseCode: classification?.responseCode,
+              adminAction: classification?.adminAction,
+            },
           },
         }
       );
@@ -329,7 +584,7 @@ class EmailQueueService {
           {
             $set: {
               deliveryStatus: 'failed',
-              deliveryError: isPermanent ? `Permanent error: ${reason || errorMessage}` : 'Max delivery retry attempts exceeded',
+              deliveryError: userMessage,
             },
           }
         ).catch(() => {});
@@ -340,9 +595,11 @@ class EmailQueueService {
         empId: job.empId,
         toMasked: this.maskEmail(job.to),
         attempts: job.attempts,
-        isPermanent,
-        reason,
-        error: errorMessage,
+        category: classification?.category,
+        enhancedCode: classification?.enhancedCode,
+        responseCode: classification?.responseCode,
+        reason: classification?.reason,
+        adminAction: classification?.adminAction,
       });
     } else {
       // Schedule retry with exponential backoff & jitter
@@ -358,6 +615,12 @@ class EmailQueueService {
             lastError: errorMessage,
             lockedAt: null,
             lockedBy: null,
+            metadata: {
+              ...(job.metadata || {}),
+              category: classification?.category,
+              enhancedCode: classification?.enhancedCode,
+              responseCode: classification?.responseCode,
+            },
           },
         }
       );
@@ -368,7 +631,7 @@ class EmailQueueService {
           {
             $set: {
               deliveryStatus: 'pending',
-              deliveryError: `Retry scheduled (attempt ${job.attempts}/${job.maxAttempts}) in ${Math.round(backoffMs / 1000)}s: ${errorMessage}`,
+              deliveryError: `Retrying email delivery in ${Math.round(backoffMs / 1000)}s...`,
             },
           }
         ).catch(() => {});
@@ -379,9 +642,9 @@ class EmailQueueService {
         empId: job.empId,
         toMasked: this.maskEmail(job.to),
         attempts: job.attempts,
+        category: classification?.category,
         nextAttemptAt,
         delayMs: backoffMs,
-        error: errorMessage,
       });
     }
   }

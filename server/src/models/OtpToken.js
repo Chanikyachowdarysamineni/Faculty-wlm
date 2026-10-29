@@ -41,8 +41,11 @@ otpTokenSchema.statics.getRecentActiveOtp = async function (empId, cooldownSecon
 
 /** Generate a 6-digit OTP, persist it, and return raw OTP + docId */
 otpTokenSchema.statics.createOtp = async function (empId, ttlMinutes = 10) {
-  // Invalidate any existing OTPs for this user
-  await this.deleteMany({ empId });
+  // Invalidate any existing active OTPs for this user without deleting records
+  await this.updateMany(
+    { empId, usedAt: null },
+    { $set: { usedAt: new Date() } }
+  );
 
   // Cryptographically secure 6-digit OTP generation (CWE-338 fix)
   const raw = String(crypto.randomInt(100000, 1000000));

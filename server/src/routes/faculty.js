@@ -354,19 +354,25 @@ router.post(
       const defaultPassword = safeMobile ? safeMobile : safeEmpId;
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
-      await User.create([{
-        empId: safeEmpId,
-        name: safeName,
-        designation: safeDesignation,
-        mobile: safeMobile,
-        email: safeEmail,
-        passwordHash,
-        role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
-        canAccessAdmin: false,
-        forcePasswordChange: true,
-        joiningDate: joiningDate || null,
-        relievingDate: relievingDate || null,
-      }], { session });
+      await User.findOneAndUpdate(
+        { empId: safeEmpId },
+        {
+          $set: {
+            name: safeName,
+            designation: safeDesignation,
+            mobile: safeMobile,
+            email: safeEmail,
+            passwordHash,
+            role: isAdminEmployeeId(safeEmpId) ? 'admin' : 'faculty',
+            canAccessAdmin: isAdminEmployeeId(safeEmpId),
+            forcePasswordChange: true,
+            joiningDate: joiningDate || null,
+            relievingDate: relievingDate || null,
+            isDeleted: false,
+          }
+        },
+        { upsert: true, new: true, session }
+      );
 
       logger.info('User account created for faculty', { empId: doc.empId });
 
@@ -531,6 +537,7 @@ router.put(
           userUpdates.mobile = allowedUpdates.mobile;
           if (allowedUpdates.mobile.trim()) {
             userUpdates.passwordHash = await bcrypt.hash(allowedUpdates.mobile.trim(), 10);
+            userUpdates.forcePasswordChange = true;
           }
         }
 
@@ -541,8 +548,26 @@ router.put(
             { new: true, runValidators: true, session }
           );
           if (!userUpdateResult) {
-            // Non-blocking: some faculties might not have User accounts yet
-            logger.warn('User account not found - login credentials not updated', { empId });
+            // User account did not exist - auto-provision it with updated faculty details
+            const facultyDoc = await Faculty.findOne({ empId }).session(session);
+            if (facultyDoc) {
+              const defaultPassword = String(allowedUpdates.mobile || facultyDoc.mobile || empId).trim();
+              const passwordHash = await bcrypt.hash(defaultPassword, 10);
+              await User.create([{
+                empId,
+                name: allowedUpdates.name || facultyDoc.name,
+                designation: allowedUpdates.designation || facultyDoc.designation,
+                mobile: allowedUpdates.mobile !== undefined ? allowedUpdates.mobile : facultyDoc.mobile,
+                email: allowedUpdates.email !== undefined ? allowedUpdates.email : facultyDoc.email,
+                passwordHash,
+                role: isAdminEmployeeId(empId) ? 'admin' : 'faculty',
+                canAccessAdmin: isAdminEmployeeId(empId),
+                forcePasswordChange: true,
+                joiningDate: allowedUpdates.joiningDate !== undefined ? allowedUpdates.joiningDate : facultyDoc.joiningDate,
+                relievingDate: allowedUpdates.relievingDate !== undefined ? allowedUpdates.relievingDate : facultyDoc.relievingDate,
+              }], { session });
+              logger.info('Auto-provisioned User account during faculty update', { empId });
+            }
           }
         }
       }
@@ -805,17 +830,23 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
       const defaultPassword = String(mobile).trim() ? String(mobile).trim() : String(empId).trim();
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
-      await User.create([{
-        empId: String(empId).trim(),
-        name: String(name).trim(),
-        designation: String(designation).trim(),
-        mobile: String(mobile).trim(),
-        email: String(email).trim(),
-        passwordHash,
-        role: 'faculty',   // H-2: Use lowercase 'faculty' consistently
-        canAccessAdmin: false,
-        forcePasswordChange: true
-      }], { session });
+      await User.findOneAndUpdate(
+        { empId: String(empId).trim() },
+        {
+          $set: {
+            name: String(name).trim(),
+            designation: String(designation).trim(),
+            mobile: String(mobile).trim(),
+            email: String(email).trim(),
+            passwordHash,
+            role: isAdminEmployeeId(String(empId).trim()) ? 'admin' : 'faculty',
+            canAccessAdmin: isAdminEmployeeId(String(empId).trim()),
+            forcePasswordChange: true,
+            isDeleted: false,
+          }
+        },
+        { upsert: true, session }
+      );
       createdCount++;
     }
 
