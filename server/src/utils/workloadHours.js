@@ -18,7 +18,7 @@ const { getDefaultCapacity } = require('./designationUtils');
  * @param {Object} session - Optional mongoose session
  * @returns {Object} { totalHours, breakdown, workloads }
  */
-const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null, semester = null) => {
+const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session = null, semester = null, academicYear = null) => {
   try {
     // C-3: Exclude cancelled/unallocated and soft-deleted workloads from capacity calculations
     const query = {
@@ -28,6 +28,9 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
     };
     if (semester) {
       query.semester = semester;
+    }
+    if (academicYear) {
+      query.academicYear = academicYear;
     }
     const dbQuery = Workload.find(query).lean();
     if (session) dbQuery.session(session);
@@ -92,7 +95,7 @@ const calculateFacultyWorkload = async (empId, excludeWorkloadId = null, session
  * @param {Object} session - Optional mongoose session
  * @returns {Object} { empId, name, capacity, currentLoad, remaining, workloadPercentage, assignments }
  */
-const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null, semester = null) => {
+const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, session = null, semester = null, academicYear = null) => {
   try {
     const query = Faculty.findOne({ empId: String(empId || '').trim() }).lean();
     if (session) query.session(session);
@@ -105,11 +108,13 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
     // Use semester-specific capacity if available, fallback to faculty.capacity
     let capacity = Number(faculty.capacity || getDefaultCapacity(faculty.designation));
     if (semester) {
-      const capRecord = await FacultyCapacity.findOne({ empId: String(empId).trim(), semester }).lean();
+      const capQuery = { empId: String(empId).trim(), semester };
+      if (academicYear) capQuery.academicYear = academicYear;
+      const capRecord = await FacultyCapacity.findOne(capQuery).lean();
       if (capRecord) capacity = Number(capRecord.capacity || capacity);
     }
 
-    const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session, semester);
+    const workloadData = await calculateFacultyWorkload(empId, excludeWorkloadId, session, semester, academicYear);
 
     const currentLoad = workloadData.totalHours;
     const remaining = capacity - currentLoad;
@@ -120,9 +125,12 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
       name: faculty.name,
       designation: faculty.designation,
       capacity,
+      target: capacity,
       currentLoad,
       remaining,
+      remainingHours: remaining,
       workloadPercentage: parseFloat(workloadPercentage),
+      utilizationPercent: parseFloat(workloadPercentage),
       isOverAllocated: currentLoad > capacity,
       breakdown: workloadData.breakdown,
       assignmentCount: workloadData.assignmentCount,
@@ -143,11 +151,12 @@ const getFacultyWorkloadSummary = async (empId, excludeWorkloadId = null, sessio
  * @param {String} excludeWorkloadId - Optional: workload ID to exclude (for updates)
  * @param {Object} session - Optional mongoose session
  * @param {String} semester - Optional: semester to filter workload calculation
+ * @param {String} academicYear - Optional: academic year to filter workload calculation
  * @returns {Object} { canAssign: Boolean, reason: String, summary: Object }
  */
-const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null, session = null, semester = null) => {
+const canAssignWorkload = async (empId, lectureHours = 0, tutorialHours = 0, practicalHours = 0, excludeWorkloadId = null, session = null, semester = null, academicYear = null) => {
   try {
-    const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session, semester);
+    const summary = await getFacultyWorkloadSummary(empId, excludeWorkloadId, session, semester, academicYear);
     const additionalHours = Number(lectureHours || 0) + Number(tutorialHours || 0) + Number(practicalHours || 0);
     const newTotal = summary.currentLoad + additionalHours;
     const capacity = summary.capacity;

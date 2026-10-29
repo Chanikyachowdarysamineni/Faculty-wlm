@@ -53,13 +53,7 @@ const getSectionsConfig = async (academicYear, semester) => {
   if (yr && sem) {
     doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  // By default, Even Semester should display existing Odd Semester section names as initial values
-  if (!doc?.value && yr && sem === 'EVEN') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
-  }
-  if (!doc?.value && yr && sem === 'ODD') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
-  }
+  // Strict period isolation: never cross-pollinate between ODD and EVEN semesters
   if (!doc?.value && yr) {
     doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
@@ -155,7 +149,9 @@ router.put('/sections', requireAuth, requireAdmin, requireAcademicPeriod, async 
   try {
     const acYear = req.academicPeriod?.academicYear?.name || req.body.academicYear;
     const sem = req.academicPeriod?.academicYearSemester?.semesterType || req.body.semester;
-    const sections = await saveSectionsConfig(req.body?.sections, acYear, sem);
+    const current = await getSectionsConfig(acYear, sem);
+    const merged = { ...current, ...(req.body?.sections || {}) };
+    const sections = await saveSectionsConfig(merged, acYear, sem);
     wsHandler.broadcast({ type: 'sections_updated', academicYear: acYear, semester: sem });
     sendSuccess(res, sections, 200);
   } catch (err) { next(err); }

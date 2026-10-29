@@ -183,7 +183,6 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
         allocationStatus: 'ALLOCATED',
         isDeleted: false,
         deletedAt: null,
-        isVisible: true,
       };
 
       // 1. Check if there's an existing workload for this faculty member on this course + section + semester
@@ -199,6 +198,7 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
       const existingEmpWl = await empWlQuery.exec();
 
       if (existingEmpWl) {
+        // Preserves admin's existing isVisible toggle state (never overwrites visibility on sync)
         await Workload.findByIdAndUpdate(
           existingEmpWl._id,
           { $set: updateData },
@@ -211,14 +211,24 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
         const existingWl = await existingQuery.exec();
 
         if (existingWl) {
+          // Preserves admin's existing isVisible toggle state (never overwrites visibility on sync)
           await Workload.findByIdAndUpdate(
             existingWl._id,
             { $set: updateData },
             { new: true, ...(session && { session }) }
           );
         } else {
-          // 3. Create new workload
-          const newDoc = new Workload(updateData);
+          // 3. Create new workload (inherits visibility of period if visible, otherwise false)
+          const periodHasVisible = await Workload.exists({
+            academicYear: academicYearStr,
+            semester: semesterStr,
+            isDeleted: false,
+            isVisible: true,
+          });
+          const newDoc = new Workload({
+            ...updateData,
+            isVisible: Boolean(periodHasVisible),
+          });
           await newDoc.save({ ...(session && { session }) });
         }
       }

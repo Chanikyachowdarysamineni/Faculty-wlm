@@ -86,7 +86,8 @@ const toClient = (doc) => {
     P: Number(doc.P || 0),
     C: Number(doc.C || 0),
     department: String(doc.department || 'CSE'),
-    semester: String(doc.semester ),
+    academicYear: String(doc.academicYear || ''),
+    semester: String(doc.semester || ''),
     isDeleted: Boolean(doc.isDeleted),
     createdAt: doc.createdAt?.toISOString() || null,
   };
@@ -197,6 +198,17 @@ router.post(
         return sendError(res, 'Academic year is required.', 400);
       }
 
+      const existingCourse = await Course.findOne({
+        subjectCode: normalizedSubjectCode,
+        program: String(program || '').trim(),
+        academicYear: resolvedAcademicYear,
+        semester: resolvedSemester,
+        isDeleted: { $ne: true },
+      });
+      if (existingCourse) {
+        return sendConflict(res, `Course code "${normalizedSubjectCode}" already exists for ${program} in ${resolvedAcademicYear} (${resolvedSemester} semester).`);
+      }
+
       const doc = await Course.create({
         courseId,
         program: String(program || '').trim(),
@@ -263,9 +275,25 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (updates.program !== undefined) updates.program = String(updates.program || '').trim();
 
     const checkSubjectCode = updates.subjectCode !== undefined ? updates.subjectCode : current.subjectCode;
-    const checkCourseType = updates.courseType !== undefined ? updates.courseType : current.courseType;
-    
-    // No duplicate check required - identical courses are allowed
+    const checkProgram = updates.program !== undefined ? updates.program : current.program;
+    const checkAy = updates.academicYear !== undefined ? updates.academicYear : current.academicYear;
+    const checkSem = updates.semester !== undefined ? updates.semester : current.semester;
+
+    if (checkSubjectCode && checkProgram && checkAy && checkSem) {
+      const duplicate = await Course.findOne({
+        courseId: { $ne: courseId },
+        subjectCode: checkSubjectCode,
+        program: checkProgram,
+        academicYear: checkAy,
+        semester: checkSem,
+        isDeleted: { $ne: true },
+      }).session(session);
+      if (duplicate) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendConflict(res, `Course code "${checkSubjectCode}" already exists for ${checkProgram} in ${checkAy} (${checkSem} semester).`);
+      }
+    }
 
     if (updates.L !== undefined) updates.L = Number(updates.L) || 0;
     if (updates.T !== undefined) updates.T = Number(updates.T) || 0;
@@ -346,6 +374,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
+    if (err.code === 11000 || err.code === 11001) {
+      logger.warn('Course update duplicate constraint failed', { courseId: req.params.id, error: err.message, userId: req.user.id });
+      return sendConflict(res, 'Failed to update course due to duplicate unique identifier.');
+    }
     logger.error('Error updating course', { error: err.message, courseId: req.params.id, userId: req.user.id });
     next(err);
   }

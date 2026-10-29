@@ -87,4 +87,64 @@ describe('Admin Management: Matching FacultyPage list', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ empId: targetEmp.empId, makeAdmin: initialStatus });
   });
+
+  test('GET /api/admin-management/users excludes faculty relieved before the academic period', async () => {
+    // Create a temporary faculty member relieved prior to 2026-2027 periodStart
+    const TEST_RELIEVED_ID = 'TEST_ADM_RELIEVED_99';
+    await Faculty.deleteMany({ empId: TEST_RELIEVED_ID });
+    await Faculty.create({
+      empId: TEST_RELIEVED_ID,
+      name: 'Dr. Relieved Faculty',
+      designation: 'Associate Professor',
+      department: 'CSE',
+      relievingDate: new Date('2025-01-01'), // Relieved in 2025
+      isDeleted: false,
+    });
+
+    const res = await request(app)
+      .get('/api/admin-management/users?academicYear=2026-2027&semester=ODD')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.find(f => f.empId === TEST_RELIEVED_ID);
+    expect(found).toBeUndefined();
+
+    await Faculty.deleteMany({ empId: TEST_RELIEVED_ID });
+  });
+
+  test('GET /api/admin-management/users excludes faculty joining after the academic period ends', async () => {
+    const TEST_FUTURE_ID = 'TEST_ADM_FUTURE_99';
+    await Faculty.deleteMany({ empId: TEST_FUTURE_ID });
+    await Faculty.create({
+      empId: TEST_FUTURE_ID,
+      name: 'Dr. Future Faculty',
+      designation: 'Assistant Professor',
+      department: 'CSE',
+      joiningDate: new Date('2028-06-01'), // Joins in 2028
+      isDeleted: false,
+    });
+
+    const res = await request(app)
+      .get('/api/admin-management/users?academicYear=2026-2027&semester=ODD')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.find(f => f.empId === TEST_FUTURE_ID);
+    expect(found).toBeUndefined();
+
+    await Faculty.deleteMany({ empId: TEST_FUTURE_ID });
+  });
+
+  test('GET /api/admin-management/users guarantees distinct faculty by empId with 0 duplicates', async () => {
+    const res = await request(app)
+      .get('/api/admin-management/users?academicYear=2026-2027&semester=ODD')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    const facultyList = res.body.data;
+    const empIds = facultyList.map(f => f.empId);
+    const distinctEmpIds = new Set(empIds);
+
+    expect(distinctEmpIds.size).toBe(facultyList.length);
+  });
 });

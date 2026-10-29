@@ -38,13 +38,7 @@ const getSectionsConfig = async (academicYear, semester) => {
   if (yr && sem) {
     doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  // By default, Even Semester should display existing Odd Semester section names as initial values
-  if (!doc?.value && yr && sem === 'EVEN') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
-  }
-  if (!doc?.value && yr && sem === 'ODD') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
-  }
+  // Strict period isolation: never cross-pollinate between ODD and EVEN semesters
   if (!doc && yr) {
     doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
@@ -310,11 +304,17 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
             designation:      { $first: '$designation' },
             coursesAssigned:  { $sum: 1 },
             totalCredits:     { $sum: '$C' },
-            // H-1: Use $ifNull to avoid null sums when fields are missing
+            // H-1: Use $ifNull to avoid null sums when fields are missing; ensure TA lecture hours are strictly 0
             totalHours: {
               $sum: {
                 $add: [
-                  { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] },
+                  {
+                    $cond: [
+                      { $eq: ['$facultyRole', 'TA'] },
+                      0,
+                      { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }
+                    ]
+                  },
                   { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
                   { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] },
                 ]
@@ -399,7 +399,13 @@ router.get('/dashboard-analytics', requireAuth, requireAdmin, requireAcademicPer
             assignedHours: { 
               $sum: { 
                 $add: [
-                  { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }, 
+                  { 
+                    $cond: [
+                      { $eq: ['$facultyRole', 'TA'] },
+                      0,
+                      { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }
+                    ]
+                  }, 
                   { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] }, 
                   { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
                 ] 
@@ -567,8 +573,9 @@ router.get('/overloaded-faculty', requireAuth, requireAdmin, requireAcademicPeri
 router.get('/faculty-workload/:empId', requireAuth, requireSelfOrAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const { empId } = req.params;
-    const semester = req.query.semester ;
-    const summary = await getFacultyWorkloadSummary(empId, null, null, semester);
+    const semester = req.query.semester || null;
+    const academicYear = req.query.academicYear || null;
+    const summary = await getFacultyWorkloadSummary(empId, null, null, semester, academicYear);
 
     res.json({
       success: true,

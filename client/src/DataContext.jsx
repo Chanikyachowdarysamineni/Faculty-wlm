@@ -77,6 +77,9 @@ export const DataProvider = ({ children }) => {
       if (msg.type === 'faculty_updated') {
         window.dispatchEvent(new CustomEvent('wlm:faculty_reload'));
       }
+      if (msg.type === 'admin_management_updated' || msg.type === 'user_updated') {
+        window.dispatchEvent(new CustomEvent('wlm:admin_management_reload'));
+      }
       if (msg.type === 'submissions_updated') {
         window.dispatchEvent(new CustomEvent('wlm:submissions_reload'));
       }

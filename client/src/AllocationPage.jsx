@@ -841,14 +841,14 @@ const AllocationPage = ({ isAdmin = true }) => {
       w.allocationStatus !== 'CANCELLED'
     );
     if (rowIdx === 0 && isMainAssigned) {
-      showToast('🔒 Main faculty slot (R1) is locked to the Workload Page assignment.');
+      showToast.warning('Main faculty slot (R1) is locked to the Workload Page assignment.');
       return;
     }
     // Prevent manual override for TA workload-driven slots (R2-R4)
     if (rowIdx >= 1 && (type === 'T' || type === 'P')) {
       const taKey = `${courseId}__${section}__${type}__${rowIdx}`;
       if (taWorkloadMap[taKey]) {
-        showToast('🔒 This TA slot is auto-assigned from the Workload Page. Update the workload assignment to modify it.');
+        showToast.warning('This TA slot is auto-assigned from the Workload Page. Update the workload assignment to modify it.');
         return;
       }
     }
@@ -952,9 +952,9 @@ const AllocationPage = ({ isAdmin = true }) => {
 
     setSaving(false);
     if (errors.length) {
-      showToast(`Saved with ${errors.length} error(s).`);
+      showToast.warning(`Saved with ${errors.length} error(s). Please review skipped slots.`);
     } else {
-      showToast('All allocations saved ?');
+      showToast.success('All allocations saved successfully.');
       setUnsaved(false);
       await refreshAllocationReadData({ withLoader: false });
     }
@@ -1026,7 +1026,7 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   const exportAllocations = (format) => {
     if (!allocationExportRows.length) {
-      showToast('No allocation rows to export for current filters.');
+      showToast.info('No allocation rows to export for current filters.');
       return;
     }
     const baseName = `allocations_${activeProgram}_${yearKey}`;

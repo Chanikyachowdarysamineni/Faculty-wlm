@@ -32,6 +32,7 @@ describe('Course Year Fetching and Workload Assignment System', () => {
   const SEMESTER = 'ODD';
 
   let adminToken;
+  let originalSettingDoc = null;
   let facultyToken;
 
   const TEST_COURSES = [
@@ -133,6 +134,9 @@ describe('Course Year Fetching and Workload Assignment System', () => {
       capacity: 18,
     });
 
+    // Backup original Section Config before test
+    originalSettingDoc = await Setting.findOne({ key: `sections_config_${ACADEMIC_YEAR}_${SEMESTER}` }).lean();
+
     // Ensure Section settings exist for test
     await Setting.findOneAndUpdate(
       { key: `sections_config_${ACADEMIC_YEAR}_${SEMESTER}` },
@@ -152,6 +156,14 @@ describe('Course Year Fetching and Workload Assignment System', () => {
   });
 
   afterAll(async () => {
+    // Restore original Section Config after test
+    if (originalSettingDoc) {
+      await Setting.findOneAndUpdate(
+        { key: `sections_config_${ACADEMIC_YEAR}_${SEMESTER}` },
+        { value: originalSettingDoc.value },
+        { upsert: true }
+      );
+    }
     await Course.deleteMany({ courseId: { $in: [90001, 90002, 90003, 90004] } });
     await Faculty.deleteMany({ empId: { $in: [TEST_EMP_ID, ADMIN_EMP_ID] } });
     await User.deleteMany({ empId: { $in: [TEST_EMP_ID, ADMIN_EMP_ID] } });

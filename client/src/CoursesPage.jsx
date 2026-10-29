@@ -4,6 +4,8 @@ import API from './config';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import { useToast } from './Toast';
+import { FieldError } from './components/FieldError';
+import { MESSAGES, formatApiError, extractFieldErrors } from './utils/messages';
 import { useSharedData } from './DataContext';
 import ManageCourseTypesModal from './ManageCourseTypesModal';
 import './CoursesPage.css';
@@ -126,6 +128,9 @@ const CoursesPage = ({ isAdmin = true }) => {
 
   // ── Toast ──
   const { showToast } = useToast();
+  const [courseErrors, setCourseErrors] = useState({});
+  const [savingCourse, setSavingCourse] = useState(false);
+  const [deletingCourse, setDeletingCourse] = useState(false);
 
   const authHeaders = () => ({
     ...authJsonHeaders()
@@ -268,6 +273,7 @@ const CoursesPage = ({ isAdmin = true }) => {
     const defaultType = COURSE_TYPES.length > 0 ? COURSE_TYPES[0] : '';
     setCourseForm({ ...emptyCourseForm, program: activeProgram, year: activeYear, courseType: defaultType });
     setEditCourse(null);
+    setCourseErrors({});
     setShowCourseModal(true);
   };
 
@@ -277,24 +283,53 @@ const CoursesPage = ({ isAdmin = true }) => {
       allowedSectionsText: Array.isArray(c.allowedSections) ? c.allowedSections.join(', ') : ''
     });
     setEditCourse(c);
+    setCourseErrors({});
     setShowCourseModal(true);
   };
 
   const saveCourse = async () => {
     const f = courseForm;
-    if (!f.subjectCode.trim() || !f.subjectName.trim() || !f.shortName.trim()) {
-      showToast('Please fill in Subject Code, Name and Short Name.'); return;
+    const errs = {};
+
+    if (!f.subjectCode || !f.subjectCode.trim()) {
+      errs.subjectCode = 'Subject code is required (e.g., 22CS207).';
     }
-    if (!f.courseType || f.courseType.trim() === '') {
-      showToast('Please select a Course Type. If none are available, click "Manage Course Types" to add one first.');
-      return;
+    if (!f.shortName || !f.shortName.trim()) {
+      errs.shortName = 'Short name is required (e.g., OS).';
     }
-    if (f.courseType === '__other__' && !f.courseTypeOther.trim()) {
-      showToast('Please type Course Type.'); return;
+    if (!f.subjectName || !f.subjectName.trim()) {
+      errs.subjectName = 'Subject name is required.';
+    }
+    if (!f.courseType || !f.courseType.trim()) {
+      errs.courseType = 'Please select a course type.';
+    } else if (f.courseType === '__other__' && !f.courseTypeOther.trim()) {
+      errs.courseType = 'Please specify the course type.';
     }
     if (f.year === '__other__' && !f.yearOther.trim()) {
-      showToast('Please type Year / Department.'); return;
+      errs.year = 'Please specify the Year / Department.';
     }
+    if (f.L !== undefined && f.L !== '' && Number(f.L) < 0) {
+      errs.L = 'Lecture hours cannot be negative.';
+    }
+    if (f.T !== undefined && f.T !== '' && Number(f.T) < 0) {
+      errs.T = 'Tutorial hours cannot be negative.';
+    }
+    if (f.P !== undefined && f.P !== '' && Number(f.P) < 0) {
+      errs.P = 'Practical hours cannot be negative.';
+    }
+    if (f.C !== undefined && f.C !== '' && Number(f.C) < 0) {
+      errs.C = 'Credits cannot be negative.';
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setCourseErrors(errs);
+      showToast.error(MESSAGES.VALIDATION_FAILED);
+      return;
+    }
+
+    setSavingCourse(true);
+    setCourseErrors({});
+
     // Resolve 'Other' free-text values
     const resolvedProgram = f.program === '__other__' ? f.programOther.trim() || 'Other' : f.program;
     const resolvedCourseType = f.courseType === '__other__' ? f.courseTypeOther.trim() || 'Other' : f.courseType;
@@ -303,13 +338,13 @@ const CoursesPage = ({ isAdmin = true }) => {
       program: resolvedProgram,
       courseType: resolvedCourseType,
       year: resolvedYear,
-      subjectCode: f.subjectCode.trim(),
+      subjectCode: f.subjectCode.trim().toUpperCase(),
       subjectName: f.subjectName.trim(),
       shortName: f.shortName.trim(),
-      L: +f.L,
-      T: +f.T,
-      P: +f.P,
-      C: +f.C,
+      L: Math.max(0, Number(f.L) || 0),
+      T: Math.max(0, Number(f.T) || 0),
+      P: Math.max(0, Number(f.P) || 0),
+      C: Math.max(0, Number(f.C) || 0),
       academicYear: selectedAcademicYear || '',
       semester: selectedSemester || 'ODD',
       allowedSections: f.allowedSectionsText
@@ -333,24 +368,33 @@ const CoursesPage = ({ isAdmin = true }) => {
       );
       const data = await res.json();
       if (!res.ok || !data.success) {
-        const errMsg = data?.errors?.length ? data.errors.map(e => typeof e === 'string' ? e : (e.msg || e.message || JSON.stringify(e))).join(' | ') : (data?.message || 'Could not save course.');
-        showToast(errMsg);
+        const fieldErrs = extractFieldErrors(data);
+        if (data.message && data.message.toLowerCase().includes('already exists')) {
+          fieldErrs.subjectCode = data.message;
+        }
+        setCourseErrors(fieldErrs);
+        showToast.error(formatApiError(data, 'Could not save course.'));
         return;
       }
 
       // Refresh the course list from server to ensure consistency
       await fetchCourses();
-      showToast(editCourse ? 'Course updated successfully.' : 'Course added successfully.');
+      showToast.success(editCourse ? MESSAGES.COURSE_UPDATE_SUCCESS : MESSAGES.COURSE_SAVE_SUCCESS);
       setShowCourseModal(false);
       setCourseForm({ ...emptyCourseForm });
       setEditCourse(null);
+      setCourseErrors({});
     } catch (error) {
-      showToast('Network error while saving course.');
+      showToast.error(formatApiError(error, MESSAGES.NETWORK_ERROR));
       console.error('Error saving course:', error);
+    } finally {
+      setSavingCourse(false);
     }
   };
 
   const confirmDeleteCourse = async () => {
+    if (!deleteCourse) return;
+    setDeletingCourse(true);
     try {
       const res = await fetch(`${API}/deva/courses/${deleteCourse.id}`, {
         method: 'DELETE',
@@ -358,17 +402,19 @@ const CoursesPage = ({ isAdmin = true }) => {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Could not delete course.');
+        showToast.error(formatApiError(data, 'Could not delete course.'));
         return;
       }
 
       // Refresh the course list from server
       await fetchCourses();
-      showToast('Course deleted successfully.');
+      showToast.success(MESSAGES.COURSE_DELETE_SUCCESS);
       setDeleteCourse(null);
     } catch (error) {
-      showToast('Network error while deleting course.');
+      showToast.error(formatApiError(error, MESSAGES.NETWORK_ERROR));
       console.error('Error deleting course:', error);
+    } finally {
+      setDeletingCourse(false);
     }
   };
 
@@ -570,9 +616,15 @@ const CoursesPage = ({ isAdmin = true }) => {
                 </div>
                 {/* Course Type */}
                 <div className="cp-fg">
-                  <label>Course Type</label>
-                  <select value={courseForm.courseType}
-                    onChange={e => setCourseForm(p => ({ ...p, courseType: e.target.value }))}>
+                  <label>Course Type *</label>
+                  <select
+                    value={courseForm.courseType}
+                    aria-invalid={!!courseErrors.courseType}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, courseType: e.target.value }));
+                      if (courseErrors.courseType) setCourseErrors(prev => ({ ...prev, courseType: '' }));
+                    }}
+                  >
                     {COURSE_TYPES.length === 0 && (
                       <option value="">— No types configured (use Manage Course Types) —</option>
                     )}
@@ -593,6 +645,7 @@ const CoursesPage = ({ isAdmin = true }) => {
                       onChange={e => setCourseForm(p => ({ ...p, courseTypeOther: e.target.value }))}
                     />
                   )}
+                  <FieldError error={courseErrors.courseType} />
                 </div>
                 {/* Year */}
                 <div className="cp-fg">
@@ -611,55 +664,128 @@ const CoursesPage = ({ isAdmin = true }) => {
                       onChange={e => setCourseForm(p => ({ ...p, yearOther: e.target.value }))}
                     />
                   )}
+                  <FieldError error={courseErrors.year} />
                 </div>
                 {/* Subject Code */}
                 <div className="cp-fg">
                   <label>Subject Code *</label>
-                  <input value={courseForm.subjectCode} placeholder="e.g. 22CS207"
-                    onChange={e => setCourseForm(p => ({ ...p, subjectCode: e.target.value }))} />
+                  <input
+                    value={courseForm.subjectCode}
+                    placeholder="e.g. 22CS207"
+                    aria-invalid={!!courseErrors.subjectCode}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, subjectCode: e.target.value }));
+                      if (courseErrors.subjectCode) setCourseErrors(prev => ({ ...prev, subjectCode: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.subjectCode} />
                 </div>
                 {/* Short Name */}
                 <div className="cp-fg">
                   <label>Short Name *</label>
-                  <input value={courseForm.shortName} placeholder="e.g. OS"
-                    onChange={e => setCourseForm(p => ({ ...p, shortName: e.target.value }))} />
+                  <input
+                    value={courseForm.shortName}
+                    placeholder="e.g. OS"
+                    aria-invalid={!!courseErrors.shortName}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, shortName: e.target.value }));
+                      if (courseErrors.shortName) setCourseErrors(prev => ({ ...prev, shortName: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.shortName} />
                 </div>
                 {/* Subject Name — full width */}
                 <div className="cp-fg cp-fg-full">
                   <label>Subject Name *</label>
-                  <input value={courseForm.subjectName} placeholder="e.g. Operating Systems"
-                    onChange={e => setCourseForm(p => ({ ...p, subjectName: e.target.value }))} />
+                  <input
+                    value={courseForm.subjectName}
+                    placeholder="e.g. Operating Systems"
+                    aria-invalid={!!courseErrors.subjectName}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, subjectName: e.target.value }));
+                      if (courseErrors.subjectName) setCourseErrors(prev => ({ ...prev, subjectName: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.subjectName} />
                 </div>
                 {/* L */}
                 <div className="cp-fg">
                   <label>L — Lecture hrs</label>
-                  <input type="number" min="0" value={courseForm.L}
-                    onChange={e => setCourseForm(p => ({ ...p, L: e.target.value }))} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={courseForm.L}
+                    aria-invalid={!!courseErrors.L}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, L: e.target.value }));
+                      if (courseErrors.L) setCourseErrors(prev => ({ ...prev, L: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.L} />
                 </div>
                 {/* T */}
                 <div className="cp-fg">
                   <label>T — Tutorial hrs</label>
-                  <input type="number" min="0" value={courseForm.T}
-                    onChange={e => setCourseForm(p => ({ ...p, T: e.target.value }))} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={courseForm.T}
+                    aria-invalid={!!courseErrors.T}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, T: e.target.value }));
+                      if (courseErrors.T) setCourseErrors(prev => ({ ...prev, T: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.T} />
                 </div>
                 {/* P */}
                 <div className="cp-fg">
                   <label>P — Practical hrs</label>
-                  <input type="number" min="0" value={courseForm.P}
-                    onChange={e => setCourseForm(p => ({ ...p, P: e.target.value }))} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={courseForm.P}
+                    aria-invalid={!!courseErrors.P}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, P: e.target.value }));
+                      if (courseErrors.P) setCourseErrors(prev => ({ ...prev, P: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.P} />
                 </div>
                 {/* C — fixed but editable in curriculum */}
                 <div className="cp-fg">
                   <label>C — Credits <span className="cp-label-note">(fixed)</span></label>
-                  <input type="number" min="0" value={courseForm.C}
-                    onChange={e => setCourseForm(p => ({ ...p, C: e.target.value }))} />
+                  <input
+                    type="number"
+                    min="0"
+                    value={courseForm.C}
+                    aria-invalid={!!courseErrors.C}
+                    onChange={e => {
+                      setCourseForm(p => ({ ...p, C: e.target.value }));
+                      if (courseErrors.C) setCourseErrors(prev => ({ ...prev, C: '' }));
+                    }}
+                  />
+                  <FieldError error={courseErrors.C} />
                 </div>
               </div>
             </div>
             <div className="cp-modal-foot">
-              <button className="cp-btn cp-btn-cancel" onClick={() => setShowCourseModal(false)}>Cancel</button>
-              <button className="cp-btn cp-btn-save" onClick={saveCourse}>
-                {editCourse ? 'Save Changes' : 'Add Course'}
+              <button
+                type="button"
+                className="cp-btn cp-btn-cancel"
+                disabled={savingCourse}
+                onClick={() => setShowCourseModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-save"
+                disabled={savingCourse}
+                onClick={saveCourse}
+              >
+                {savingCourse ? 'Saving...' : (editCourse ? 'Save Changes' : 'Add Course')}
               </button>
             </div>
           </div>
@@ -668,18 +794,32 @@ const CoursesPage = ({ isAdmin = true }) => {
 
       {/* ── Delete Course confirm ── */}
       {deleteCourse && (
-        <div className="cp-overlay" onClick={() => setDeleteCourse(null)}>
+        <div className="cp-overlay" onClick={() => !deletingCourse && setDeleteCourse(null)}>
           <div className="cp-modal cp-modal-confirm" onClick={e => e.stopPropagation()}>
             <div className="cp-modal-head">
               <h3>Delete Course</h3>
-              <button className="cp-modal-x" onClick={() => setDeleteCourse(null)}>✕</button>
+              <button className="cp-modal-x" disabled={deletingCourse} onClick={() => setDeleteCourse(null)}>✕</button>
             </div>
             <p className="cp-confirm-text">
               Remove <strong>{deleteCourse.subjectName}</strong> ({deleteCourse.subjectCode}) and all its workload sessions? This cannot be undone.
             </p>
             <div className="cp-modal-foot">
-              <button className="cp-btn cp-btn-cancel" onClick={() => setDeleteCourse(null)}>Cancel</button>
-              <button className="cp-btn cp-btn-danger" onClick={confirmDeleteCourse}>Yes, Delete</button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-cancel"
+                disabled={deletingCourse}
+                onClick={() => setDeleteCourse(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cp-btn cp-btn-danger"
+                disabled={deletingCourse}
+                onClick={confirmDeleteCourse}
+              >
+                {deletingCourse ? 'Deleting...' : 'Yes, Delete'}
+              </button>
             </div>
           </div>
         </div>

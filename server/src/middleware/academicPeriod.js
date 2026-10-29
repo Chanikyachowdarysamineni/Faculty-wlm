@@ -19,8 +19,8 @@ const requireAcademicPeriod = async (req, res, next) => {
     const yearName = req.query.academicYear || req.body?.academicYear || req.headers['x-academic-year'];
     const semType = req.query.semester || req.body?.semester || req.headers['x-semester'];
 
-    // If nothing is provided, pass through without scoping
-    if (!yearId && !yearName) {
+    // If explicitly requested ALL, pass through without scoping
+    if (yearName === 'ALL' || yearId === 'ALL') {
       req.academicPeriod = null;
       req.getPeriodFilter = () => ({});
       req.getSemesterId = () => null;
@@ -37,6 +37,14 @@ const requireAcademicPeriod = async (req, res, next) => {
     // Fallback: resolve by name string (e.g. "2026-2027")
     if (!academicYear && yearName) {
       academicYear = await AcademicYear.findOne({ name: yearName }).lean();
+    }
+
+    // Fallback: if no year was explicitly provided, default to currently active academic year
+    if (!academicYear && !yearId && !yearName) {
+      academicYear = await AcademicYear.findOne({ isCurrent: true, status: 'ACTIVE' }).lean();
+      if (!academicYear) {
+        academicYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+      }
     }
 
     if (!academicYear) {

@@ -10,6 +10,8 @@ import DesignationManagementModal from './components/DesignationManagementModal'
 import { exportAsCSV, exportAsExcel } from './utils/exportUtils';
 import { getDefaultCapacity } from './utils/designationUtils';
 import { useApiForm } from './utils/useApiForm';
+import { useToast } from './Toast';
+import { MESSAGES, formatApiError } from './utils/messages';
 import { ErrorMessage, FormGroup } from './components/FormElements';
 import './FacultyPage.css';
 
@@ -31,15 +33,11 @@ const FacultyPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null); // null = add, obj = edit
-  const [toast, setToast] = useState('');
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  };
+  const { showToast } = useToast();
 
   const { values: form, errors, isSubmitting, handleChange, handleSubmit, resetForm, registerField } = useApiForm({
     initialValues: EMPTY_FORM,
-    showToast: (t) => showToast(t.message),
+    showToast,
     onSubmit: async (values) => {
       if (values.joiningDate && values.relievingDate) {
         if (new Date(values.relievingDate) < new Date(values.joiningDate)) {
@@ -889,7 +887,6 @@ const FacultyPage = () => {
           }}
         />
       )}
-      {toast && <div className="fp-toast">{toast}</div>}
     </div>
   );
 };

@@ -1,47 +1,84 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import API from '../config';
 import { authJsonHeaders } from '../utils/apiFetchAll';
+import { useToast } from '../Toast';
+import { MESSAGES, formatApiError } from '../utils/messages';
+import { useAcademicPeriod } from '../AcademicPeriodContext';
 
 const AdminManagement = ({ user }) => {
+  const { showToast } = useToast();
+  const { selectedAcademicYear, selectedSemester, selectedAcademicYearId } = useAcademicPeriod();
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState('');
+  const [updatingEmpId, setUpdatingEmpId] = useState(null);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/deva/admin-management/users`, { headers: authJsonHeaders() });
+      const query = new URLSearchParams();
+      if (selectedAcademicYear) query.append('academicYear', selectedAcademicYear);
+      if (selectedSemester) query.append('semester', selectedSemester);
+      if (selectedAcademicYearId) query.append('academicYearId', selectedAcademicYearId);
+
+      const url = `${API}/deva/admin-management/users${query.toString() ? `?${query.toString()}` : ''}`;
+      const res = await fetch(url, {
+        headers: {
+          ...authJsonHeaders(),
+          'x-academic-year': selectedAcademicYear || '',
+          'x-semester': selectedSemester || '',
+          ...(selectedAcademicYearId ? { 'x-academic-year-id': selectedAcademicYearId } : {})
+        }
+      });
       const data = await res.json();
-      if (data.success) {
-        setUsers(data.data);
+      if (res.ok && data.success) {
+        // Deduplicate records by empId to guarantee every faculty member appears exactly once
+        const seen = new Map();
+        (data.data || []).forEach(u => {
+          const key = String(u.empId || '').trim();
+          if (key && !seen.has(key)) {
+            seen.set(key, u);
+          }
+        });
+        setUsers(Array.from(seen.values()));
+      } else {
+        showToast.error(formatApiError(data, 'Failed to load faculty list.'));
       }
     } catch (err) {
       console.error(err);
-      showToast('Error loading users');
+      showToast.error(MESSAGES.NETWORK_ERROR);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedAcademicYear, selectedSemester, selectedAcademicYearId, showToast]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
-  };
+  // Real-time synchronization
+  useEffect(() => {
+    const handleReload = () => { fetchUsers(); };
+    window.addEventListener('wlm:faculty_reload', handleReload);
+    window.addEventListener('wlm:academic_period_reload', handleReload);
+    window.addEventListener('wlm:admin_management_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:faculty_reload', handleReload);
+      window.removeEventListener('wlm:academic_period_reload', handleReload);
+      window.removeEventListener('wlm:admin_management_reload', handleReload);
+    };
+  }, [fetchUsers]);
 
   const handleToggleAdmin = async (empId, currentStatus) => {
     const currentEmpId = user?.id || user?.empId;
     if (currentEmpId && empId === currentEmpId) {
-      return showToast('You cannot change your own admin status.');
+      return showToast.warning('You cannot change your own administrator status.');
     }
     
     const makeAdmin = !currentStatus;
-    if (!window.confirm(`Are you sure you want to ${makeAdmin ? 'grant admin privileges to' : 'remove admin privileges from'} user ${empId}?`)) return;
+    if (!window.confirm(`Are you sure you want to ${makeAdmin ? 'grant administrator privileges to' : 'remove administrator privileges from'} user ${empId}?`)) return;
 
+    setUpdatingEmpId(empId);
     try {
       const res = await fetch(`${API}/deva/admin-management/toggle-admin`, {
         method: 'POST',
@@ -50,15 +87,17 @@ const AdminManagement = ({ user }) => {
       });
       const data = await res.json();
       
-      if (data.success) {
-        showToast(data.message || 'Status updated');
+      if (res.ok && data.success) {
+        showToast.success(data.message || (makeAdmin ? 'Admin privilege granted successfully.' : 'Admin privilege removed successfully.'));
         fetchUsers();
       } else {
-        showToast(data.message || 'Error updating status');
+        showToast.error(formatApiError(data, 'Error updating administrator status.'));
       }
     } catch (err) {
       console.error(err);
-      showToast('Error updating status');
+      showToast.error(formatApiError(err, MESSAGES.NETWORK_ERROR));
+    } finally {
+      setUpdatingEmpId(null);
     }
   };
 
@@ -75,12 +114,17 @@ const AdminManagement = ({ user }) => {
         <div>
           <h2 style={{ margin: 0, color: '#1e293b', fontSize: '20px', fontWeight: '700' }}>Admin Management</h2>
           <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>
-            Manage system administrator privileges for active faculty members.
+            Manage system administrator privileges for active faculty members in {selectedAcademicYear || 'current academic year'} ({selectedSemester || 'active semester'}).
           </p>
         </div>
         {!loading && (
-          <div style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '500' }}>
-            Total Faculty: <strong>{filteredUsers.length}</strong>{filteredUsers.length !== users.length && ` (of ${users.length})`}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '500' }}>
+              Eligible Faculty: <strong>{filteredUsers.length}</strong>{filteredUsers.length !== users.length && ` (of ${users.length})`}
+            </div>
+            <div style={{ background: '#ecfdf5', color: '#047857', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '600' }}>
+              Administrators: <strong>{users.filter(u => u.isEffectiveAdmin).length}</strong>
+            </div>
           </div>
         )}
       </div>
@@ -171,16 +215,6 @@ const AdminManagement = ({ user }) => {
               )}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
-          background: '#334155', color: '#fff', padding: '10px 20px', borderRadius: '4px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 9999
-        }}>
-          {toast}
         </div>
       )}
     </div>

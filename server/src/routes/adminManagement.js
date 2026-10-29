@@ -5,22 +5,56 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError } = require('../utils/response');
 const logger = require('../utils/logger');
 const { ADMIN_EMPLOYEE_IDS, isAdminEmployeeId } = require('../config/adminConfig');
+const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
+const wsHandler = require('../websocket');
 
 const router = express.Router();
 
 // GET /api/admin-management/users - List active faculty matching FacultyPage with admin status
-router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/users', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
-    // 1. Fetch active faculty matching FacultyPage exactly (excluding deleted & system admin IDs)
-    const facultyList = await Faculty.find(
-      { isDeleted: { $ne: true }, empId: { $nin: ADMIN_EMPLOYEE_IDS } },
-      'slNo empId name designation department email'
-    ).sort({ slNo: 1 }).lean();
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
 
-    // 2. Fetch corresponding User accounts to get roles and admin access
+    // 1. Authoritative active faculty filter identical to FacultyPage
+    const baseFilter = {
+      isDeleted: { $ne: true },
+      empId: { $nin: ADMIN_EMPLOYEE_IDS }
+    };
+
+    // Apply joining and relieving date eligibility rules
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      baseFilter.$and = dateClauses;
+    }
+
+    // 2. Fetch distinct active faculty matching FacultyPage
+    const facultyDocs = await Faculty.find(
+      baseFilter,
+      'slNo empId name designation department email joiningDate relievingDate updatedAt'
+    ).sort({ slNo: 1, empId: 1 }).lean();
+
+    // Deduplicate by empId to guarantee every faculty member appears exactly once
+    const facultyMap = new Map();
+    for (const f of facultyDocs) {
+      const empIdKey = String(f.empId || '').trim();
+      if (!empIdKey) continue;
+      if (!facultyMap.has(empIdKey)) {
+        facultyMap.set(empIdKey, f);
+      } else {
+        const existing = facultyMap.get(empIdKey);
+        if (f.updatedAt && (!existing.updatedAt || new Date(f.updatedAt) > new Date(existing.updatedAt))) {
+          facultyMap.set(empIdKey, f);
+        }
+      }
+    }
+    const facultyList = Array.from(facultyMap.values());
+
+    // 3. Fetch corresponding User accounts to get roles and admin access
     const empIds = facultyList.map(f => f.empId);
     const users = await User.find(
       { empId: { $in: empIds } },
@@ -30,19 +64,22 @@ router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
     const userMap = new Map();
     users.forEach(u => userMap.set(String(u.empId).trim(), u));
 
-    // 3. Merge faculty details with effective admin status
-    const usersWithAdminStatus = facultyList.map(faculty => {
-      const u = userMap.get(String(faculty.empId).trim());
-      const isEnvAdmin = isAdminEmployeeId(faculty.empId);
+    // 4. Merge faculty details with effective admin status
+    const usersWithAdminStatus = facultyList.map((faculty, idx) => {
+      const empIdStr = String(faculty.empId).trim();
+      const u = userMap.get(empIdStr);
+      const isEnvAdmin = isAdminEmployeeId(empIdStr);
       const isDbAdmin = u?.role === 'admin' || u?.role === 'Admin' || !!u?.canAccessAdmin;
       return {
         _id: faculty._id,
-        slNo: faculty.slNo || 0,
-        empId: faculty.empId,
+        slNo: faculty.slNo || idx + 1,
+        empId: empIdStr,
         name: faculty.name,
         designation: faculty.designation || 'N/A',
         department: faculty.department || 'CSE',
         email: faculty.email || '',
+        joiningDate: faculty.joiningDate ? new Date(faculty.joiningDate).toISOString() : null,
+        relievingDate: faculty.relievingDate ? new Date(faculty.relievingDate).toISOString() : null,
         role: u?.role || 'faculty',
         isEnvAdmin,
         isEffectiveAdmin: isEnvAdmin || isDbAdmin,
@@ -99,6 +136,9 @@ router.post('/toggle-admin', requireAuth, requireAdmin, async (req, res, next) =
         }
       );
     }
+
+    wsHandler.broadcast({ type: 'admin_management_updated', empId, makeAdmin });
+    wsHandler.broadcast({ type: 'user_updated', empId });
 
     sendSuccess(res, { message: `User ${empId} is ${makeAdmin ? 'now' : 'no longer'} an admin` }, 200);
   } catch (err) {

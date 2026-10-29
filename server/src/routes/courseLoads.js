@@ -152,8 +152,7 @@ router.get('/', requireAuth, async (req, res) => {
     const Setting = require('../models/Setting');
     let configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semTypeNorm}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_${semesterType}` }).lean();
-    if (!configDoc && semTypeNorm === 'EVEN') configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_ODD` }).lean();
-    if (!configDoc && semTypeNorm === 'ODD') configDoc = await Setting.findOne({ key: `sections_config_${academicYear}_EVEN` }).lean();
+    // Strict period isolation: never cross-pollinate between ODD and EVEN semesters
     if (!configDoc) configDoc = await Setting.findOne({ key: `sections_config_${academicYear}` }).lean();
     if (!configDoc) configDoc = await Setting.findOne({ key: 'sections_config' }).lean();
     

@@ -41,9 +41,20 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
     const { name, order, isEnabled } = req.body;
     if (!name || !name.trim()) return sendError(res, 'Designation name is required.', 400);
 
-    const doc = await Designation.create({ name: name.trim(), order: order || 0, isEnabled: isEnabled !== false });
+    const trimmedName = name.trim();
+    const existing = await Designation.findOne({
+      name: { $regex: new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    if (existing) {
+      return sendConflict(res, `Designation "${trimmedName}" already exists.`);
+    }
+
+    const doc = await Designation.create({ name: trimmedName, order: order || 0, isEnabled: isEnabled !== false });
     sendSuccess(res, doc, 201);
   } catch (err) {
+    if (err.code === 11000) {
+      return sendConflict(res, 'Designation already exists.');
+    }
     logger.error('Error creating designation', { error: err.message });
     next(err);
   }
@@ -66,6 +77,18 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     
     const oldName = existing.name;
     const isNameChanged = newName && oldName !== newName;
+
+    if (isNameChanged) {
+      const duplicate = await Designation.findOne({
+        _id: { $ne: req.params.id },
+        name: { $regex: new RegExp(`^${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      }).session(session);
+      if (duplicate) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendConflict(res, `Designation "${newName}" already exists.`);
+      }
+    }
 
     existing.name = newName || existing.name;
     if (order !== undefined) existing.order = order;
@@ -116,6 +139,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
+    if (err.code === 11000) {
+      return sendConflict(res, 'Designation already exists.');
+    }
     logger.error('Error updating designation', { error: err.message });
     next(err);
   }
@@ -124,9 +150,25 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
 // DELETE /api/designations/:id (Admin only)
 router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const doc = await Designation.findByIdAndDelete(req.params.id);
-    if (!doc) return sendNotFound(res, 'Designation not found');
-    sendSuccess(res, { message: 'Designation deleted' }, 200);
+    const desig = await Designation.findById(req.params.id);
+    if (!desig) return sendNotFound(res, 'Designation not found');
+
+    // Check if any active faculty use this designation
+    const activeFacultyCount = await Faculty.countDocuments({
+      designation: desig.name,
+      isDeleted: { $ne: true }
+    });
+    if (activeFacultyCount > 0) {
+      desig.isEnabled = false;
+      await desig.save();
+      return sendSuccess(res, {
+        message: `Designation "${desig.name}" is assigned to ${activeFacultyCount} active faculty member(s) and was disabled instead of deleted to protect data integrity.`,
+        deactivated: true
+      }, 200);
+    }
+
+    await Designation.findByIdAndDelete(req.params.id);
+    sendSuccess(res, { message: 'Designation deleted', deactivated: false }, 200);
   } catch (err) {
     logger.error('Error deleting designation', { error: err.message });
     next(err);

@@ -2,29 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { exportAsCSV, exportAsExcel } from '../utils/exportUtils';
 import API from '../config';
 import { authJsonHeaders } from '../utils/apiFetchAll';
+import { useToast } from '../Toast';
+import { FieldError } from './FieldError';
+import { MESSAGES, formatApiError } from '../utils/messages';
 import './DesignationManagementModal.css';
 
 const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
+  const { showToast } = useToast();
   const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [name, setName] = useState('');
   const [order, setOrder] = useState('');
   const [editId, setEditId] = useState(null);
+  const [nameError, setNameError] = useState('');
 
   useEffect(() => {
     fetchDesignations();
   }, []);
 
-  
   const handleExport = (format) => {
     if (!designations || designations.length === 0) {
-      alert('No designations to export.');
+      showToast.warning('No designations available to export.');
       return;
     }
 
     const columns = [
       { header: 'Order', key: 'order' },
       { header: 'Designation Name', key: 'name' },
+      { header: 'Status', value: (row) => row.isEnabled === false ? 'Disabled' : 'Active' },
       { header: 'Created At', value: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : '' }
     ];
 
@@ -47,9 +54,12 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
       const data = await res.json();
       if (data.success) {
         setDesignations(data.data);
+      } else {
+        showToast.error(formatApiError(data, 'Failed to fetch designations.'));
       }
     } catch (err) {
       console.error('Failed to fetch admin designations', err);
+      showToast.error(MESSAGES.NETWORK_ERROR);
     } finally {
       setLoading(false);
     }
@@ -57,7 +67,13 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setNameError('Designation name is required.');
+      return;
+    }
+
+    setIsSaving(true);
+    setNameError('');
 
     try {
       const payload = { name: name.trim(), order: Number(order) || 0 };
@@ -70,18 +86,24 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setName('');
         setOrder('');
         setEditId(null);
+        showToast.success(editId ? 'Designation updated successfully.' : 'Designation created successfully.');
         fetchDesignations();
         if (onUpdated) onUpdated();
       } else {
-        alert(data.message || 'Error saving designation');
+        if (data.message && data.message.toLowerCase().includes('already exists')) {
+          setNameError(data.message);
+        }
+        showToast.error(formatApiError(data, 'Error saving designation.'));
       }
     } catch (err) {
       console.error(err);
-      alert('Error saving designation');
+      showToast.error(formatApiError(err, MESSAGES.NETWORK_ERROR));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -89,25 +111,34 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
     setEditId(d._id);
     setName(d.name);
     setOrder(d.order);
+    setNameError('');
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this designation?')) return;
+  const handleDelete = async (id, desigName) => {
+    if (!window.confirm(`Are you sure you want to delete or disable designation "${desigName || 'this designation'}"?`)) return;
+    setIsDeleting(true);
     try {
       const res = await fetch(`${API}/deva/designations/${id}`, {
         method: 'DELETE',
         headers: authJsonHeaders()
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        if (data.data?.deactivated) {
+          showToast.warning(data.data.message || 'Designation disabled because active faculty members are using it.');
+        } else {
+          showToast.success('Designation deleted successfully.');
+        }
         fetchDesignations();
         if (onUpdated) onUpdated();
       } else {
-        alert(data.message || 'Error deleting designation');
+        showToast.error(formatApiError(data, 'Error deleting designation.'));
       }
     } catch (err) {
       console.error(err);
-      alert('Error deleting designation');
+      showToast.error(formatApiError(err, MESSAGES.NETWORK_ERROR));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -115,6 +146,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
     setEditId(null);
     setName('');
     setOrder('');
+    setNameError('');
   };
 
   const content = (
@@ -125,21 +157,31 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
       </div>
       
       <form className="dmm-form" onSubmit={handleSave}>
-        <input 
-          type="text" 
-          placeholder="Designation Name" 
-          value={name} 
-          onChange={(e) => setName(e.target.value)} 
-          required 
-        />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <input 
+            type="text" 
+            placeholder="Designation Name *" 
+            value={name} 
+            aria-invalid={!!nameError}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (nameError) setNameError('');
+            }} 
+            required 
+          />
+          <FieldError error={nameError} />
+        </div>
         <input 
           type="number" 
           placeholder="Order (Optional)" 
           value={order} 
           onChange={(e) => setOrder(e.target.value)} 
+          style={{ width: '130px' }}
         />
-        <button type="submit" className="dmm-btn-save">{editId ? 'Update' : 'Add'}</button>
-        {editId && <button type="button" className="dmm-btn-cancel" onClick={handleCancel}>Cancel</button>}
+        <button type="submit" className="dmm-btn-save" disabled={isSaving}>
+          {isSaving ? 'Saving...' : (editId ? 'Update' : 'Add')}
+        </button>
+        {editId && <button type="button" className="dmm-btn-cancel" disabled={isSaving} onClick={handleCancel}>Cancel</button>}
       </form>
 
       <div className="dmm-list-wrap">
@@ -158,10 +200,15 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
               {designations.map(d => (
                 <tr key={d._id}>
                   <td>{d.order}</td>
-                  <td>{d.name}</td>
                   <td>
-                    <button className="dmm-action-btn edit" onClick={() => handleEdit(d)}>Edit</button>
-                    <button className="dmm-action-btn delete" onClick={() => handleDelete(d._id)}>Delete</button>
+                    {d.name}
+                    {d.isEnabled === false && (
+                      <span style={{ marginLeft: '8px', fontSize: '11px', color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>Disabled</span>
+                    )}
+                  </td>
+                  <td>
+                    <button className="dmm-action-btn edit" disabled={isSaving || isDeleting} onClick={() => handleEdit(d)}>Edit</button>
+                    <button className="dmm-action-btn delete" disabled={isSaving || isDeleting} onClick={() => handleDelete(d._id, d.name)}>Delete</button>
                   </td>
                 </tr>
               ))}

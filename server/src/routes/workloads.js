@@ -64,7 +64,22 @@ const _legacyNormalizeYear = (year) => {
 };
 
 const isDuplicateKeyError = (err) =>
-  !!err && (err.code === 11000 || err.code === 11001);
+  !!err && (
+    err.code === 11000 ||
+    err.code === 11001 ||
+    err.errorResponse?.code === 11000 ||
+    err.errorResponse?.code === 11001 ||
+    String(err.message || '').includes('E11000') ||
+    String(err.message || '').includes('duplicate key')
+  );
+
+const isWriteConflictError = (err) =>
+  !!err && (
+    err.code === 112 ||
+    err.errorResponse?.code === 112 ||
+    String(err.message || '').includes('WriteConflict') ||
+    (typeof err.hasErrorLabel === 'function' && err.hasErrorLabel('TransientTransactionError'))
+  );
 
 // L-3 FIX: normalizeCourseTypeKey removed (now imported from courseUtils)
 
@@ -86,7 +101,7 @@ const isTaUniqueIndexError = (err) => {
   return keyPattern.courseId === 1 && keyPattern.year === 1 && keyPattern.section === 1 && keyPattern.facultyRole === 1;
 };
 
-const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
+const buildDeSectionConflictFilter = ({ year, section, excludeId, academicYear, semester, program }) => {
   const filter = {
     year: String(year || '').trim(),
     section: String(section || '').trim(),
@@ -99,6 +114,9 @@ const buildDeSectionConflictFilter = ({ year, section, excludeId }) => {
     ],
   };
 
+  if (academicYear) filter.academicYear = String(academicYear).trim();
+  if (semester) filter.semester = String(semester).trim();
+  if (program) filter.program = String(program).trim();
   if (excludeId) {
     filter._id = { $ne: excludeId };
   }
@@ -121,13 +139,7 @@ const getSectionsConfig = async (academicYear, semester) => {
   if (yr && sem) {
     doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  // By default, Even Semester should display existing Odd Semester section names as initial values
-  if (!doc?.value && yr && sem === 'EVEN') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
-  }
-  if (!doc?.value && yr && sem === 'ODD') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
-  }
+  // Strict period isolation: never cross-pollinate between ODD and EVEN semesters
   if (!doc && yr) {
     doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }
@@ -201,7 +213,7 @@ const normalizeSlots = (slots = []) =>
       : emptyFacultySlot();
   });
 
-const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty }, session = null) => {
+const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty, academicYear, semester }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   if (!numericCourseId || !year || !section || !faculty?.empId) return;
 
@@ -210,7 +222,11 @@ const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty },
   const course = await courseQuery.exec();
   if (!course) return;
 
-  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const query = { courseId: numericCourseId, year, section };
+  if (academicYear) query.academicYear = String(academicYear).trim();
+  if (semester) query.semester = String(semester).trim();
+
+  const existingQuery = CourseAllocation.findOne(query).lean();
   if (session) existingQuery.session(session);
   const existing = await existingQuery.exec();
 
@@ -234,36 +250,42 @@ const syncMainFacultyToAllocation = async ({ courseId, year, section, faculty },
 
   const lectureSlot = lectureSlots[0] || {};
 
+  const setObj = {
+    courseId: numericCourseId,
+    subjectCode: course.subjectCode,
+    subjectName: course.subjectName,
+    shortName: course.shortName,
+    program: course.program,
+    year,
+    section,
+    fixedL: Number(course.L || 0),
+    fixedT: Number(course.T || 0),
+    fixedP: Number(course.P || 0),
+    C: Number(course.C || 0),
+    lectureSlots,
+    lectureSlot,
+    tutorialSlots,
+    practicalSlots,
+  };
+  if (academicYear) setObj.academicYear = String(academicYear).trim();
+  if (semester) setObj.semester = String(semester).trim();
+
   await CourseAllocation.findOneAndUpdate(
-    { courseId: numericCourseId, year, section },
-    {
-      $set: {
-        courseId: numericCourseId,
-        subjectCode: course.subjectCode,
-        subjectName: course.subjectName,
-        shortName: course.shortName,
-        program: course.program,
-        year,
-        section,
-        fixedL: Number(course.L || 0),
-        fixedT: Number(course.T || 0),
-        fixedP: Number(course.P || 0),
-        C: Number(course.C || 0),
-        lectureSlots,
-        lectureSlot,
-        tutorialSlots,
-        practicalSlots,
-      },
-    },
+    query,
+    { $set: setObj },
     { upsert: true, new: true, ...(session && { session }) }
   );
 };
 
-const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }, session = null) => {
+const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId, academicYear, semester }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   if (!numericCourseId || !year || !section || !empId) return;
 
-  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const query = { courseId: numericCourseId, year, section };
+  if (academicYear) query.academicYear = String(academicYear).trim();
+  if (semester) query.semester = String(semester).trim();
+
+  const existingQuery = CourseAllocation.findOne(query).lean();
   if (session) existingQuery.session(session);
   const existing = await existingQuery.exec();
   if (!existing) return;
@@ -282,7 +304,7 @@ const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }
   if (shouldClearPrimary(existing.practicalSlots)) practicalSlots[0] = emptyFacultySlot();
 
   await CourseAllocation.findOneAndUpdate(
-    { courseId: numericCourseId, year, section },
+    query,
     {
       $set: {
         lectureSlots,
@@ -296,7 +318,7 @@ const clearMainFacultyFromAllocation = async ({ courseId, year, section, empId }
 };
 
 // Sync a TA workload assignment to the allocation at the specified row index (1-3)
-const syncTAToAllocation = async ({ courseId, year, section, faculty, allocationRow }, session = null) => {
+const syncTAToAllocation = async ({ courseId, year, section, faculty, allocationRow, academicYear, semester }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   const rowIdx = Number(allocationRow || 0);
   if (!numericCourseId || !year || !section || !faculty?.empId || rowIdx < 1 || rowIdx > 3) return;
@@ -307,7 +329,12 @@ const syncTAToAllocation = async ({ courseId, year, section, faculty, allocation
   if (!course) return;
 
   const taSlot = toPrimarySlot(faculty, 0);
-  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+
+  const query = { courseId: numericCourseId, year, section };
+  if (academicYear) query.academicYear = String(academicYear).trim();
+  if (semester) query.semester = String(semester).trim();
+
+  const existingQuery = CourseAllocation.findOne(query).lean();
   if (session) existingQuery.session(session);
   const existing = await existingQuery.exec();
 
@@ -316,36 +343,42 @@ const syncTAToAllocation = async ({ courseId, year, section, faculty, allocation
   if (course.T > 0) tutorialSlots[rowIdx] = taSlot;
   if (course.P > 0) practicalSlots[rowIdx] = taSlot;
 
+  const setObj = {
+    courseId: numericCourseId,
+    subjectCode: course.subjectCode,
+    subjectName: course.subjectName,
+    shortName: course.shortName,
+    program: course.program,
+    year,
+    section,
+    fixedL: Number(course.L || 0),
+    fixedT: Number(course.T || 0),
+    fixedP: Number(course.P || 0),
+    C: Number(course.C || 0),
+    tutorialSlots,
+    practicalSlots,
+  };
+  if (academicYear) setObj.academicYear = String(academicYear).trim();
+  if (semester) setObj.semester = String(semester).trim();
+
   await CourseAllocation.findOneAndUpdate(
-    { courseId: numericCourseId, year, section },
-    {
-      $set: {
-        courseId: numericCourseId,
-        subjectCode: course.subjectCode,
-        subjectName: course.subjectName,
-        shortName: course.shortName,
-        program: course.program,
-        year,
-        section,
-        fixedL: Number(course.L || 0),
-        fixedT: Number(course.T || 0),
-        fixedP: Number(course.P || 0),
-        C: Number(course.C || 0),
-        tutorialSlots,
-        practicalSlots,
-      },
-    },
+    query,
+    { $set: setObj },
     { upsert: true, new: true, ...(session && { session }) }
   );
 };
 
 // Clear a TA from the allocation at the specified row index
-const clearTAFromAllocation = async ({ courseId, year, section, allocationRow }, session = null) => {
+const clearTAFromAllocation = async ({ courseId, year, section, allocationRow, academicYear, semester }, session = null) => {
   const numericCourseId = Number(courseId || 0);
   const rowIdx = Number(allocationRow || 0);
   if (!numericCourseId || !year || !section || rowIdx < 1 || rowIdx > 3) return;
 
-  const existingQuery = CourseAllocation.findOne({ courseId: numericCourseId, year, section }).lean();
+  const query = { courseId: numericCourseId, year, section };
+  if (academicYear) query.academicYear = String(academicYear).trim();
+  if (semester) query.semester = String(semester).trim();
+
+  const existingQuery = CourseAllocation.findOne(query).lean();
   if (session) existingQuery.session(session);
   const existing = await existingQuery.exec();
   if (!existing) return;
@@ -356,7 +389,7 @@ const clearTAFromAllocation = async ({ courseId, year, section, allocationRow },
   practicalSlots[rowIdx] = emptyFacultySlot();
 
   await CourseAllocation.findOneAndUpdate(
-    { courseId: numericCourseId, year, section },
+    query,
     { $set: { tutorialSlots, practicalSlots } },
     { new: true, ...(session && { session }) }
   );
@@ -622,9 +655,10 @@ router.get('/faculty-hours/:empId', requireAuth, requireAcademicPeriod, async (r
     }
 
     const semester = req.query.semester || null;
-    const summary = await getFacultyWorkloadSummary(empId, null, null, semester);
+    const academicYear = req.query.academicYear || null;
+    const summary = await getFacultyWorkloadSummary(empId, null, null, semester, academicYear);
     logger.info('Faculty workload summary retrieved', { empId, summary: { currentLoad: summary.currentLoad, totalCapacity: summary.capacity, utilizationPercent: summary.workloadPercentage }, userId: req.user.id });
-    sendSuccess(res, { data: summary }, 200);
+    sendSuccess(res, summary, 200);
   } catch (err) {
     if (err.message.includes('Faculty not found')) {
       logger.warn('Faculty not found for hours check', { empId: req.params.empId, userId: req.user.id });
@@ -748,6 +782,8 @@ router.put('/:id/periods', requireAuth, requireAdmin, async (req, res, next) => 
           courseId: result.courseId,
           year: result.year,
           section: result.section,
+          academicYear: result.academicYear,
+          semester: result.semester,
           faculty: {
             empId: result.empId,
             empName: result.empName,
@@ -881,23 +917,56 @@ router.patch('/bulk-visibility', requireAuth, requireAdmin, requireAcademicPerio
 
     const boolIsVisible = Boolean(isVisible);
 
-    // Use getPeriodFilter to scope to the correct academic year + semester
-    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
-    const filter = { isDeleted: { $ne: true }, ...periodFilter };
+    // Explicitly read period context from body, query, headers, or middleware
+    const academicYear = req.body?.academicYear || req.query?.academicYear || req.headers['x-academic-year'] || req.academicPeriod?.academicYear?.name;
+    const semester = req.body?.semester || req.query?.semester || req.headers['x-semester'] || req.academicPeriod?.academicYearSemester?.semesterType || req.academicPeriod?.semester;
+    const academicYearSemesterId = req.body?.academicYearSemesterId || req.query?.academicYearSemesterId || req.headers['x-academic-year-id'] || req.getSemesterId?.();
+
+    const filter = { isDeleted: { $ne: true } };
+
+    if (academicYear && semester) {
+      const yearStr = String(academicYear).trim();
+      const semStr = String(semester).trim().toUpperCase();
+      if (academicYearSemesterId && mongoose.Types.ObjectId.isValid(academicYearSemesterId)) {
+        filter.$or = [
+          { academicYear: yearStr, semester: semStr },
+          { academicYearSemesterId: new mongoose.Types.ObjectId(academicYearSemesterId) }
+        ];
+      } else {
+        filter.academicYear = yearStr;
+        filter.semester = semStr;
+      }
+    } else if (academicYear) {
+      filter.academicYear = String(academicYear).trim();
+    } else {
+      const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+      Object.assign(filter, periodFilter);
+    }
 
     const result = await Workload.updateMany(filter, { $set: { isVisible: boolIsVisible } });
 
     logger.info('Global workload visibility toggled', {
       isVisible: boolIsVisible,
       modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount,
       filter,
       userId: req.user.id
     });
 
+    wsHandler.broadcast({
+      type: 'workload_updated',
+      action: 'bulk_visibility',
+      isVisible: boolIsVisible,
+      academicYear,
+      semester
+    });
+
     sendSuccess(res, {
-      message: `Global visibility updated: All ${result.matchedCount} workloads are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
+      message: `Global visibility updated: All ${result.matchedCount} workloads for ${academicYear || 'active period'} (${semester || 'active semester'}) are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
       modifiedCount: result.modifiedCount,
-      matchedCount: result.matchedCount
+      matchedCount: result.matchedCount,
+      academicYear,
+      semester
     });
   } catch (err) {
     logger.error('Error in global workload visibility toggle', { error: err.message, userId: req.user.id });
@@ -922,27 +991,63 @@ router.patch('/faculty-visibility/:empId', requireAuth, requireAdmin, requireAca
 
     const boolIsVisible = Boolean(isVisible);
 
-    // Use getPeriodFilter to scope to the correct academic year + semester
-    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
-    const filter = { empId, isDeleted: { $ne: true }, ...periodFilter };
+    // Explicitly read period context from body, query, headers, or middleware
+    const academicYear = req.body?.academicYear || req.query?.academicYear || req.headers['x-academic-year'] || req.academicPeriod?.academicYear?.name;
+    const semester = req.body?.semester || req.query?.semester || req.headers['x-semester'] || req.academicPeriod?.academicYearSemester?.semesterType || req.academicPeriod?.semester;
+    const academicYearSemesterId = req.body?.academicYearSemesterId || req.query?.academicYearSemesterId || req.headers['x-academic-year-id'] || req.getSemesterId?.();
+
+    const filter = { empId, isDeleted: { $ne: true } };
+
+    if (academicYear && semester) {
+      const yearStr = String(academicYear).trim();
+      const semStr = String(semester).trim().toUpperCase();
+      if (academicYearSemesterId && mongoose.Types.ObjectId.isValid(academicYearSemesterId)) {
+        filter.$or = [
+          { academicYear: yearStr, semester: semStr },
+          { academicYearSemesterId: new mongoose.Types.ObjectId(academicYearSemesterId) }
+        ];
+      } else {
+        filter.academicYear = yearStr;
+        filter.semester = semStr;
+      }
+    } else if (academicYear) {
+      filter.academicYear = String(academicYear).trim();
+    } else {
+      const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+      Object.assign(filter, periodFilter);
+    }
 
     const result = await Workload.updateMany(filter, { $set: { isVisible: boolIsVisible } });
 
     if (result.matchedCount === 0) {
-      logger.warn('No workloads found for faculty visibility toggle', { empId, userId: req.user.id });
-      return sendNotFound(res, 'No workloads found for this faculty.');
+      logger.warn('No workloads found for faculty visibility toggle', { empId, filter, userId: req.user.id });
+      return sendNotFound(res, `No workloads found for faculty ${empId} in ${academicYear || 'active year'} (${semester || 'active semester'}).`);
     }
 
     logger.info('Faculty workloads visibility toggled', {
       empId,
       isVisible: boolIsVisible,
       modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount,
+      filter,
       userId: req.user.id,
     });
 
+    wsHandler.broadcast({
+      type: 'workload_updated',
+      action: 'faculty_visibility',
+      empId,
+      isVisible: boolIsVisible,
+      academicYear,
+      semester
+    });
+
     sendSuccess(res, {
-      message: `All workloads for ${empId} are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
+      message: `All workloads for ${empId} in ${academicYear || 'active year'} (${semester || 'active semester'}) are now ${boolIsVisible ? 'visible' : 'hidden'}.`,
       modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount,
+      academicYear,
+      semester
     });
   } catch (err) {
     logger.error('Error toggling faculty workloads visibility', { error: err.message, userId: req.user.id });
@@ -987,6 +1092,13 @@ router.patch('/:id/visibility', requireAuth, requireAdmin, async (req, res, next
       empId: result.empId,
       isVisible: boolIsVisible,
       userId: req.user.id
+    });
+
+    wsHandler.broadcast({
+      type: 'workload_updated',
+      action: 'single_visibility',
+      id,
+      isVisible: boolIsVisible
     });
 
     sendSuccess(res, {
@@ -1053,6 +1165,11 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       }
       
       if (member) {
+        if (member.isDeleted) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, 'Faculty member has been deleted or deactivated and cannot be assigned workload.', 400);
+        }
         const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
         const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
         if (periodEnd && member.joiningDate && new Date(member.joiningDate) > new Date(periodEnd)) {
@@ -1060,10 +1177,17 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           session.endSession();
           return sendError(res, 'Faculty joined after this semester ends and cannot be allocated.', 400);
         }
-        if (periodStart && member.relievingDate && new Date(member.relievingDate) < new Date(periodStart)) {
-          await session.abortTransaction();
-          session.endSession();
-          return sendError(res, 'Faculty was relieved before this semester starts and cannot be allocated.', 400);
+        if (member.relievingDate) {
+          const relDate = new Date(member.relievingDate);
+          if (periodStart && relDate < new Date(periodStart)) {
+            await session.abortTransaction();
+            session.endSession();
+            return sendError(res, 'Faculty was relieved before this semester starts and cannot be allocated.', 400);
+          } else if (!periodStart && relDate < new Date()) {
+            await session.abortTransaction();
+            session.endSession();
+            return sendError(res, 'Relieved faculty members cannot receive new workload assignments.', 400);
+          }
         }
       }
       const effectiveMember = member || {
@@ -1113,10 +1237,10 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       }
 
       // Backend validation for required fields (no nulls or missing)
-      const yearName = req.academicPeriod?.academicYear?.name;
-      const semType = req.academicPeriod?.academicYearSemester?.semesterType;
+      const yearName = req.academicPeriod?.academicYear?.name || req.body?.academicYear || req.query?.academicYear || req.headers['x-academic-year'];
+      const semType = req.academicPeriod?.academicYearSemester?.semesterType || req.body?.semester || req.query?.semester || req.headers['x-semester'];
       if (!semType) {
-        return sendError(res, 'Validation failed', 400);
+        return sendError(res, 'Validation failed: Semester is required', 400);
       }
       if (course && course.semester && course.semester !== semType) {
         return sendError(res, `Course belongs to ${course.semester} semester, but active context is ${semType} semester.`, 400);
@@ -1124,7 +1248,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       const semId = req.getSemesterId();
       
       if (!yearName) {
-        return sendError(res, 'Validation failed', 400);
+        return sendError(res, 'Validation failed: Academic Year is required', 400);
       }
 
       const requiredFields = [
@@ -1152,17 +1276,23 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
 
       const courseTypeKey = normalizeCourseTypeKey(effectiveCourse.courseType);
       if (normalizedFacultyRole === 'Main Faculty' && courseTypeKey === 'DE' && isRestrictedDeYear(normalizedYear)) {
-        const filter = buildDeSectionConflictFilter({ year: normalizedYear, section: normalizedSection });
+        const filter = buildDeSectionConflictFilter({
+          year: normalizedYear,
+          section: normalizedSection,
+          academicYear: yearName,
+          semester: semType,
+          program: effectiveCourse.program,
+        });
         filter.isDeleted = { $ne: true };
         const existingDe = await Workload.findOne(filter).session(session).lean();
         if (existingDe && existingDe.empId !== effectiveMember.empId) {
           logger.warn('Department Elective duplicate for section', { year: normalizedYear, section: normalizedSection, userId: req.user.id });
-          return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
+          return sendConflict(res, `Only one Department Elective can be assigned to ${normalizedYear} Year, Section ${normalizedSection} for this semester. Currently assigned to ${existingDe.empName || existingDe.empId}.`);
         }
       }
 
       if (normalizedFacultyRole === 'Main Faculty') {
-        const existingMain = await Workload.findOne({
+        const existingMainFilter = {
           courseId: effectiveCourse.courseId,
           year: normalizedYear,
           section: normalizedSection,
@@ -1172,15 +1302,55 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           academicYear: yearName,
           semester: semType,
           isDeleted: { $ne: true },
-        }).session(session).lean();
+        };
+        if (effectiveCourse.courseId === 0) {
+          existingMainFilter.subjectName = effectiveCourse.subjectName;
+        }
+        const existingMain = await Workload.findOne(existingMainFilter).session(session);
         if (existingMain) {
-          logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
-          return sendConflict(res, MAIN_FACULTY_DUPLICATE_MSG);
+          if (existingMain.empId === effectiveMember.empId) {
+            // Same faculty member: update hours instead of throwing 409
+            existingMain.manualL = manualL ?? effectiveCourse.L;
+            existingMain.manualT = manualT ?? effectiveCourse.T;
+            existingMain.manualP = manualP ?? effectiveCourse.P;
+            existingMain.empName = effectiveMember.name;
+            existingMain.designation = effectiveMember.designation;
+            existingMain.department = effectiveMember.department || 'CSE';
+            existingMain.mobile = effectiveMember.mobile || '';
+            await existingMain.save({ session });
+
+            await syncMainFacultyToAllocation({
+              courseId: existingMain.courseId,
+              year: existingMain.year,
+              section: existingMain.section,
+              academicYear: yearName,
+              semester: semType,
+              faculty: {
+                empId: existingMain.empId,
+                empName: existingMain.empName,
+                designation: existingMain.designation,
+              },
+            }, session);
+
+            await session.commitTransaction();
+            await recalculateCapacity(existingMain.empId, { updatedBy: req.user.empId, semester: existingMain.semester, academicYear: existingMain.academicYear });
+            wsHandler.broadcast({ type: 'workload_updated' });
+            return sendSuccess(res, toClient(existingMain), 200, { message: 'Workload updated successfully.' });
+          } else {
+            logger.warn('Main faculty already assigned', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, existingEmpId: existingMain.empId, newEmpId: effectiveMember.empId, userId: req.user.id });
+            return sendConflict(res, `This course is already allocated to ${existingMain.empName || existingMain.empId} as Main Faculty for ${normalizedYear} Year, Section ${normalizedSection}.`);
+          }
         }
       }
 
       if (normalizedFacultyRole === 'TA') {
-        const existingTa = await Workload.findOne({
+        const parsedRow = Number(allocationRow);
+        if (!Number.isInteger(parsedRow) || parsedRow < 1 || parsedRow > 3) {
+          logger.warn('Invalid allocation row for TA', { allocationRow, userId: req.user.id });
+          return sendError(res, 'TA allocationRow must be 1, 2, or 3 (R2, R3, R4).', 400);
+        }
+
+        const existingTaFilter = {
           courseId: effectiveCourse.courseId,
           year: normalizedYear,
           section: normalizedSection,
@@ -1190,27 +1360,46 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           academicYear: yearName,
           semester: semType,
           isDeleted: { $ne: true },
-          allocationRow: Number(allocationRow),
-        }).session(session).lean();
-        if (existingTa) {
-          logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, userId: req.user.id });
-          return sendConflict(res, TA_SECTION_DUPLICATE_MSG);
+          allocationRow: parsedRow,
+        };
+        if (effectiveCourse.courseId === 0) {
+          existingTaFilter.subjectName = effectiveCourse.subjectName;
         }
-        const parsedRow = Number(allocationRow);
-        if (!Number.isInteger(parsedRow) || parsedRow < 1 || parsedRow > 3) {
-          logger.warn('Invalid allocation row for TA', { allocationRow, userId: req.user.id });
-          return sendError(res, 'TA allocationRow must be 1, 2, or 3 (R2, R3, R4).', 400);
+        const existingTa = await Workload.findOne(existingTaFilter).session(session);
+        if (existingTa) {
+          if (existingTa.empId === effectiveMember.empId) {
+            existingTa.manualL = 0; // TAs cannot have lecture hours
+            existingTa.manualT = manualT ?? effectiveCourse.T;
+            existingTa.manualP = manualP ?? effectiveCourse.P;
+            await existingTa.save({ session });
+            await syncTAToAllocation({
+              courseId: existingTa.courseId,
+              year: existingTa.year,
+              section: existingTa.section,
+              academicYear: yearName,
+              semester: semType,
+              faculty: { empId: existingTa.empId, empName: existingTa.empName, designation: existingTa.designation },
+              allocationRow: existingTa.allocationRow,
+            }, session);
+            await session.commitTransaction();
+            await recalculateCapacity(existingTa.empId, { updatedBy: req.user.empId, semester: existingTa.semester, academicYear: existingTa.academicYear });
+            wsHandler.broadcast({ type: 'workload_updated' });
+            return sendSuccess(res, toClient(existingTa), 200, { message: 'TA workload updated successfully.' });
+          } else {
+            logger.warn('TA already assigned for section', { courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, allocationRow: parsedRow, userId: req.user.id });
+            return sendConflict(res, `TA slot R${parsedRow + 1} is already assigned to ${existingTa.empName || existingTa.empId} for this course and section.`);
+          }
         }
       }
 
       // CRITICAL: Validate workload hours capacity
-      const lectureHours = manualL ?? effectiveCourse.L;
+      const lectureHours = normalizedFacultyRole === 'TA' ? 0 : (manualL ?? effectiveCourse.L);
       const tutorialHours = manualT ?? effectiveCourse.T;
       const practicalHours = manualP ?? effectiveCourse.P;
       const hoursToAssign = lectureHours + tutorialHours + practicalHours;
 
       try {
-        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours, null, session, semType);
+        const workloadCheck = await canAssignWorkload(effectiveMember.empId, lectureHours, tutorialHours, practicalHours, null, session, semType, yearName);
         if (!workloadCheck.canAssign && !req.body.allowOverload) {
           logger.warn('Faculty workload capacity exceeded', { 
             empId: effectiveMember.empId, 
@@ -1233,7 +1422,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         return sendError(res, 'Error validating faculty capacity. Please contact support.', 500);
       }
 
-      const duplicateRole = await Workload.findOne({
+      const duplicateRoleFilter = {
         empId: effectiveMember.empId,
         courseId: effectiveCourse.courseId,
         year: normalizedYear,
@@ -1242,10 +1431,50 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         allocationStatus: 'ALLOCATED',
         academicYear: yearName,
         semester: semType,
-      }).session(session).lean();
+        isDeleted: { $ne: true },
+      };
+      if (effectiveCourse.courseId === 0) {
+        duplicateRoleFilter.subjectName = effectiveCourse.subjectName;
+      }
+      const duplicateRole = await Workload.findOne(duplicateRoleFilter).session(session);
       if (duplicateRole) {
-        logger.warn('Duplicate role assignment', { empId: effectiveMember.empId, courseId: effectiveCourse.courseId, year: normalizedYear, section: normalizedSection, role: normalizedFacultyRole, userId: req.user.id });
-        return sendConflict(res, ROLE_DUPLICATE_MSG);
+        duplicateRole.manualL = normalizedFacultyRole === 'TA' ? 0 : (manualL ?? effectiveCourse.L);
+        duplicateRole.manualT = manualT ?? effectiveCourse.T;
+        duplicateRole.manualP = manualP ?? effectiveCourse.P;
+        if (normalizedFacultyRole === 'TA' && allocationRow !== undefined) {
+          duplicateRole.allocationRow = Number(allocationRow);
+        }
+        await duplicateRole.save({ session });
+
+        if (normalizedFacultyRole === 'Main Faculty') {
+          await syncMainFacultyToAllocation({
+            courseId: duplicateRole.courseId,
+            year: duplicateRole.year,
+            section: duplicateRole.section,
+            academicYear: yearName,
+            semester: semType,
+            faculty: {
+              empId: duplicateRole.empId,
+              empName: duplicateRole.empName,
+              designation: duplicateRole.designation,
+            },
+          }, session);
+        } else if (normalizedFacultyRole === 'TA') {
+          await syncTAToAllocation({
+            courseId: duplicateRole.courseId,
+            year: duplicateRole.year,
+            section: duplicateRole.section,
+            academicYear: yearName,
+            semester: semType,
+            faculty: { empId: duplicateRole.empId, empName: duplicateRole.empName, designation: duplicateRole.designation },
+            allocationRow: duplicateRole.allocationRow,
+          }, session);
+        }
+
+        await session.commitTransaction();
+        await recalculateCapacity(duplicateRole.empId, { updatedBy: req.user.empId, semester: duplicateRole.semester, academicYear: duplicateRole.academicYear });
+        wsHandler.broadcast({ type: 'workload_updated' });
+        return sendSuccess(res, toClient(duplicateRole), 200, { message: 'Workload updated successfully.' });
       }
 
       const createdDocs = await Workload.create([{
@@ -1263,7 +1492,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         year: normalizedYear,
         section: normalizedSection,
         fixedL: effectiveCourse.L, fixedT: effectiveCourse.T, fixedP: effectiveCourse.P, C: effectiveCourse.C,
-        manualL: manualL ?? effectiveCourse.L,
+        manualL: normalizedFacultyRole === 'TA' ? 0 : (manualL ?? effectiveCourse.L),
         manualT: manualT ?? effectiveCourse.T,
         manualP: manualP ?? effectiveCourse.P,
         allocationRow: normalizedFacultyRole === 'TA' ? Number(allocationRow) : null,
@@ -1278,6 +1507,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           courseId: doc.courseId,
           year: doc.year,
           section: doc.section,
+          academicYear: doc.academicYear,
+          semester: doc.semester,
           faculty: {
             empId: doc.empId,
             empName: doc.empName,
@@ -1291,6 +1522,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           courseId: doc.courseId,
           year: doc.year,
           section: doc.section,
+          academicYear: doc.academicYear,
+          semester: doc.semester,
           faculty: { empId: doc.empId, empName: doc.empName, designation: doc.designation },
           allocationRow: doc.allocationRow,
         }, session); // H-5: Pass session
@@ -1314,8 +1547,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         logger.error('DE unique index error', { error: err.message, userId: req.user.id });
         return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
       }
-      if (isDuplicateKeyError(err)) {
-        logger.error('Duplicate key error', { error: err.message, userId: req.user.id });
+      if (isDuplicateKeyError(err) || isWriteConflictError(err)) {
+        logger.warn('Duplicate key or write conflict error', { error: err.message, userId: req.user.id });
         return sendConflict(res, MAIN_FACULTY_DUPLICATE_MSG);
       }
       logger.error('Error creating workload', { error: err.message, userId: req.user.id });
@@ -1361,8 +1594,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
     const nextYear = String(updates.year ?? current.year).trim();
     const nextSection = String(updates.section ?? current.section).trim();
 
-    const yearName = req.academicPeriod?.academicYear?.name;
-    const semType = req.academicPeriod?.academicYearSemester?.semesterType;
+    const yearName = req.academicPeriod?.academicYear?.name || current.academicYear || req.body?.academicYear || req.query?.academicYear || req.headers['x-academic-year'];
+    const semType = req.academicPeriod?.academicYearSemester?.semesterType || current.semester || req.body?.semester || req.query?.semester || req.headers['x-semester'];
     const sectionCheck = await ensureValidSection(nextYear, nextSection, yearName, semType);
     if (!sectionCheck.ok) {
       logger.warn('Invalid section in workload update', { id: req.params.id, year: nextYear, section: nextSection, userId: req.user.id });
@@ -1371,6 +1604,32 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
 
     const nextEmpId = String(updates.empId ?? current.empId).trim();
     const member = await Faculty.findOne({ empId: nextEmpId }).session(session).lean();
+    if (member) {
+      if (member.isDeleted) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendError(res, 'Faculty member has been deleted or deactivated and cannot be assigned workload.', 400);
+      }
+      const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+      const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+      if (periodEnd && member.joiningDate && new Date(member.joiningDate) > new Date(periodEnd)) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendError(res, 'Faculty joined after this semester ends and cannot be allocated.', 400);
+      }
+      if (member.relievingDate) {
+        const relDate = new Date(member.relievingDate);
+        if (periodStart && relDate < new Date(periodStart)) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, 'Faculty was relieved before this semester starts and cannot be allocated.', 400);
+        } else if (!periodStart && relDate < new Date()) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendError(res, 'Relieved faculty members cannot receive new workload assignments.', 400);
+        }
+      }
+    }
     const effectiveMember = member
       ? {
         empId: member.empId,
@@ -1545,7 +1804,7 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
       fixedT: effectiveCourse.T,
       fixedP: effectiveCourse.P,
       C: effectiveCourse.C,
-      manualL: Number(updates.manualL ?? current.manualL ?? effectiveCourse.L ?? 0),
+      manualL: normalizedFacultyRole === 'TA' ? 0 : Number(updates.manualL ?? current.manualL ?? effectiveCourse.L ?? 0),
       manualT: Number(updates.manualT ?? current.manualT ?? effectiveCourse.T ?? 0),
       manualP: Number(updates.manualP ?? current.manualP ?? effectiveCourse.P ?? 0),
       allocationRow: nextAllocationRow,
@@ -1561,7 +1820,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
         safeUpdates.manualP,
         req.params.id,
         session,
-        safeUpdates.semester
+        safeUpdates.semester,
+        current.academicYear
       );
       if (!workloadCheck.canAssign && !req.body.allowOverload) {
         logger.warn('Faculty workload capacity exceeded during update', {
@@ -1579,11 +1839,18 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
 
     if (normalizedFacultyRole === 'Main Faculty' && safeUpdates.courseTypeKey === 'DE' && isRestrictedDeYear(nextYear)) {
       const existingDe = await Workload.findOne(
-        buildDeSectionConflictFilter({ year: nextYear, section: nextSection, excludeId: req.params.id })
+        buildDeSectionConflictFilter({
+          year: nextYear,
+          section: nextSection,
+          excludeId: req.params.id,
+          academicYear: current.academicYear,
+          semester: current.semester,
+          program: safeUpdates.program
+        })
       ).session(session).lean();
       if (existingDe && existingDe.empId !== effectiveMember.empId) {
         logger.warn('DE constraint violation in update', { id: req.params.id, year: nextYear, section: nextSection, userId: req.user.id });
-        return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
+        return sendConflict(res, `Only one Department Elective can be assigned to ${nextYear} Year, Section ${nextSection} for this semester. Currently assigned to ${existingDe.empName || existingDe.empId}.`);
       }
     }
 
@@ -1610,6 +1877,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
           year: current.year,
           section: current.section,
           empId: current.empId,
+          academicYear: current.academicYear,
+          semester: current.semester,
         }, session);
       }
     }
@@ -1619,6 +1888,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
         courseId: doc.courseId,
         year: doc.year,
         section: doc.section,
+        academicYear: doc.academicYear,
+        semester: doc.semester,
         faculty: {
           empId: doc.empId,
           empName: doc.empName,
@@ -1644,6 +1915,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
           year: current.year,
           section: current.section,
           allocationRow: current.allocationRow,
+          academicYear: current.academicYear,
+          semester: current.semester,
         }, session);
       }
     }
@@ -1653,6 +1926,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
         courseId: doc.courseId,
         year: doc.year,
         section: doc.section,
+        academicYear: doc.academicYear,
+        semester: doc.semester,
         faculty: { empId: doc.empId, empName: doc.empName, designation: doc.designation },
         allocationRow: doc.allocationRow,
       }, session); // H-5: Pass session
@@ -1679,8 +1954,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
       logger.error('DE unique index error in update', { error: err.message, id: req.params.id, userId: req.user.id });
       return sendConflict(res, DE_SECTION_DUPLICATE_MSG);
     }
-    if (isDuplicateKeyError(err)) {
-      logger.error('Duplicate key error in update', { error: err.message, id: req.params.id, userId: req.user.id });
+    if (isDuplicateKeyError(err) || isWriteConflictError(err)) {
+      logger.warn('Duplicate key or write conflict error in update', { error: err.message, id: req.params.id, userId: req.user.id });
       return sendConflict(res, MAIN_FACULTY_DUPLICATE_MSG);
     }
     logger.error('Error updating workload', { error: err.message, id: req.params.id, userId: req.user.id });
@@ -1730,6 +2005,8 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
         year: doc.year,
         section: doc.section,
         empId: doc.empId,
+        academicYear: doc.academicYear,
+        semester: doc.semester,
       }, session);
     }
 
@@ -1739,6 +2016,8 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
         year: doc.year,
         section: doc.section,
         allocationRow: doc.allocationRow,
+        academicYear: doc.academicYear,
+        semester: doc.semester,
       }, session);
     }
 

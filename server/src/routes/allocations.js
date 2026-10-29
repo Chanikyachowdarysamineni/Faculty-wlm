@@ -60,13 +60,7 @@ const getSectionsConfig = async (academicYear, semester) => {
   if (yr && sem) {
     doc = await Setting.findOne({ key: `sections_config_${yr}_${sem}` }).lean();
   }
-  // By default, Even Semester should display existing Odd Semester section names as initial values
-  if (!doc?.value && yr && sem === 'EVEN') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_ODD` }).lean();
-  }
-  if (!doc?.value && yr && sem === 'ODD') {
-    doc = await Setting.findOne({ key: `sections_config_${yr}_EVEN` }).lean();
-  }
+  // Strict period isolation: never cross-pollinate between ODD and EVEN semesters
   if (!doc && yr) {
     doc = await Setting.findOne({ key: `sections_config_${yr}` }).lean();
   }

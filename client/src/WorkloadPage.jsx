@@ -8,6 +8,7 @@ import API from './config';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import { useToast } from './Toast';
 import { FieldError } from './components/FieldError';
+import { MESSAGES, formatApiError } from './utils/messages';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 import {
@@ -224,7 +225,15 @@ const WorkloadPage = ({ submissions }) => {
     const fetchAllocation = async () => {
       setAllocLoading(true);
       try {
-        const res = await fetch(`${API}/deva/allocations?courseId=${form.courseId}&year=${encodeURIComponent(form.year)}&section=${encodeURIComponent(form.section)}`, { headers: authHeader() });
+        const queryParams = new URLSearchParams({
+          courseId: String(form.courseId),
+          year: String(form.year),
+          section: String(form.section),
+        });
+        if (selectedAcademicYear) queryParams.append('academicYear', selectedAcademicYear);
+        if (selectedSemester) queryParams.append('semester', selectedSemester);
+
+        const res = await fetch(`${API}/deva/allocations?${queryParams.toString()}`, { headers: authHeader() });
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setAllocation(data.data[0]);
@@ -238,7 +247,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     };
     fetchAllocation();
-  }, [showForm, form.courseId, form.year, form.section, selectedAcademicYear]);
+  }, [showForm, form.courseId, form.year, form.section, selectedAcademicYear, selectedSemester]);
 
   const loadSectionsConfig = useCallback(async () => {
     try {
@@ -288,7 +297,7 @@ const WorkloadPage = ({ submissions }) => {
     };
 
     fetchPreferences();
-  }, [form.empId, courseList]);
+  }, [form.empId, courseList, selectedAcademicYear, selectedSemester]);
 
   useEffect(() => { loadSectionsConfig(); }, [loadSectionsConfig]);
 
@@ -311,7 +320,16 @@ const WorkloadPage = ({ submissions }) => {
     if (withLoader) setLoading(true);
     setFetchError('');
     try {
-      const data = await fetchAllPages('/deva/workloads', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
+      const queryParams = { semester: selectedSemester, academicYear: selectedAcademicYear };
+      if (selectedAcademicYearId) queryParams.academicYearId = selectedAcademicYearId;
+      const data = await fetchAllPages('/deva/workloads', queryParams, {
+        headers: {
+          ...authHeader(),
+          'x-academic-year': selectedAcademicYear || '',
+          'x-semester': selectedSemester || '',
+          ...(selectedAcademicYearId ? { 'x-academic-year-id': selectedAcademicYearId } : {})
+        }
+      });
       if (data.success) {
         const normalized = (data.data || []).map(w => ({
           ...w,
@@ -334,7 +352,8 @@ const WorkloadPage = ({ submissions }) => {
           manualT: Number(w.manualT || 0),
           manualP: Number(w.manualP || 0),
           capacity: Number(w.capacity),
-          allocationRow: w.allocationRow ?? null
+          allocationRow: w.allocationRow ?? null,
+          isVisible: Boolean(w.isVisible)
         }));
         setWorkloads(normalized);
 
@@ -356,6 +375,12 @@ const WorkloadPage = ({ submissions }) => {
   }, [selectedAcademicYear, selectedSemester]);
 
   useEffect(() => { fetchWorkloads({ withLoader: true }); }, [fetchWorkloads, selectedAcademicYear, selectedSemester]);
+
+  // Reset active filter and search when switching academic year or semester
+  useEffect(() => {
+    setActiveYear('All');
+    setSearch('');
+  }, [selectedAcademicYear, selectedSemester]);
 
   useEffect(() => {
     const id = setInterval(() => { fetchWorkloads({ withLoader: false }); }, AUTO_REFRESH_MS);
@@ -482,8 +507,26 @@ const WorkloadPage = ({ submissions }) => {
         headers: authHeader()
       });
       const data = await res.json();
-      if (data.success) {
-        setFacultyWorkloadSummary(data.data);
+      if (data.success && data.data) {
+        const raw = data.data?.data || data.data;
+        const fac = facultyList.find(f => f.empId === empId);
+        const fallbackCap = Number(fac?.capacity || (fac?.designation ? getDefaultCapacity(fac.designation) : 18));
+        const resolvedCap = Number(raw.capacity ?? raw.target ?? fallbackCap);
+        const currentLoad = Number(raw.currentLoad || 0);
+        const remaining = Number(raw.remaining ?? raw.remainingHours ?? (resolvedCap - currentLoad));
+        const workloadPercentage = Number(raw.workloadPercentage ?? raw.utilizationPercent ?? (resolvedCap > 0 ? ((currentLoad / resolvedCap) * 100).toFixed(1) : 0));
+
+        const norm = {
+          ...raw,
+          capacity: resolvedCap,
+          target: resolvedCap,
+          currentLoad,
+          remaining,
+          remainingHours: remaining,
+          workloadPercentage,
+          utilizationPercent: workloadPercentage,
+        };
+        setFacultyWorkloadSummary(norm);
       } else {
         setWorkloadHoursError(data.message || 'Failed to load workload hours');
         setFacultyWorkloadSummary(null);
@@ -516,17 +559,20 @@ const WorkloadPage = ({ submissions }) => {
     const availableSections = sectionsConfig[configKey] || sectionsConfig[courseYear] || ['1'];
     const autoSection = availableSections?.[0] || '1';
 
-    setForm(prev => ({
-      ...prev,
-      courseId: cid,
-      courseType: c?.courseType || prev.courseType,
-      manualL: c ? String(c.L) : '',
-      manualT: c ? String(c.T) : '',
-      manualP: c ? String(c.P) : '',
-      // AUTO-FETCH: Set year from course data and auto-select first section
-      year: courseYear,
-      section: autoSection
-    }));
+    setForm(prev => {
+      const isTa = prev.facultyRole === 'TA';
+      return {
+        ...prev,
+        courseId: cid,
+        courseType: c?.courseType || prev.courseType,
+        manualL: isTa ? '0' : (c ? String(c.L) : ''),
+        manualT: c ? String(c.T) : '',
+        manualP: c ? String(c.P) : '',
+        // AUTO-FETCH: Set year from course data and auto-select first section
+        year: courseYear,
+        section: autoSection
+      };
+    });
   };
 
   const handleAddSection = async () => {
@@ -644,9 +690,9 @@ const WorkloadPage = ({ submissions }) => {
       courseTypeOther: isOtherCrs && !COURSE_TYPES.includes(w.courseType) ? (w.courseType || '') : '',
       year: w.year,
       section: w.section,
-      manualL: String(w.manualL),
-      manualT: String(w.manualT),
-      manualP: String(w.manualP),
+      manualL: (w.facultyRole === 'TA' ? '0' : String(w.manualL ?? '')),
+      manualT: String(w.manualT ?? ''),
+      manualP: String(w.manualP ?? ''),
 
       taAllocationRow: { 1: 'R2', 2: 'R3', 3: 'R4' }[w.allocationRow] || 'R2',
       yearOther: '', sectionOther: '',
@@ -654,8 +700,17 @@ const WorkloadPage = ({ submissions }) => {
     });
     setEditTarget(w);
     setErrors({});
+    if (w.empId && w.empId !== '__other__') {
+      fetchFacultyWorkloadHours(w.empId);
+    }
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (showForm && form.empId && form.empId !== '__other__') {
+      fetchFacultyWorkloadHours(form.empId);
+    }
+  }, [showForm, form.empId, selectedAcademicYear, selectedSemester]);
 
   // ── Save (add / update): calls server API ──────────────────
   // keepOpen=true → after save, reset course fields but keep faculty & form open
@@ -749,19 +804,20 @@ const WorkloadPage = ({ submissions }) => {
 
       // ── WORKLOAD HOURS VALIDATION ──
       // Check if assignment would exceed faculty capacity
-      if (form.empId !== '__other__' && facultyWorkloadSummary) {
-        const hoursToAssign = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
-        const currentLoad = facultyWorkloadSummary.currentLoad;
-        const totalCapacity = facultyWorkloadSummary.capacity;
+      const hoursToAssign = (selectedRole === 'TA' ? 0 : (Number(form.manualL) || 0)) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
 
-        let adjustedCurrentLoad = currentLoad || 0;
+      if (form.empId !== '__other__' && facultyWorkloadSummary) {
+        const currentLoad = facultyWorkloadSummary.currentLoad || 0;
+        const totalCapacity = facultyWorkloadSummary.capacity || 18;
+
+        let adjustedCurrentLoad = currentLoad;
         if (editTarget) {
-          const oldHours = (Number(editTarget.manualL) || 0) + (Number(editTarget.manualT) || 0) + (Number(editTarget.manualP) || 0);
+          const oldHours = (editTarget.facultyRole === 'TA' ? 0 : (Number(editTarget.manualL) || 0)) + (Number(editTarget.manualT) || 0) + (Number(editTarget.manualP) || 0);
           adjustedCurrentLoad = Math.max(0, adjustedCurrentLoad - oldHours);
         }
         const newTotal = adjustedCurrentLoad + hoursToAssign;
 
-        if (newTotal > totalCapacity) {
+        if (newTotal > totalCapacity && !form.allowOverload) {
           const exceededBy = newTotal - totalCapacity;
           const errorMsg = `Cannot assign ${hoursToAssign}h. Faculty would exceed capacity by ${exceededBy}h (would be ${newTotal}h/${totalCapacity}h)`;
           setErrors((prev) => ({
@@ -776,8 +832,8 @@ const WorkloadPage = ({ submissions }) => {
 
       // ── CAPACITY HOURS VALIDATION ──
       // Check if manual hours exceed the capacity set for this workload
-      const capacity = Number(facultyWorkloadSummary?.capacity);
-      const assignedHours = (Number(form.manualL) || 0) + (Number(form.manualT) || 0) + (Number(form.manualP) || 0);
+      const capacity = Number(facultyWorkloadSummary?.capacity || facObj?.capacity || 18);
+      const assignedHours = hoursToAssign;
 
       if (capacity > 0 && assignedHours > capacity && !form.allowOverload) {
         const errorMsg = `Assigned hours (${assignedHours}h) exceed the capacity (${capacity}h) for this role. This workload would be marked as OVERLOADED. Check 'Allow Overload' to proceed anyway.`;
@@ -790,16 +846,13 @@ const WorkloadPage = ({ submissions }) => {
         return;
       }
 
-
-
       const payload = {
-
         empId: resolvedEmpId,
         courseId: resolvedCrsId,
         facultyRole: selectedRole,
         year: normalizedYear,  // Use normalized year (I, II, III, IV)
         section: String(resolvedSection).trim() || 'default',  // Fallback section
-        manualL: form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0),
+        manualL: selectedRole === 'TA' ? 0 : (form.manualL !== '' ? parseInt(form.manualL) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.L || 0)),
         manualT: form.manualT !== '' ? parseInt(form.manualT) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.T || 0),
         manualP: form.manualP !== '' ? parseInt(form.manualP) : (courseList.find(c => String(c.id || c.courseId) === String(resolvedCrsId))?.P || 0),
         // capacity is now purely derived from Faculty
@@ -927,7 +980,7 @@ const WorkloadPage = ({ submissions }) => {
       }
     } catch (err) {
       console.error('❌ Network/Request Error:', err);
-      showToast({ type: 'error', message: `Server unreachable or request failed: ${err.message}` });
+      showToast.error(formatApiError(err, MESSAGES.NETWORK_ERROR));
     } finally {
       setSaving(false);
     }
@@ -936,7 +989,7 @@ const WorkloadPage = ({ submissions }) => {
   // ── Update Faculty Capacity: calls server API to update all workloads for a faculty ──
   const updateFacultyCapacity = async () => {
     if (!editCapacityTarget || !editCapacityValue || Number(editCapacityValue) <= 0) {
-      showToast({ type: 'error', message: 'Enter a valid capacity hours value.' });
+      showToast.warning('Please enter a valid positive capacity hours value.');
       return;
     }
 
@@ -949,17 +1002,17 @@ const WorkloadPage = ({ submissions }) => {
       });
       const data = await res.json();
       if (!data.success) {
-        showToast(`⚠ ${data.message || 'Could not update capacity.'}`);
+        showToast.error(formatApiError(data, 'Could not update faculty capacity.'));
         return;
       }
       setFaculty(prev => prev.map(f => String(f.empId) === String(editCapacityTarget) ? { ...f, capacity: newCapacity } : f));
       await fetchWorkloads();
-      showToast(`✓ Capacity updated to ${newCapacity}h for all workloads.`);
+      showToast.success(`Workload capacity successfully updated to ${newCapacity}h.`);
       setEditCapacityTarget(null);
       setEditCapacityValue('');
     } catch (err) {
       console.error('Error updating capacity:', err);
-      showToast({ type: 'error', message: 'Failed to update capacity.' });
+      showToast.error(formatApiError(err, 'Failed to update capacity.'));
     }
   };
 
@@ -970,11 +1023,11 @@ const WorkloadPage = ({ submissions }) => {
         method: 'DELETE', headers: authHeader()
       });
       const data = await res.json();
-      if (!data.success) { showToast(`⚠ ${data.message}`); return; }
+      if (!data.success) { showToast.error(formatApiError(data, 'Could not remove workload entry.')); return; }
       await fetchWorkloads();
-      showToast('Workload entry removed.');
-    } catch {
-      showToast({ type: 'error', message: 'Delete failed. Please try again.' });
+      showToast.success(MESSAGES.WORKLOAD_DELETE_SUCCESS);
+    } catch (err) {
+      showToast.error(formatApiError(err, 'Delete failed. Please try again.'));
     } finally {
       setDeleteTarget(null);
     }
@@ -991,10 +1044,26 @@ const WorkloadPage = ({ submissions }) => {
       setWorkloads(workloads.map(w => ({ ...w, isVisible: newVisibility })));
 
       try {
-        const res = await fetch(`${API}/deva/workloads/bulk-visibility`, {
+        const queryParams = new URLSearchParams();
+        if (selectedAcademicYear) queryParams.append('academicYear', selectedAcademicYear);
+        if (selectedSemester) queryParams.append('semester', selectedSemester);
+        if (selectedAcademicYearId) queryParams.append('academicYearId', selectedAcademicYearId);
+
+        const res = await fetch(`${API}/deva/workloads/bulk-visibility?${queryParams.toString()}`, {
           method: 'PATCH',
-          headers: { ...authHeader(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isVisible: newVisibility })
+          headers: {
+            ...authHeader(),
+            'Content-Type': 'application/json',
+            'x-academic-year': selectedAcademicYear || '',
+            'x-semester': selectedSemester || '',
+            ...(selectedAcademicYearId ? { 'x-academic-year-id': selectedAcademicYearId } : {})
+          },
+          body: JSON.stringify({
+            isVisible: newVisibility,
+            academicYear: selectedAcademicYear,
+            semester: selectedSemester,
+            academicYearId: selectedAcademicYearId
+          })
         });
 
         if (!res.ok) {
@@ -1003,13 +1072,13 @@ const WorkloadPage = ({ submissions }) => {
         }
 
         // Background refresh to ensure perfect sync
-        fetchWorkloads();
-        showToast(`✓ All workloads ${newVisibility ? 'visible' : 'hidden'}.`);
+        await fetchWorkloads();
+        showToast.success(`All workloads for ${selectedAcademicYear || 'selected period'} (${selectedSemester || 'active semester'}) are now ${newVisibility ? 'visible' : 'hidden'}.`);
       } catch (err) {
         // Revert optimistic update on failure
         setWorkloads(previousWorkloads);
         console.error('Error toggling global visibility:', err);
-        showToast(`⚠ Failed to update visibility: ${err.message}`);
+        showToast.error(formatApiError(err, 'Failed to update visibility.'));
       } finally {
         setTogglingVisibility(false);
       }
@@ -1018,7 +1087,7 @@ const WorkloadPage = ({ submissions }) => {
 
     // Per-faculty visibility toggle
     if (!empId) {
-      showToast({ type: 'error', message: 'Invalid faculty.' });
+      showToast.error('Invalid faculty.');
       return;
     }
 
@@ -1029,10 +1098,26 @@ const WorkloadPage = ({ submissions }) => {
     setWorkloads(workloads.map(w => w.empId === empId ? { ...w, isVisible: newVisibility } : w));
 
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}`, {
+      const queryParams = new URLSearchParams();
+      if (selectedAcademicYear) queryParams.append('academicYear', selectedAcademicYear);
+      if (selectedSemester) queryParams.append('semester', selectedSemester);
+      if (selectedAcademicYearId) queryParams.append('academicYearId', selectedAcademicYearId);
+
+      const res = await fetch(`${API}/deva/workloads/faculty-visibility/${empId}?${queryParams.toString()}`, {
         method: 'PATCH',
-        headers: { ...authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisible: newVisibility })
+        headers: {
+          ...authHeader(),
+          'Content-Type': 'application/json',
+          'x-academic-year': selectedAcademicYear || '',
+          'x-semester': selectedSemester || '',
+          ...(selectedAcademicYearId ? { 'x-academic-year-id': selectedAcademicYearId } : {})
+        },
+        body: JSON.stringify({
+          isVisible: newVisibility,
+          academicYear: selectedAcademicYear,
+          semester: selectedSemester,
+          academicYearId: selectedAcademicYearId
+        })
       });
 
       if (!res.ok) {
@@ -1046,13 +1131,13 @@ const WorkloadPage = ({ submissions }) => {
       }
 
       // Background refresh to ensure perfect sync
-      fetchWorkloads();
-      showToast(`✓ All workloads ${newVisibility ? 'visible' : 'hidden'} from faculty.`);
+      await fetchWorkloads();
+      showToast.success(`Workloads for faculty ${empId} (${selectedAcademicYear} ${selectedSemester}) are now ${newVisibility ? 'visible' : 'hidden'}.`);
     } catch (err) {
       // Revert optimistic update on failure
       setWorkloads(previousWorkloads);
       console.error('Error toggling faculty visibility:', err);
-      showToast(`⚠ Failed to update visibility: ${err.message}`);
+      showToast.error(formatApiError(err, 'Failed to update visibility.'));
     } finally {
       setTogglingVisibility(false);
     }
@@ -1251,11 +1336,11 @@ const WorkloadPage = ({ submissions }) => {
           <button
             className={`wl-monopoly-btn ${workloads.some(w => w.isVisible) ? 'wl-visible' : 'wl-hidden'}`}
             onClick={() => toggleFacultyVisibility(null, !workloads.some(w => w.isVisible))}
-            disabled={togglingVisibility}
-            title={workloads.some(w => w.isVisible) ? 'Hide all workloads from all faculty' : 'Show all workloads to all faculty'}
+            disabled={togglingVisibility || workloads.length === 0}
+            title={workloads.some(w => w.isVisible) ? `Hide all workloads from all faculty for ${selectedAcademicYear || 'current period'} (${selectedSemester || 'active semester'})` : `Show all workloads to all faculty for ${selectedAcademicYear || 'current period'} (${selectedSemester || 'active semester'})`}
             style={{ padding: '4px 8px', fontSize: '12px', marginLeft: '4px' }}
           >
-            {workloads.some(w => w.isVisible) ? '🔒 Hide All' : '👁 Show All'}
+            {togglingVisibility ? '⏳ Updating...' : workloads.some(w => w.isVisible) ? '🔒 Hide All' : '👁 Show All'}
           </button>
         </div>
       </div>
@@ -1440,7 +1525,14 @@ const WorkloadPage = ({ submissions }) => {
               <label>Faculty Role *</label>
               <select
                 value={form.facultyRole || 'Main Faculty'}
-                onChange={e => setForm(p => ({ ...p, facultyRole: e.target.value }))}
+                onChange={e => {
+                  const newRole = e.target.value;
+                  setForm(p => ({
+                    ...p,
+                    facultyRole: newRole,
+                    ...(newRole === 'TA' ? { manualL: '0' } : (p.manualL === '0' && selectedCourse ? { manualL: String(selectedCourse.L) } : {}))
+                  }));
+                }}
               >
                 {Array.from(new Set([
                   ...FACULTY_ROLES,
@@ -1851,16 +1943,22 @@ const WorkloadPage = ({ submissions }) => {
               ['manualL', 'L — Lecture hrs'],
               ['manualT', 'T — Tutorial hrs'],
               ['manualP', 'P — Practical hrs'],
-            ].map(([key, lbl]) => (
-              <div className="wl-fg" key={key}>
-                <label>{lbl}</label>
-                <input
-                  type="number" min="0"
-                  value={form[key]}
-                  onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                />
-              </div>
-            ))}
+            ].map(([key, lbl]) => {
+              const isTaLecture = form.facultyRole === 'TA' && key === 'manualL';
+              return (
+                <div className="wl-fg" key={key}>
+                  <label>
+                    {lbl} {isTaLecture && <span className="wl-locked-note">(0 for TA)</span>}
+                  </label>
+                  <input
+                    type="number" min="0"
+                    value={isTaLecture ? '0' : form[key]}
+                    disabled={isTaLecture}
+                    onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                  />
+                </div>
+              );
+            })}
             <div className="wl-fg">
               <label>C — Credits <span className="wl-locked-note">(fixed)</span></label>
               <input
@@ -1872,28 +1970,44 @@ const WorkloadPage = ({ submissions }) => {
           </div>
 
           {/* ── Capacity Status Indicator ── */}
-          <div style={{ fontSize: 12, color: '#666', padding: '4px 0', marginTop: '16px' }}>
-            <div>✓ Assigned Hours: <strong>{(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0))}</strong>h</div>
-            {facultyWorkloadSummary && (
-              <div style={{ marginTop: '4px', color: (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target ? '#dc2626' : '#16a34a' }}>
-                {(Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target
-                  ? `⚠ OVERLOAD: Exceeds capacity of ${facultyWorkloadSummary.target}h`
-                  : `✓ Within capacity of ${facultyWorkloadSummary.target}h`}
+          {(() => {
+            const thisHours = (form.facultyRole === 'TA' ? 0 : Number(form.manualL || 0)) + Number(form.manualT || 0) + Number(form.manualP || 0);
+            const facObj = facultyList.find(f => f.empId === form.empId);
+            const resolvedCap = Number(facultyWorkloadSummary?.capacity ?? facultyWorkloadSummary?.target ?? facObj?.capacity ?? (facObj?.designation ? getDefaultCapacity(facObj.designation) : 18));
+            const currentLoad = Number(facultyWorkloadSummary?.currentLoad || 0);
+            const prevAssigned = editTarget ? ((editTarget.facultyRole === 'TA' ? 0 : Number(editTarget.manualL || 0)) + Number(editTarget.manualT || 0) + Number(editTarget.manualP || 0)) : 0;
+            const projectedLoad = Math.max(0, currentLoad - prevAssigned) + thisHours;
+            const isOverload = resolvedCap > 0 && projectedLoad > resolvedCap;
+            const remainingHours = Math.max(0, resolvedCap - projectedLoad);
+
+            return (
+              <div style={{ fontSize: 12, color: '#666', padding: '4px 0', marginTop: '16px' }}>
+                <div>
+                  ✓ Assigned Hours for this course: <strong>{thisHours}</strong>h
+                  {form.facultyRole === 'TA' && <span style={{ marginLeft: 6, color: '#6366f1' }}>(TA: L=0, T={Number(form.manualT || 0)}, P={Number(form.manualP || 0)})</span>}
+                </div>
+                {resolvedCap > 0 && (
+                  <div style={{ marginTop: '4px', color: isOverload ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                    {isOverload
+                      ? `⚠ OVERLOAD: Exceeds capacity of ${resolvedCap}h (Projected: ${projectedLoad}h / ${resolvedCap}h)`
+                      : `✓ Within capacity of ${resolvedCap}h (Current: ${currentLoad}h, Projected: ${projectedLoad}h / ${resolvedCap}h, Remaining: ${remainingHours}h)`}
+                  </div>
+                )}
+                {isOverload && (
+                  <div style={{ marginTop: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.allowOverload}
+                        onChange={(e) => setForm(prev => ({ ...prev, allowOverload: e.target.checked }))}
+                      />
+                      Allow Overload (Proceed anyway)
+                    </label>
+                  </div>
+                )}
               </div>
-            )}
-            {facultyWorkloadSummary && (Number(form.manualL || 0) + Number(form.manualT || 0) + Number(form.manualP || 0)) > facultyWorkloadSummary.target && (
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={form.allowOverload}
-                    onChange={(e) => setForm(prev => ({ ...prev, allowOverload: e.target.checked }))}
-                  />
-                  Allow Overload (Proceed anyway)
-                </label>
-              </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* ── Form actions ── */}
           <div className="wl-form-actions">
@@ -1975,6 +2089,15 @@ const WorkloadPage = ({ submissions }) => {
                         <span className={`wl-report-status ${summary.status === 'Overload' ? 'wl-report-status-over' : 'wl-report-status-ok'}`}>
                           {summary.status} | Assigned: {summary.assigned} / Target: {summary.target} | Remaining: {summary.remaining}
                         </span>
+                        <button
+                          className={`wl-action ${fac.rows.some(w => w.isVisible) ? 'wl-edit-btn' : 'wl-del-btn'}`}
+                          onClick={() => toggleFacultyVisibility(fac.empId, !fac.rows.some(w => w.isVisible))}
+                          disabled={togglingVisibility}
+                          title={fac.rows.some(w => w.isVisible) ? `Hide workloads for ${fac.empName}` : `Show workloads for ${fac.empName}`}
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          {fac.rows.some(w => w.isVisible) ? '👁 Visible' : '🔒 Hidden'}
+                        </button>
                         <button
                           className="wl-action wl-edit-btn"
                           onClick={() => {
@@ -2061,16 +2184,17 @@ const WorkloadPage = ({ submissions }) => {
                                 );
                               })}
                               <tr className="wl-tr-total" style={{ fontWeight: 'bold', backgroundColor: '#f1f5f9' }}>
-                                <td colSpan="7" style={{ textAlign: 'right', paddingRight: '12px' }}>Total:</td>
+                                <td colSpan="8" style={{ textAlign: 'right', paddingRight: '12px' }}>Total:</td>
                                 <td className="wl-td-num">{totalFixedL}</td>
                                 <td className="wl-td-num">{totalFixedT}</td>
                                 <td className="wl-td-num">{totalFixedP}</td>
-                                <td></td>
+                                <td className="wl-td-num wl-td-c">{totalC}</td>
                                 <td className="wl-td-num">{totalManualL}</td>
                                 <td className="wl-td-num">{totalManualT}</td>
                                 <td className="wl-td-num">{totalManualP}</td>
                                 <td className="wl-td-num">{grandTotal}</td>
-                                <td colSpan="2"></td>
+                                <td></td>
+                                <td></td>
                               </tr>
                             </>
                           );
@@ -2149,6 +2273,7 @@ const WorkloadPage = ({ submissions }) => {
               const totalL = fac.rows.reduce((s, r) => s + (r.manualL || 0), 0);
               const totalT = fac.rows.reduce((s, r) => s + (r.manualT || 0), 0);
               const totalP = fac.rows.reduce((s, r) => s + (r.manualP || 0), 0);
+              const totalC = fac.rows.reduce((s, r) => s + (r.C || 0), 0);
               const totalHrs = totalL + totalT + totalP;
 
               const facListEntry = facultyList.find(f => f.empId === fac.empId);
@@ -2226,7 +2351,7 @@ const WorkloadPage = ({ submissions }) => {
                           <td>{totalL}</td>
                           <td>{totalT}</td>
                           <td>{totalP}</td>
-                          <td></td>
+                          <td>{totalC}</td>
                           <td><strong>{totalHrs}</strong></td>
                           <td></td>
                         </tr>
