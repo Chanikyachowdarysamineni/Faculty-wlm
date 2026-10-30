@@ -92,6 +92,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
         setEditId(null);
         showToast.success(editId ? 'Designation updated successfully.' : 'Designation created successfully.');
         fetchDesignations();
+        window.dispatchEvent(new CustomEvent('wlm:designations_reload'));
         if (onUpdated) onUpdated();
       } else {
         if (data.message && data.message.toLowerCase().includes('already exists')) {
@@ -130,6 +131,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
           showToast.success('Designation deleted successfully.');
         }
         fetchDesignations();
+        window.dispatchEvent(new CustomEvent('wlm:designations_reload'));
         if (onUpdated) onUpdated();
       } else {
         showToast.error(formatApiError(data, 'Error deleting designation.'));

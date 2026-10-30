@@ -165,14 +165,14 @@ const AdminDashboard = () => {
 /**
  * Admin Overview Card - Shows key admin information and quick actions
  */
-const AdminOverview = ({ user, selectedSemester }) => {
-  const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [], taDesignationStats: [] });
+const AdminOverview = ({ user }) => {
+  const navigate = useNavigate();
+  const { selectedAcademicYear, selectedSemester } = useAcademicPeriod();
+  const [stats, setStats] = useState({ overloaded: [], pending: [], perfect: [], designationStats: [] });
   const [loading, setLoading] = useState(true);
+  const [desigTab, setDesigTab] = useState('ALL'); // 'ALL', 'TA', 'FACULTY'
 
-  // Filters
-
-
-  // UI state
+  // UI state for overview cards
   const [expandedCard, setExpandedCard] = useState(null); // 'overloaded', 'pending', 'perfect'
 
   useEffect(() => {
@@ -180,18 +180,18 @@ const AdminOverview = ({ user, selectedSemester }) => {
       setLoading(true);
       try {
         const headers = authJsonHeaders();
-        // M-4 FIX: Use server-side analytics endpoint instead of fetching all data client-side
         const params = new URLSearchParams();
+        if (selectedAcademicYear) params.append('academicYear', selectedAcademicYear);
         if (selectedSemester) params.append('semester', selectedSemester);
 
-        const res = await fetch(`${API}/deva/stats/dashboard-analytics?${params}`, { headers });
+        const res = await fetch(`${API}/deva/stats/dashboard-analytics?${params.toString()}`, { headers });
         const json = await res.json();
         if (json.success && json.data) {
           setStats({
             overloaded: json.data.overloaded || [],
             pending:    json.data.pending    || [],
             perfect:    json.data.perfect    || [],
-            taDesignationStats: json.data.taDesignationStats || []
+            designationStats: json.data.designationStats || json.data.taDesignationStats || []
           });
         }
       } catch (err) {
@@ -201,7 +201,12 @@ const AdminOverview = ({ user, selectedSemester }) => {
       }
     };
     fetchData();
-  }, [selectedSemester]);
+    const handleReload = () => { fetchData(); };
+    window.addEventListener('wlm:designations_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:designations_reload', handleReload);
+    };
+  }, [selectedAcademicYear, selectedSemester]);
 
   const handleCardClick = (cardType) => {
     setExpandedCard(expandedCard === cardType ? null : cardType);
@@ -211,35 +216,49 @@ const AdminOverview = ({ user, selectedSemester }) => {
     if (expandedCard === 'overloaded') return { title: 'Overloaded Faculty (Exceeding Capacity)', data: stats.overloaded, color: '#dc2626' };
     if (expandedCard === 'pending') return { title: 'Pending Faculty (Under Capacity)', data: stats.pending, color: '#eab308' };
     if (expandedCard === 'perfect') return { title: 'Perfectly Assigned Faculty', data: stats.perfect, color: '#16a34a' };
-    const taMatch = (stats.taDesignationStats || []).find(t => t.designation === expandedCard);
-    if (taMatch) {
-      return {
-        title: `${taMatch.designation} (${taMatch.count} Faculty • ${taMatch.totalAllocated}h Assigned / ${taMatch.totalCapacity}h Capacity)`,
-        data: (taMatch.faculty || []).map(f => ({
-          empId: f.empId,
-          name: f.name,
-          designation: f.designation,
-          capacity: f.capacity,
-          assignedHours: f.allocated,
-          pendingLoad: f.remaining,
-          overloadStatus: f.status === 'Overloaded' ? 'Overload' : 'Normal'
-        })),
-        color: '#4f46e5'
-      };
-    }
     return null;
   };
+
+  const isTaDesignation = (name = '') => {
+    const n = String(name || '').toLowerCase();
+    return n.includes('teaching associate') || n.includes('teaching assistant') || n.includes('teaching instructor') || n.startsWith('ta');
+  };
+
+  const rawDesignations = stats.designationStats || [];
+  const taDesignationsCount = rawDesignations.filter(d => isTaDesignation(d.designation || d.name)).length;
+  const facultyDesignationsCount = rawDesignations.filter(d => !isTaDesignation(d.designation || d.name)).length;
+
+  const displayedDesignationStats = useMemo(() => {
+    if (desigTab === 'TA') {
+      return rawDesignations.filter(d => isTaDesignation(d.designation || d.name));
+    }
+    if (desigTab === 'FACULTY') {
+      return rawDesignations.filter(d => !isTaDesignation(d.designation || d.name));
+    }
+    return rawDesignations;
+  }, [rawDesignations, desigTab]);
+
+  const totalDesignationFacultyCount = useMemo(() => {
+    return (rawDesignations || []).reduce((sum, d) => sum + (Number(d.count) || 0), 0);
+  }, [rawDesignations]);
+
+  const displayedDesignationFacultyCount = useMemo(() => {
+    return (displayedDesignationStats || []).reduce((sum, d) => sum + (Number(d.count) || 0), 0);
+  }, [displayedDesignationStats]);
 
   const activeList = getActiveList();
 
   return (
     <div className="admin-overview">
-      <div className="welcome-card" style={{ marginBottom: '24px' }}>
-        <h1>Welcome, Admin {user?.name || 'Administrator'}!</h1>
-        <p className="emp-id">Employee ID: {user?.id || user?.empId || ''}</p>
+      <div className="welcome-card" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Welcome, Admin {user?.name || 'Administrator'}!</h1>
+          <p className="emp-id" style={{ marginTop: '4px' }}>Employee ID: {user?.id || user?.empId || ''}</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <GlobalPeriodSelector />
+        </div>
       </div>
-
-
 
       {/* Analytics Cards */}
       <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' }}>
@@ -253,7 +272,7 @@ const AdminOverview = ({ user, selectedSemester }) => {
           <div className="stat-content">
             <h3 style={{ color: '#4338ca' }}>Total Faculty</h3>
             <p className="stat-value">{loading ? '...' : (stats.overloaded.length + stats.pending.length + stats.perfect.length)}</p>
-            <p className="stat-desc">All Active Faculty</p>
+            <p className="stat-desc">All Active Faculty in Period</p>
           </div>
         </div>
 
@@ -301,60 +320,227 @@ const AdminOverview = ({ user, selectedSemester }) => {
 
       </div>
 
-      {/* TA & Instructor Designations Section */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', marginTop: '16px' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', margin: 0 }}>
-          TA & Instructor Designations (Workload & Capacity)
-        </h2>
-        <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px', fontWeight: 500 }}>
-          Permitted for R2, R3, R4 Allocations Only
-        </span>
-      </div>
-      <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-        {(stats.taDesignationStats || []).map((item) => {
-          const isSelected = expandedCard === item.designation;
-          return (
-            <div
-              className="stat-card"
-              key={item.designation}
-              onClick={() => handleCardClick(item.designation)}
-              style={{
-                cursor: 'pointer',
-                border: isSelected ? '2px solid #4f46e5' : '1px solid #e2e8f0',
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                padding: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'stretch'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '14px', color: '#1e293b' }}>{item.designation}</h3>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>Designation</span>
-                </div>
-                <span style={{ fontSize: '24px', fontWeight: 800, color: '#4f46e5' }}>{item.count}</span>
-              </div>
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
-                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{item.totalAllocated}h</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{item.totalCapacity}h</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '4px 2px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Remaining</div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: item.remainingCapacity < 0 ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
-                    {item.remainingCapacity}h
-                  </div>
-                </div>
+      {/* Dynamic Designation-Wise Workload & Capacity Section */}
+      <div style={{ background: '#ffffff', padding: '20px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🏛️</span> Designation-Wise Workload &amp; Capacity
+            </h2>
+            <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+              Database-driven cards for all active designations. Click any card to view detailed faculty assignments.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Small Box: All Designations Faculty Count */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: '#eef2ff',
+              border: '1px solid #c7d2fe',
+              padding: '5px 12px',
+              borderRadius: '10px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
+            }}>
+              <span style={{ fontSize: '15px' }}>👥</span>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  Total Faculty
+                </span>
+                <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#3730a3' }}>
+                  {totalDesignationFacultyCount} {desigTab !== 'ALL' && <span style={{ fontSize: '11px', fontWeight: 600, color: '#6366f1' }}>({displayedDesignationFacultyCount} in view)</span>}
+                </span>
               </div>
             </div>
-          );
-        })}
+
+            {/* Academic Period Badge */}
+            <span style={{
+              fontSize: '12px',
+              color: '#0369a1',
+              background: '#e0f2fe',
+              border: '1px solid #bae6fd',
+              padding: '6px 12px',
+              borderRadius: '10px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>📅</span>
+              <span>{selectedAcademicYear || '2026-2027'} • {selectedSemester || 'ODD'} Semester</span>
+            </span>
+
+            {desigTab === 'TA' && (
+              <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', border: '1px solid #e2e8f0', padding: '6px 10px', borderRadius: '10px', fontWeight: 500 }}>
+                Permitted for R2, R3, R4 Allocations Only
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Category Tabs */}
+        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setDesigTab('ALL')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: 'none',
+              background: desigTab === 'ALL' ? '#4f46e5' : '#f1f5f9',
+              color: desigTab === 'ALL' ? '#ffffff' : '#475569',
+              transition: 'all 0.2s'
+            }}
+          >
+            All Designations ({rawDesignations.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesigTab('TA')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: 'none',
+              background: desigTab === 'TA' ? '#4f46e5' : '#f1f5f9',
+              color: desigTab === 'TA' ? '#ffffff' : '#475569',
+              transition: 'all 0.2s'
+            }}
+          >
+            TA &amp; Instructors ({taDesignationsCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesigTab('FACULTY')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: 'none',
+              background: desigTab === 'FACULTY' ? '#4f46e5' : '#f1f5f9',
+              color: desigTab === 'FACULTY' ? '#ffffff' : '#475569',
+              transition: 'all 0.2s'
+            }}
+          >
+            Faculty Roles ({facultyDesignationsCount})
+          </button>
+        </div>
+
+        {/* Dynamic Designation Cards Grid */}
+        {loading ? (
+          <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <div key={n} className="stat-card" style={{ padding: '24px 20px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', minHeight: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ fontSize: '22px', marginBottom: '8px' }}>⏳</div>
+                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Loading designation analytics...</div>
+              </div>
+            ))}
+          </div>
+        ) : displayedDesignationStats.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+            <div style={{ fontSize: '24px', marginBottom: '8px' }}>📋</div>
+            <div style={{ fontWeight: 600 }}>No designations available in this category.</div>
+          </div>
+        ) : (
+          <div className="admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+            {displayedDesignationStats.map((item) => {
+              const desigId = item.id || item.designationId || item._id;
+              const isTA = isTaDesignation(item.designation || item.name);
+              const isOver = item.remainingCapacity < 0 || item.isOverloaded;
+              return (
+                <div
+                  className="stat-card"
+                  key={desigId || item.designation}
+                  onClick={() => desigId && navigate(`/admin/designations/${desigId}`)}
+                  style={{
+                    cursor: 'pointer',
+                    border: isOver ? '1.5px solid #fca5a5' : '1px solid #e2e8f0',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    borderRadius: '10px',
+                    background: '#ffffff',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-3px)';
+                    e.currentTarget.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.08)';
+                    e.currentTarget.style.borderColor = '#4f46e5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)';
+                    e.currentTarget.style.borderColor = isOver ? '#fca5a5' : '#e2e8f0';
+                  }}
+                  title="Click to view full faculty list and workload details"
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px', gap: '8px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                          {item.designation || item.name}
+                        </h3>
+                        <span style={{ fontSize: '11px', color: isTA ? '#4338ca' : '#64748b', fontWeight: 500, background: isTA ? '#eef2ff' : '#f8fafc', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>
+                          {isTA ? 'TA / Instructor (R2-R4)' : 'Faculty Role'}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '26px', fontWeight: 800, color: '#4f46e5', lineHeight: 1 }}>
+                          {item.count}
+                        </span>
+                        <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>FACULTY</div>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
+                      <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{item.totalAllocated}h</div>
+                      </div>
+                      <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{item.totalCapacity}h</div>
+                      </div>
+                      <div style={{ background: isOver ? '#fef2f2' : '#f0fdf4', padding: '6px 2px', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '10.5px', color: isOver ? '#b91c1c' : '#15803d', fontWeight: 600 }}>Remaining</div>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: isOver ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
+                          {item.remainingCapacity}h
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    {isOver ? (
+                      <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 700 }}>
+                        ⚠ Over by {Math.abs(item.remainingCapacity)}h
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>
+                        ✓ Within Capacity
+                      </span>
+                    )}
+                    <span style={{ fontSize: '11.5px', color: '#4f46e5', fontWeight: 600 }}>
+                      View Details →
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Detailed Faculty List (Expanded) */}

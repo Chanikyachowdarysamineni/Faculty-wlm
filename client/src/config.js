@@ -68,5 +68,6 @@ export const isSectionsEndpointLikelyUnsupported = () => {
 	}
 };
 
+export { API };
 export default API;
 

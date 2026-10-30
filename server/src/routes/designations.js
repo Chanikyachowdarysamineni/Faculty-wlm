@@ -6,10 +6,15 @@ const Faculty = require('../models/Faculty');
 const User = require('../models/User');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
+const FacultyCapacity = require('../models/FacultyCapacity');
 const { mongoose } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound, sendCreated, sendPaginated } = require('../utils/response');
 const logger = require('../utils/logger');
+const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
+const { getDefaultCapacity } = require('../utils/designationUtils');
 
 const router = express.Router();
 
@@ -171,6 +176,197 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     sendSuccess(res, { message: 'Designation deleted', deactivated: false }, 200);
   } catch (err) {
     logger.error('Error deleting designation', { error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/designations/:id/workload-details - Dedicated designation faculty & workload details
+router.get('/:id/workload-details', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
+  try {
+    const desigParam = String(req.params.id || '').trim();
+    if (!desigParam) return sendError(res, 'Designation ID is required.', 400);
+
+    // 1. Resolve designation by ObjectId or fallback by name
+    let designationDoc = null;
+    if (mongoose.Types.ObjectId.isValid(desigParam)) {
+      designationDoc = await Designation.findById(desigParam).lean();
+    }
+    if (!designationDoc) {
+      designationDoc = await Designation.findOne({
+        name: { $regex: new RegExp(`^${desigParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      }).lean();
+    }
+    if (!designationDoc) {
+      return sendNotFound(res, `Designation not found for ID "${desigParam}"`);
+    }
+
+    const desigIdStr = String(designationDoc._id);
+    const desigName = designationDoc.name;
+
+    // 2. Resolve Academic Period
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+    const academicYear = req.academicPeriod?.academicYear?.name || req.query.academicYear || '';
+    const semester = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || '';
+
+    // 3. Faculty query with eligibility filters (joining/relieving date + admin exclusion)
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = {
+      isDeleted: { $ne: true },
+      empId: { $nin: hiddenIds },
+      $or: [
+        { designationId: designationDoc._id },
+        { designation: desigName },
+        { designation: { $regex: new RegExp(`^${desigName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+      ]
+    };
+
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      facultyMatch.$and = dateClauses;
+    }
+
+    const rawFaculty = await Faculty.find(facultyMatch).sort({ slNo: 1, name: 1 }).lean();
+
+    // Deduplicate by empId
+    const facultyMap = new Map();
+    for (const f of rawFaculty) {
+      const empIdKey = String(f.empId || '').trim();
+      if (!empIdKey) continue;
+      if (!facultyMap.has(empIdKey)) {
+        facultyMap.set(empIdKey, f);
+      } else {
+        const existing = facultyMap.get(empIdKey);
+        if (f.updatedAt && (!existing.updatedAt || new Date(f.updatedAt) > new Date(existing.updatedAt))) {
+          facultyMap.set(empIdKey, f);
+        }
+      }
+    }
+    const facultyList = Array.from(facultyMap.values());
+    const empIds = facultyList.map(f => f.empId);
+
+    // 4. Fetch Workloads for these faculty members in the active academic period
+    const workloadMatch = {
+      empId: { $in: empIds },
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+      ...periodFilter
+    };
+
+    const workloadAgg = await Workload.aggregate([
+      { $match: workloadMatch },
+      {
+        $group: {
+          _id: '$empId',
+          assignedHours: {
+            $sum: {
+              $add: [
+                {
+                  $cond: [
+                    { $eq: ['$facultyRole', 'TA'] },
+                    0,
+                    { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }
+                  ]
+                },
+                { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+                { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
+              ]
+            }
+          },
+          courseCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const workloadByEmpId = new Map();
+    workloadAgg.forEach(w => {
+      workloadByEmpId.set(String(w._id).trim(), {
+        assignedHours: Number(w.assignedHours) || 0,
+        courseCount: Number(w.courseCount) || 0
+      });
+    });
+
+    // 5. Fetch Capacity for these faculty in the active academic period
+    const capFilter = {
+      empId: { $in: empIds },
+      ...(req.getSemesterId && req.getSemesterId() ? periodFilter : {})
+    };
+    const capacities = await FacultyCapacity.find(capFilter).lean();
+    const capacityByEmpId = new Map();
+    capacities.forEach(c => {
+      if (c.capacity != null) capacityByEmpId.set(String(c.empId).trim(), Number(c.capacity));
+    });
+
+    // 6. Aggregate faculty details
+    let totalAssignedHours = 0;
+    let totalCapacity = 0;
+
+    const facultyDetails = facultyList.map((f, idx) => {
+      const empIdStr = String(f.empId).trim();
+      const wData = workloadByEmpId.get(empIdStr) || { assignedHours: 0, courseCount: 0 };
+      const defaultCap = getDefaultCapacity(f.designation);
+      const cap = capacityByEmpId.get(empIdStr) || Number(f.capacity || defaultCap);
+      const assigned = wData.assignedHours || 0;
+      const remaining = cap - assigned;
+
+      totalAssignedHours += assigned;
+      totalCapacity += cap;
+
+      let status = 'Available';
+      if (assigned > cap) {
+        status = 'Overload';
+      } else if (assigned === cap && cap > 0) {
+        status = 'Normal';
+      } else if (assigned > 0) {
+        status = 'Normal';
+      }
+
+      return {
+        _id: f._id,
+        sNo: idx + 1,
+        empId: empIdStr,
+        name: f.name,
+        designation: f.designation,
+        designationId: desigIdStr,
+        department: f.department || 'CSE',
+        mobile: f.mobile || '—',
+        email: f.email || '—',
+        joiningDate: f.joiningDate ? new Date(f.joiningDate).toISOString().split('T')[0] : '—',
+        relievingDate: f.relievingDate ? new Date(f.relievingDate).toISOString().split('T')[0] : '—',
+        assignedHours: assigned,
+        capacity: cap,
+        remainingCapacity: remaining,
+        courseCount: wData.courseCount,
+        status,
+        isOverloaded: assigned > cap,
+      };
+    });
+
+    const remainingCapacity = totalCapacity - totalAssignedHours;
+
+    sendSuccess(res, {
+      designation: {
+        id: desigIdStr,
+        name: desigName,
+        order: designationDoc.order ?? 0,
+        isEnabled: designationDoc.isEnabled !== false
+      },
+      academicPeriod: {
+        academicYear,
+        semester,
+      },
+      summary: {
+        totalFaculty: facultyList.length,
+        totalAssignedHours,
+        totalCapacity,
+        remainingCapacity,
+        isOverloaded: totalAssignedHours > totalCapacity,
+      },
+      faculty: facultyDetails
+    }, 200);
+  } catch (err) {
+    logger.error('Error fetching designation workload details', { error: err.message });
     next(err);
   }
 });

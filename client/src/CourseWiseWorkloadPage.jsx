@@ -402,8 +402,11 @@ const CourseWiseWorkloadPage = () => {
     <div className="wl-wrapper">
       <div className="wl-topbar">
         <div className="wl-topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button className="wl-btn wl-btn-forms" onClick={() => navigate('/')}>
-            ← Back
+          <button className="wl-btn wl-btn-forms" onClick={() => {
+            try { sessionStorage.setItem('wlm_dash_mode', 'admin'); } catch {}
+            navigate('/dashboard');
+          }}>
+            ← Back to Dashboard
           </button>
           <h2 className="wl-heading">Course Wise Workload Details</h2>
           <span className="wl-count-badge">{displayData.length} courses</span>

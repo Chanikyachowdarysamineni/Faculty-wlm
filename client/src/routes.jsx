@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./Dashboard'));
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
 const CourseWiseWorkloadPage = lazy(() => import('./CourseWiseWorkloadPage'));
 const CourseLoadsPage = lazy(() => import('./CourseLoadsPage'));
+const DesignationDetailsPage = lazy(() => import('./DesignationDetailsPage'));
 
 import { useAuth } from './AuthContext';
 import ProtectedRoute from './ProtectedRoute';
@@ -77,6 +78,14 @@ const CourseLoadsPageWrapper = () => {
   );
 };
 
+const DesignationDetailsPageWrapper = () => {
+  return (
+    <Suspense fallback={<LoadingIndicator message="Loading designation details..." />}>
+      <DesignationDetailsPage />
+    </Suspense>
+  );
+};
+
 export const publicRoutes = [
   { path: '/login', element: <LoginPageWrapper />, title: 'Login' },
   { path: '/reset-password', element: <LoginPageWrapper />, title: 'Reset Password' },
@@ -102,7 +111,9 @@ export const protectedRoutes = [
   { path: '/profile', element: <ProtectedRoute><DashboardWrapper initialTab="profile" /></ProtectedRoute>, title: 'Profile' },
   { path: '/admin-dashboard', element: <ProtectedRoute roles={['admin']}><AdminDashboardWrapper /></ProtectedRoute>, title: 'Admin Dashboard' },
   { path: '/course-wise-workload', element: <ProtectedRoute><CourseWiseWorkloadPageWrapper /></ProtectedRoute>, title: 'Course Wise Workload Details' },
-  { path: '/course-loads', element: <ProtectedRoute><CourseLoadsPageWrapper /></ProtectedRoute>, title: 'Course Loads' }
+  { path: '/course-loads', element: <ProtectedRoute><CourseLoadsPageWrapper /></ProtectedRoute>, title: 'Course Loads' },
+  { path: '/admin/designations/:designationId', element: <ProtectedRoute roles={['admin']}><DesignationDetailsPageWrapper /></ProtectedRoute>, title: 'Designation Workload Details' },
+  { path: '/admin-dashboard/designation/:designationId', element: <ProtectedRoute roles={['admin']}><DesignationDetailsPageWrapper /></ProtectedRoute>, title: 'Designation Workload Details' }
 ];
 
 export const allRoutes = [...publicRoutes, ...protectedRoutes];

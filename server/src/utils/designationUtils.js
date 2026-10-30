@@ -51,4 +51,34 @@ const getDefaultCapacity = (designation = '') => {
   return isTADesignation(designation) ? 12 : 18;
 };
 
-module.exports = { TA_DESIGNATIONS, matchTaDesignation, isTADesignation, getDefaultCapacity };
+const syncFacultyDesignationIds = async () => {
+  try {
+    const Designation = require('../models/Designation');
+    const Faculty = require('../models/Faculty');
+    const designations = await Designation.find().lean();
+    if (!designations || !designations.length) return;
+
+    for (const d of designations) {
+      await Faculty.updateMany(
+        { 
+          $and: [
+            {
+              $or: [
+                { designation: d.name },
+                { designation: { $regex: new RegExp(`^${d.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+              ]
+            },
+            {
+              $or: [{ designationId: null }, { designationId: { $exists: false } }]
+            }
+          ]
+        },
+        { $set: { designationId: d._id } }
+      );
+    }
+  } catch (err) {
+    console.warn('[designationUtils] syncFacultyDesignationIds error:', err.message);
+  }
+};
+
+module.exports = { TA_DESIGNATIONS, matchTaDesignation, isTADesignation, getDefaultCapacity, syncFacultyDesignationIds };

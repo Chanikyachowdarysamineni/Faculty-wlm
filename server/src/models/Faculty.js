@@ -13,6 +13,7 @@ const facultySchema = new mongoose.Schema(
     department:  { type: String, default: 'CSE' },
     cluster:     { type: String, default: '' },
     designation: { type: String, required: true, trim: true },
+    designationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Designation', default: null },
     mobile:      { type: String, default: '' },
     email:       { type: String, default: '' },
     passwordHash:{ type: String, default: null },
@@ -48,6 +49,7 @@ const facultySchema = new mongoose.Schema(
 // Indexes for efficient filtering and sorting
 facultySchema.index({ department: 1 });
 facultySchema.index({ designation: 1 });
+facultySchema.index({ designationId: 1 });
 facultySchema.index({ status: 1 });
 facultySchema.index({ name: 1 });
 

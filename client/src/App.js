@@ -80,6 +80,7 @@ function App() {
     
     localStorage.removeItem('wlm_token');
     localStorage.removeItem('wlm_user');
+    sessionStorage.removeItem('wlm_dash_mode');
     setCurrentUser(null);
   }, []);
 

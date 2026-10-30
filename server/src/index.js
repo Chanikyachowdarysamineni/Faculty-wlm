@@ -499,6 +499,10 @@ if (process.env.NODE_ENV !== 'test') {
     { upsert: true }
   );
 
+  // Sync faculty designationIds dynamically
+  const { syncFacultyDesignationIds } = require('./utils/designationUtils');
+  await syncFacultyDesignationIds();
+
   // Server runs on HTTP (Nginx handles SSL termination in production)
   const server = http.createServer(app);
 

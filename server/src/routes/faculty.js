@@ -324,12 +324,18 @@ router.post(
       const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).session(session).lean();
       const slNo = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
 
+      const Designation = require('../models/Designation');
+      const desigMatch = await Designation.findOne({
+        name: { $regex: new RegExp(`^${safeDesignation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      }).session(session).lean();
+
       const createdDocs = await Faculty.create([{
         slNo,
         empId: safeEmpId,
         name: safeName,
         department: String(department || 'CSE').trim() || 'CSE',
         designation: safeDesignation,
+        designationId: desigMatch ? desigMatch._id : null,
         capacity: capacity !== undefined ? Number(capacity) : getDefaultCapacity(safeDesignation),
         mobile: safeMobile,
         email: safeEmail,
@@ -475,7 +481,15 @@ router.put(
 
       if (isAdmin) {
         if (name !== undefined && String(name).trim()) allowedUpdates.name = String(name).trim();
-        if (designation !== undefined && String(designation).trim()) allowedUpdates.designation = String(designation).trim();
+        if (designation !== undefined && String(designation).trim()) {
+          const desigStr = String(designation).trim();
+          allowedUpdates.designation = desigStr;
+          const Designation = require('../models/Designation');
+          const desigMatch = await Designation.findOne({
+            name: { $regex: new RegExp(`^${desigStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+          }).session(session).lean();
+          if (desigMatch) allowedUpdates.designationId = desigMatch._id;
+        }
         if (department !== undefined && String(department).trim()) allowedUpdates.department = String(department).trim();
         if (slNo !== undefined) allowedUpdates.slNo = Number(slNo);
         if (capacity !== undefined && !semester) allowedUpdates.capacity = Number(capacity);
@@ -823,12 +837,18 @@ router.post('/import', requireAuth, requireAdmin, async (req, res, next) => {
       const maxDoc = await Faculty.findOne().sort({ slNo: -1 }).session(session).lean();
       const slNo = await nextSequence('faculty_slno', Number(maxDoc?.slNo || 0));
 
+      const Designation = require('../models/Designation');
+      const desigDoc = await Designation.findOne({
+        name: { $regex: new RegExp(`^${String(designation).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      }).session(session).lean();
+
       const createdDocs = await Faculty.create([{
         slNo,
         empId: String(empId).trim(),
         name: String(name).trim(),
         department: String(department || 'CSE').trim(),
         designation: String(designation).trim(),
+        designationId: desigDoc ? desigDoc._id : null,
         capacity: item.capacity !== undefined ? Number(item.capacity) : require('../utils/designationUtils').getDefaultCapacity(String(designation).trim()),
         mobile: String(mobile).trim(),
         email: String(email).trim(),

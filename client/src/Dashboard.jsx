@@ -24,31 +24,37 @@ import { useSharedData } from './DataContext';
 import wsClient from './utils/WebSocketClient';
 import './Dashboard.css';
 
-const TA_DESIGNATIONS_ORDER = [
-  'Teaching Associate',
-  'Teaching Assistant',
-  'Teaching Assistant-I',
-  'Teaching Assistant-II',
-  'Teaching Instructor'
+const DESIGNATION_COLOR_PALETTE = [
+  { color: '#4f46e5', bg: '#eef2ff' }, // Indigo
+  { color: '#0891b2', bg: '#ecfeff' }, // Cyan
+  { color: '#2563eb', bg: '#eff6ff' }, // Blue
+  { color: '#7c3aed', bg: '#f5f3ff' }, // Violet
+  { color: '#059669', bg: '#ecfdf5' }, // Emerald
+  { color: '#d97706', bg: '#fffbeb' }, // Amber
+  { color: '#e11d48', bg: '#ffe4e6' }, // Rose
+  { color: '#0d9488', bg: '#f0fdfa' }, // Teal
+  { color: '#9333ea', bg: '#faf5ff' }, // Purple
 ];
 
-const TA_COLORS = {
-  'Teaching Associate': { color: '#4f46e5', bg: '#eef2ff' },
-  'Teaching Assistant': { color: '#0891b2', bg: '#ecfeff' },
-  'Teaching Assistant-I': { color: '#2563eb', bg: '#eff6ff' },
-  'Teaching Assistant-II': { color: '#7c3aed', bg: '#f5f3ff' },
-  'Teaching Instructor': { color: '#059669', bg: '#ecfdf5' },
+const KNOWN_DESIGNATION_COLORS = {
+  'teaching associate': { color: '#4f46e5', bg: '#eef2ff' },
+  'teaching assistant': { color: '#0891b2', bg: '#ecfeff' },
+  'teaching assistant-i': { color: '#2563eb', bg: '#eff6ff' },
+  'teaching assistant-ii': { color: '#7c3aed', bg: '#f5f3ff' },
+  'teaching instructor': { color: '#059669', bg: '#ecfdf5' },
 };
 
-const matchTaDesignation = (raw) => {
-  if (!raw) return null;
-  const s = String(raw).trim().toLowerCase().replace(/[\s_-]+/g, ' ');
-  if (s === 'teaching associate' || s === 'teaching assoc' || s === 't assoc') return 'Teaching Associate';
-  if (s === 'teaching assistant ii' || s === 'teaching assistant 2' || s === 'ta ii' || s === 'ta 2' || s === 'ta-ii' || s === 'teaching assistant-ii') return 'Teaching Assistant-II';
-  if (s === 'teaching assistant i' || s === 'teaching assistant 1' || s === 'ta i' || s === 'ta 1' || s === 'ta-i' || s === 'teaching assistant-i') return 'Teaching Assistant-I';
-  if (s === 'teaching assistant' || s === 'ta') return 'Teaching Assistant';
-  if (s === 'teaching instructor' || s === 'instructor' || s === 'ti') return 'Teaching Instructor';
-  return null;
+const getDesignationColor = (name = '', index = 0) => {
+  const clean = String(name || '').trim().toLowerCase();
+  if (KNOWN_DESIGNATION_COLORS[clean]) {
+    return KNOWN_DESIGNATION_COLORS[clean];
+  }
+  return DESIGNATION_COLOR_PALETTE[Math.abs(index) % DESIGNATION_COLOR_PALETTE.length];
+};
+
+const isTaDesignation = (name = '') => {
+  const n = String(name || '').toLowerCase();
+  return n.includes('teaching associate') || n.includes('teaching assistant') || n.includes('teaching instructor') || n.startsWith('ta');
 };
 
 const NAV_ITEMS = [
@@ -233,7 +239,29 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
   const resolvedInitialTab = initialTab || urlTab || 'dashboard';
   const [activeNav, setActiveNav] = useState(resolvedInitialTab);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [dashMode, setDashMode] = useState(null);
+  const [dashMode, setDashModeState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('wlm_dash_mode');
+      if (saved === 'admin' || saved === 'faculty') return saved;
+      if (user?.role === 'admin' || user?.role === 'Admin') return 'admin';
+    } catch {
+      // ignore storage access error
+    }
+    return null;
+  });
+
+  const setDashMode = useCallback((mode) => {
+    try {
+      if (mode) {
+        sessionStorage.setItem('wlm_dash_mode', mode);
+      } else {
+        sessionStorage.removeItem('wlm_dash_mode');
+      }
+    } catch {
+      // ignore
+    }
+    setDashModeState(mode);
+  }, []);
 
   const [expandedCard, setExpandedCard] = useState(null);
 
@@ -307,8 +335,10 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
     overloaded: [],
     pending: [],
     perfect: [],
+    designationStats: [],
     taDesignationStats: [],
   });
+  const [desigTab, setDesigTab] = useState('ALL');
   const [dashboardCards, setDashboardCards] = useState({
     loading: false,
     courses: { total: 0, assigned: 0, notAssigned: 0, due: 0 },
@@ -570,12 +600,14 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
     window.addEventListener('wlm:workloads_reload', onRealtimeReload);
     window.addEventListener('wlm:settings_reload', onRealtimeReload);
     window.addEventListener('wlm:academic_period_reload', onRealtimeReload);
+    window.addEventListener('wlm:designations_reload', onRealtimeReload);
     return () => {
       clearInterval(id);
       window.removeEventListener('wlm:allocations_reload', onRealtimeReload);
       window.removeEventListener('wlm:workloads_reload', onRealtimeReload);
       window.removeEventListener('wlm:settings_reload', onRealtimeReload);
       window.removeEventListener('wlm:academic_period_reload', onRealtimeReload);
+      window.removeEventListener('wlm:designations_reload', onRealtimeReload);
     };
   }, [isAdmin, refreshDashboardData]);
 
@@ -590,12 +622,14 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
         if (!res.ok) throw new Error('Analytics fetch failed');
         const json = await res.json();
         if (isMounted && json.success) {
+          const stats = json.data.designationStats || json.data.taDesignationStats || [];
           setAnalytics({
             loading: false,
             overloaded: json.data.overloaded || [],
             pending: json.data.pending || [],
             perfect: json.data.perfect || [],
-            taDesignationStats: json.data.taDesignationStats || [],
+            designationStats: stats,
+            taDesignationStats: stats,
           });
         }
       } catch (err) {
@@ -1075,30 +1109,35 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
 
   const { summaryStats, analyticsStats } = getMyStats;
 
-  const taDesignationMetrics = useMemo(() => {
-    return TA_DESIGNATIONS_ORDER.map(desig => {
-      const matched = (liveFaculty || []).filter(f => matchTaDesignation(f.designation) === desig);
-      const count = matched.length;
-      let totalCapacity = 0;
-      let totalAllocated = 0;
-      matched.forEach(f => {
-        const cap = f.capacity !== undefined ? Number(f.capacity) : 12;
-        const alloc = Number(f.allocated) || 0;
-        totalCapacity += cap;
-        totalAllocated += alloc;
-      });
-      const remainingCapacity = totalCapacity - totalAllocated;
+  const rawDesignations = useMemo(() => {
+    return analytics.designationStats || analytics.taDesignationStats || [];
+  }, [analytics.designationStats, analytics.taDesignationStats]);
 
-      return {
-        designation: desig,
-        count,
-        totalCapacity,
-        totalAllocated,
-        remainingCapacity,
-        faculty: matched
-      };
-    });
-  }, [liveFaculty]);
+  const taDesignationsCount = useMemo(() => {
+    return rawDesignations.filter(d => isTaDesignation(d.designation || d.name)).length;
+  }, [rawDesignations]);
+
+  const facultyDesignationsCount = useMemo(() => {
+    return rawDesignations.filter(d => !isTaDesignation(d.designation || d.name)).length;
+  }, [rawDesignations]);
+
+  const displayedDesignationStats = useMemo(() => {
+    if (desigTab === 'TA') {
+      return rawDesignations.filter(d => isTaDesignation(d.designation || d.name));
+    }
+    if (desigTab === 'FACULTY') {
+      return rawDesignations.filter(d => !isTaDesignation(d.designation || d.name));
+    }
+    return rawDesignations;
+  }, [rawDesignations, desigTab]);
+
+  const totalDesignationFacultyCount = useMemo(() => {
+    return (rawDesignations || []).reduce((sum, d) => sum + (Number(d.count) || 0), 0);
+  }, [rawDesignations]);
+
+  const displayedDesignationFacultyCount = useMemo(() => {
+    return (displayedDesignationStats || []).reduce((sum, d) => sum + (Number(d.count) || 0), 0);
+  }, [displayedDesignationStats]);
 
   // ─────────────────────────────────────────────────────────
   // Role picker — shown only for canAccessAdmin users before they choose
@@ -1478,74 +1517,214 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
                                     ))}
                                   </div>
 
-                                  {/* ── TA & Instructor Designations Section ── */}
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', marginTop: '32px' }}>
-                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', margin: 0 }}>
-                                      TA & Instructor Designations (Workload & Capacity)
-                                    </h2>
-                                    <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', padding: '4px 10px', borderRadius: '12px', fontWeight: 500 }}>
-                                      Permitted for R2, R3, R4 Allocations Only
-                                    </span>
-                                  </div>
-                                  <div className="dash-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
-                                    {taDesignationMetrics.map((item) => {
-                                      const styling = TA_COLORS[item.designation] || { color: '#4f46e5', bg: '#eef2ff' };
-                                      const isSelected = expandedCard === item.designation;
-                                      return (
-                                        <div
-                                          className="dash-card"
-                                          key={item.designation}
-                                          style={{
-                                            cursor: 'pointer',
-                                            flexDirection: 'column',
-                                            alignItems: 'stretch',
-                                            padding: '18px 20px',
-                                            border: isSelected ? `2px solid ${styling.color}` : '1px solid #e2e8f0',
-                                            background: isSelected ? styling.bg : '#ffffff',
-                                            transition: 'all 0.2s ease',
-                                          }}
-                                          onClick={() => setExpandedCard(isSelected ? null : item.designation)}
-                                          title={`Click to view faculty in ${item.designation}`}
-                                        >
-                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                              <div className="dash-card-icon" style={{ background: styling.bg, color: styling.color, width: '40px', height: '40px', borderRadius: '10px' }}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                                  <circle cx="9" cy="7" r="4" />
-                                                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                                                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                                </svg>
-                                              </div>
-                                              <div>
-                                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{item.designation}</div>
-                                                <div style={{ fontSize: '11px', color: '#64748b' }}>Designation</div>
-                                              </div>
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                              <span style={{ fontSize: '24px', fontWeight: 800, color: styling.color }}>{item.count}</span>
-                                            </div>
-                                          </div>
-
-                                          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
-                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
-                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
-                                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalAllocated}h</div>
-                                            </div>
-                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
-                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
-                                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalCapacity}h</div>
-                                            </div>
-                                            <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
-                                              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Remaining</div>
-                                              <div style={{ fontSize: '13px', fontWeight: 700, color: item.remainingCapacity < 0 ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
-                                                {item.remainingCapacity}h
-                                              </div>
-                                            </div>
-                                          </div>
+                                  {/* ── Dynamic Designation-Wise Workload & Capacity Section ── */}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', marginTop: '32px', flexWrap: 'wrap', gap: '12px' }}>
+                                    <div>
+                                      <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#374151', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>🏛️</span> Designation-Wise Workload &amp; Capacity
+                                      </h2>
+                                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                                        Database-driven analytics for all designations configured in Designation Management. Click any card to view detailed faculty workload allocations.
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                      {/* Small Box: All Designations Faculty Count */}
+                                      <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        background: '#eef2ff',
+                                        border: '1px solid #c7d2fe',
+                                        padding: '5px 12px',
+                                        borderRadius: '10px',
+                                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
+                                      }}>
+                                        <span style={{ fontSize: '15px' }}>👥</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                                          <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                            Total Faculty
+                                          </span>
+                                          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#3730a3' }}>
+                                            {totalDesignationFacultyCount} {desigTab !== 'ALL' && <span style={{ fontSize: '11px', fontWeight: 600, color: '#6366f1' }}>({displayedDesignationFacultyCount} in view)</span>}
+                                          </span>
                                         </div>
-                                      );
-                                    })}
+                                      </div>
+
+                                      {/* Academic Period Badge */}
+                                      <span style={{
+                                        fontSize: '12px',
+                                        color: '#0369a1',
+                                        background: '#e0f2fe',
+                                        border: '1px solid #bae6fd',
+                                        padding: '6px 12px',
+                                        borderRadius: '10px',
+                                        fontWeight: 600,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}>
+                                        <span>📅</span>
+                                        <span>{selectedAcademicYear || '2026-2027'} • {selectedSemester || 'ODD'} Semester</span>
+                                      </span>
+
+                                      {desigTab === 'TA' && (
+                                        <span style={{ fontSize: '12px', color: '#6b7280', background: '#f1f5f9', border: '1px solid #e2e8f0', padding: '6px 10px', borderRadius: '10px', fontWeight: 500 }}>
+                                          Permitted for R2, R3, R4 Allocations Only
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Category Tabs */}
+                                  <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDesigTab('ALL')}
+                                      style={{
+                                        padding: '6px 14px',
+                                        borderRadius: '20px',
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: 'none',
+                                        background: desigTab === 'ALL' ? '#4f46e5' : '#f1f5f9',
+                                        color: desigTab === 'ALL' ? '#ffffff' : '#475569',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      All Designations ({rawDesignations.length})
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDesigTab('TA')}
+                                      style={{
+                                        padding: '6px 14px',
+                                        borderRadius: '20px',
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: 'none',
+                                        background: desigTab === 'TA' ? '#4f46e5' : '#f1f5f9',
+                                        color: desigTab === 'TA' ? '#ffffff' : '#475569',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      TA &amp; Instructors ({taDesignationsCount})
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDesigTab('FACULTY')}
+                                      style={{
+                                        padding: '6px 14px',
+                                        borderRadius: '20px',
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: 'none',
+                                        background: desigTab === 'FACULTY' ? '#4f46e5' : '#f1f5f9',
+                                        color: desigTab === 'FACULTY' ? '#ffffff' : '#475569',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      Faculty Roles ({facultyDesignationsCount})
+                                    </button>
+                                  </div>
+
+                                  <div className="dash-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+                                    {analytics.loading ? (
+                                      [1, 2, 3, 4, 5].map(n => (
+                                        <div key={n} className="dash-card" style={{ padding: '24px 20px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', minHeight: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                                          <div style={{ fontSize: '20px', marginBottom: '8px' }}>⏳</div>
+                                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Loading analytics...</div>
+                                        </div>
+                                      ))
+                                    ) : displayedDesignationStats.length === 0 ? (
+                                      <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '30px', color: '#64748b', background: '#f8fafc', borderRadius: '10px' }}>
+                                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>📋</div>
+                                        <div style={{ fontWeight: 600 }}>No designations found in this category.</div>
+                                      </div>
+                                    ) : (
+                                      displayedDesignationStats.map((item, idx) => {
+                                        const desigName = item.designation || item.name || '';
+                                        const styling = getDesignationColor(desigName, idx);
+                                        const desigId = item.id || item.designationId || item._id;
+                                        const isOver = item.remainingCapacity < 0 || item.isOverloaded;
+                                        const isTA = isTaDesignation(desigName);
+
+                                        return (
+                                          <div
+                                            className="dash-card"
+                                            key={desigId || desigName}
+                                            style={{
+                                              cursor: 'pointer',
+                                              flexDirection: 'column',
+                                              alignItems: 'stretch',
+                                              padding: '18px 20px',
+                                              border: isOver ? '1.5px solid #fca5a5' : '1px solid #e2e8f0',
+                                              background: '#ffffff',
+                                              transition: 'all 0.2s ease',
+                                              borderRadius: '12px',
+                                              boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+                                            }}
+                                            onClick={() => {
+                                              if (desigId) {
+                                                navigate(`/admin/designations/${desigId}`);
+                                              }
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.transform = 'translateY(-2px)';
+                                              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.08)';
+                                              e.currentTarget.style.borderColor = styling.color;
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.transform = 'none';
+                                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)';
+                                              e.currentTarget.style.borderColor = isOver ? '#fca5a5' : '#e2e8f0';
+                                            }}
+                                            title={`Click to view faculty details for ${desigName}`}
+                                          >
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <div className="dash-card-icon" style={{ background: styling.bg, color: styling.color, width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                                    <circle cx="9" cy="7" r="4" />
+                                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                                  </svg>
+                                                </div>
+                                                <div>
+                                                  <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>{desigName}</div>
+                                                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                                                    {isTA ? 'TA / Instructor (R2-R4)' : 'Designation'}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div style={{ textAlign: 'right' }}>
+                                                <span style={{ fontSize: '24px', fontWeight: 800, color: styling.color }}>{item.count}</span>
+                                              </div>
+                                            </div>
+
+                                            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', textAlign: 'center' }}>
+                                              <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Assigned</div>
+                                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalAllocated ?? 0}h</div>
+                                              </div>
+                                              <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Capacity</div>
+                                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{item.totalCapacity ?? 0}h</div>
+                                              </div>
+                                              <div style={{ background: '#f8fafc', padding: '6px 2px', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Remaining</div>
+                                                <div style={{ fontSize: '13px', fontWeight: 700, color: item.remainingCapacity < 0 ? '#dc2626' : item.remainingCapacity === 0 ? '#16a34a' : '#0284c7' }}>
+                                                  {item.remainingCapacity ?? 0}h
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
                                   </div>
                                 </>
                               )}
@@ -1597,26 +1776,7 @@ const Dashboard = ({ user = {}, onLogout, initialTab }) => {
                                 if (expandedCard === 'Pending Faculty') activeList = { title: 'Pending Faculty', data: dashboardComputed.availableFaculty || [], color: '#ca8a04' };
                                 if (expandedCard === 'Perfectly Assigned') activeList = { title: 'Perfectly Assigned Faculty', data: dashboardComputed.fullyLoadedFaculty || [], color: '#16a34a' };
 
-                                const taMatched = taDesignationMetrics.find(m => m.designation === expandedCard);
-                                if (taMatched) {
-                                  activeList = {
-                                    title: `${taMatched.designation} (${taMatched.count} Faculty • ${taMatched.totalAllocated}h Assigned / ${taMatched.totalCapacity}h Capacity)`,
-                                    data: taMatched.faculty.map(f => {
-                                      const cap = f.capacity !== undefined ? Number(f.capacity) : 12;
-                                      const alloc = Number(f.allocated) || 0;
-                                      return {
-                                        empId: f.empId,
-                                        name: f.name,
-                                        designation: f.designation,
-                                        capacity: cap,
-                                        assignedHours: alloc,
-                                        pendingLoad: cap - alloc,
-                                        overloadStatus: alloc > cap ? 'Overload' : 'Normal'
-                                      };
-                                    }),
-                                    color: TA_COLORS[taMatched.designation]?.color || '#4f46e5'
-                                  };
-                                }
+
 
                                 if (!activeList) return null;
 
