@@ -13,7 +13,26 @@ if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
 }
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const path = require('path');
+const fs = require('fs');
+
+// Load environment variables from server/.env, with fallback to root .env
+const serverEnvPath = path.join(__dirname, '..', '.env');
+const rootEnvPath = path.join(__dirname, '..', '..', '.env');
+
+if (fs.existsSync(serverEnvPath)) {
+  require('dotenv').config({ path: serverEnvPath });
+}
+if (fs.existsSync(rootEnvPath)) {
+  require('dotenv').config({ path: rootEnvPath });
+}
+require('dotenv').config();
+
+// Auto-default NODE_ENV to 'production' if not explicitly set (e.g. in PM2/Docker) and not in tests
+if (!process.env.NODE_ENV || process.env.NODE_ENV === 'undefined') {
+  const isTest = process.argv.some(arg => arg.includes('jest') || arg.includes('mocha'));
+  process.env.NODE_ENV = isTest ? 'test' : 'production';
+}
 
 // H-6 FIX: Import logger BEFORE env var validation so it is available if we need to log the error
 const logger = require('./utils/logger');
@@ -29,14 +48,13 @@ if (missingEnvVars.length > 0) {
 }
 
 // Warn if NODE_ENV is not production in production-like environment
-if (process.env.MONGO_URI?.includes('mongodb') && process.env.NODE_ENV !== 'production') {
+if (process.env.MONGO_URI?.includes('mongodb') && process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
   console.warn('⚠️  NODE_ENV is not set to "production" - consider setting it for better performance');
 }
 
 const express      = require('express');
 const http         = require('http');
 const https        = require('https');
-const fs           = require('fs');
 const cors         = require('cors');
 const morgan       = require('morgan');
 const helmet       = require('helmet');
@@ -351,7 +369,6 @@ app.use('/deva/course-loads', courseLoadsRoutes);
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything
-const path = require('path');
 const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
 if (fs.existsSync(clientBuildPath)) {
   // Serve static assets (JS/CSS/images) under the /csefaculty base path
@@ -384,10 +401,22 @@ app.use(errorHandler);
 // (which would drop all in-flight HTTP connections with ERR_CONNECTION_CLOSED)
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
+  if (logger && logger.error) {
+    logger.error('Unhandled Promise Rejection', {
+      reason: reason?.message || String(reason),
+      stack: reason?.stack
+    });
+  }
 });
 
 process.on('uncaughtException', (err) => {
   console.error('[uncaughtException]', err);
+  if (logger && logger.error) {
+    logger.error('Uncaught Exception', {
+      error: err?.message || String(err),
+      stack: err?.stack
+    });
+  }
   // Give active requests ~2 s to complete before exiting
   setTimeout(() => process.exit(1), 2000).unref();
 });
@@ -395,7 +424,8 @@ process.on('uncaughtException', (err) => {
 // ── Start — connect to MongoDB first, then listen ──────────
 if (process.env.NODE_ENV !== 'test') {
   (async () => {
-  await connect();
+    try {
+      await connect();
 
   const dropIndexSafe = async (model, indexName) => {
     try {
@@ -559,6 +589,17 @@ if (process.env.NODE_ENV !== 'test') {
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+    } catch (startupErr) {
+      console.error('❌  Fatal error during application startup:', startupErr);
+      if (logger && logger.error) {
+        logger.error('Fatal error during application startup', {
+          error: startupErr?.message || String(startupErr),
+          stack: startupErr?.stack
+        });
+      }
+      // Force exit with non-zero code so process managers (PM2, Docker, systemd) restart automatically
+      process.exit(1);
+    }
   })();
 }
 
