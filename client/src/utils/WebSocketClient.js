@@ -83,7 +83,9 @@ class WebSocketClient {
       };
 
       this.ws.onerror = (error) => {
-        console.error('✗ WebSocket error:', error);
+        if (this.reconnectAttempts === 0) {
+          console.warn('ℹ️ Real-time updates WebSocket connection pending or unavailable (data is synchronized via REST API)');
+        }
         this.emit('error', error);
       };
 
