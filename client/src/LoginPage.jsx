@@ -96,6 +96,23 @@ const LoginPage = ({ onLogin }) => {
     return { score, label: 'Strong', color: '#10b981', width: '100%' };
   }, [newResetPassword]);
 
+  const parseApiResponse = async (res) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        return await res.json();
+      } catch {
+        return { success: false, message: 'Invalid JSON response from server.' };
+      }
+    }
+    const text = await res.text();
+    console.error('Non-JSON response from server:', text);
+    return {
+      success: false,
+      message: `Server returned HTTP ${res.status}. Please ensure backend is running.`,
+    };
+  };
+
   // ── Forgot Password: Step 1 (Request Reset Code / Link) ──
   const handleRequestReset = async (e) => {
     e.preventDefault();
@@ -116,7 +133,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId: trimmedId }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
       if (!res.ok || !data.success) {
         setForgotError(data.message || 'Failed to send password reset code. Please try again.');
@@ -170,7 +187,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
       if (!res.ok || !data.success) {
         setForgotError(data.message || (data.errors && data.errors[0]?.message) || 'Failed to reset password. Please check your verification code.');
@@ -228,7 +245,7 @@ const LoginPage = ({ onLogin }) => {
     const checkDeliveryStatus = async () => {
       try {
         const res = await fetch(`${API}/deva/auth/otp-status?employeeId=${encodeURIComponent(employeeId.trim())}`);
-        const data = await res.json();
+        const data = await parseApiResponse(res);
         if (data.success && data.data) {
           const { deliveryStatus, deliveryError } = data.data;
           if (deliveryStatus === 'failed') {
@@ -278,7 +295,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId: trimmedId, password }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
       if (!res.ok || !data.success) {
         setLoginError(data.message || 'Login failed. Please check your credentials.');
@@ -336,7 +353,7 @@ const LoginPage = ({ onLogin }) => {
           newPassword: forceNewPassword,
         }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
       if (!res.ok || !data.success) {
         setForceError(data.message || 'Failed to update password.');
@@ -380,7 +397,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId: employeeId.trim() }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
       if (!res.ok || !data.success) {
         setSendError(data.message || 'Failed to send OTP. Please try again.');
       } else {
@@ -415,7 +432,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId: employeeId.trim(), otp }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
       if (!res.ok || !data.success) {
         setVerifyStatus('error');
         setVerifyError(data.message || 'Invalid OTP. Please try again.');
@@ -490,7 +507,7 @@ const LoginPage = ({ onLogin }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId: employeeId.trim() }),
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
       if (!res.ok || !data.success) {
         setVerifyError(data.message || 'Failed to resend OTP.');
       } else {

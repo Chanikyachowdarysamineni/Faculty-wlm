@@ -52,7 +52,8 @@ const resolveApiBase = () => {
 	
 	// PRIORITY 4: Production - use relative paths for nginx proxy
 
-	return '/csefaculty';
+	// Return empty string so endpoints resolve directly to /deva/... matching Nginx proxy
+	return '';
 };
 
 const API = resolveApiBase();

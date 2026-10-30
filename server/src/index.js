@@ -536,9 +536,20 @@ if (process.env.NODE_ENV !== 'test') {
   // Server runs on HTTP (Nginx handles SSL termination in production)
   const server = http.createServer(app);
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌  Port ${PORT} is already in use by another process.`);
+      console.error(`   If duplicate PM2 processes are running, clear them with:`);
+      console.error(`   pm2 delete all && pm2 start npm --name faculty-backend -- start\n`);
+    } else {
+      console.error(`\n❌  HTTP Server error:`, err.message);
+    }
+    process.exit(1);
+  });
+
   if (process.env.NODE_ENV !== 'test') {
-    server.listen(PORT, () => {
-      console.log(`\n✅  WLM Server running on http://localhost:${PORT}`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n✅  WLM Server running on http://0.0.0.0:${PORT}`);
       console.log(`   Auth:        POST http://localhost:${PORT}/deva/auth/login`);
       console.log(`   Faculty:     GET  http://localhost:${PORT}/deva/faculty`);
       console.log(`   Courses:     GET  http://localhost:${PORT}/deva/courses`);
