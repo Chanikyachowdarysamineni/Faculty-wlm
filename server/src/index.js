@@ -246,19 +246,10 @@ app.use(cors({
 }));
 // NOTE: trust proxy is set above (before CORS) — do not set it again here
 
-// ── HTTPS Enforcement Middleware (Production) ──────────────────────
-// Redirect HTTP to HTTPS and enforce secure headers — skipped for localhost
+// ── Production Reverse Proxy Headers ──────────────────────────
+// Reverse proxy (Nginx/Apache) handles SSL termination and HTTPS redirect.
+// Node runs as an internal upstream on HTTP; no redirect needed.
 if (process.env.NODE_ENV === 'production') {
-  app.use((req, res, next) => {
-    const host = req.header('host') || '';
-    const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
-    if (!isLocalhost && req.header('x-forwarded-proto') !== 'https') {
-      return res.redirect(301, `https://${host}${req.url}`);
-    }
-    next();
-  });
-
-  // Add HSTS only for non-localhost
   app.use((req, res, next) => {
     const host = req.header('host') || '';
     if (!host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {

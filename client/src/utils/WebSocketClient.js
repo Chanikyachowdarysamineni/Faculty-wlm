@@ -35,7 +35,9 @@ class WebSocketClient {
       backendUrl = `${protocol}//${host}`;
     }
 
-    let url = `${backendUrl}/ws`;
+    const isCseFaculty = typeof window !== 'undefined' && window.location.pathname.startsWith('/csefaculty');
+    const wsPath = isCseFaculty ? '/csefaculty/ws' : '/ws';
+    let url = `${backendUrl}${wsPath}`;
     const token = localStorage.getItem('wlm_token') || localStorage.getItem('token');
     if (token) {
       url += `?token=${encodeURIComponent(token)}`;

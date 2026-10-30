@@ -17,10 +17,23 @@ class WebSocketHandler {
    * @param {http.Server} server - Express HTTP server
    */
   initialize(server) {
-    // Create WebSocket server
-    this.wss = new WebSocket.Server({ 
-      server,
-      path: '/ws',
+    // Create WebSocket server supporting both /ws and /csefaculty/ws
+    this.wss = new WebSocket.Server({ noServer: true });
+
+    server.on('upgrade', (request, socket, head) => {
+      try {
+        const parsed = new URL(request.url, 'http://localhost');
+        const pathname = parsed.pathname;
+        if (pathname === '/ws' || pathname === '/csefaculty/ws' || pathname.endsWith('/ws')) {
+          this.wss.handleUpgrade(request, socket, head, (ws) => {
+            this.wss.emit('connection', ws, request);
+          });
+        } else {
+          socket.destroy();
+        }
+      } catch (err) {
+        socket.destroy();
+      }
     });
 
     // Handle new connections

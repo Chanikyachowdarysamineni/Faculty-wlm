@@ -55,6 +55,12 @@ export const AcademicPeriodProvider = ({ children, currentUser }) => {
         setLoading(false);
         return;
       }
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        console.warn('Academic years endpoint returned non-JSON response:', response.status);
+        setLoading(false);
+        return;
+      }
       const data = await response.json();
       if (data.success && data.data && data.data.length > 0) {
         setAcademicYears(data.data);
