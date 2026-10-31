@@ -251,3 +251,4 @@ const FacultyScrollController = ({ tableWrapRef }) => {
 };
 
 export default FacultyScrollController;
+
