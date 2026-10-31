@@ -371,7 +371,7 @@ router.post(
   }
 );
 
-// GET /api/submissions/export  (admin) — export all submissions as CSV or Excel
+// GET /api/submissions/export  (admin) — export all submissions as CSV or Excel (2 worksheets)
 router.get('/export', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
   try {
     const format = String(req.query.format || 'csv').toLowerCase();
@@ -380,54 +380,139 @@ router.get('/export', requireAuth, requireAdmin, requireAcademicPeriod, async (r
       return sendError(res, 'Invalid format. Supported: csv, excel', 400);
     }
 
-    // Fetch submissions and courses in parallel
-    const [docs, courseList] = await Promise.all([
-      Submission.find({ ...req.getPeriodFilter() })
+    const { getSemesterPeriodDates, buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
+    const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+    const { getDefaultCapacity } = require('../utils/designationUtils');
+
+    const academicYear = req.academicPeriod?.academicYear?.name || req.query.academicYear || '';
+    const semester = req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || 'ODD';
+
+    const periodDates = req.academicPeriod || getSemesterPeriodDates({
+      academicYear,
+      semesterType: semester
+    });
+    const periodStart = periodDates?.periodStart;
+    const periodEnd = periodDates?.periodEnd;
+
+    // Filter eligible faculty active during this academic period, non-deleted, excluding hidden admins
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = { isDeleted: { $ne: true }, empId: { $nin: hiddenIds } };
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      facultyMatch.$and = dateClauses;
+    }
+
+    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {
+      academicYear,
+      semester
+    };
+
+    // Fetch eligible faculty, submissions, and courses in parallel
+    const [allFaculty, docs, courseList] = await Promise.all([
+      Faculty.find(facultyMatch).sort({ slNo: 1, name: 1 }).lean(),
+      Submission.find({ ...periodFilter })
         .select('empId empName designation mobile prefs createdAt updatedAt')
         .sort({ createdAt: -1 })
         .lean(),
-      Course.find({ ...req.getPeriodFilter() })
-        .select('courseId shortName')
+      Course.find({ ...periodFilter })
+        .select('courseId shortName name')
         .lean(),
     ]);
 
-    if (!docs.length) {
-      logger.warn('No submissions found for export', { userId: req.user.id });
-      return sendError(res, 'No submissions found to export.', 404);
+    // Map of submitted empIds
+    const submittedEmpIdMap = new Map();
+    docs.forEach(doc => {
+      const key = String(doc.empId || '').trim();
+      if (key && !submittedEmpIdMap.has(key)) {
+        submittedEmpIdMap.set(key, doc);
+      }
+    });
+
+    // Lookup map of all eligible faculty by empId
+    const facultyByEmpId = new Map();
+    allFaculty.forEach(fac => {
+      const key = String(fac.empId || '').trim();
+      if (key) {
+        facultyByEmpId.set(key, fac);
+      }
+    });
+
+    // Also fetch faculty info for any submitted IDs not currently in allFaculty (e.g. relieved later)
+    const missingSubmittedIds = docs
+      .map(d => String(d.empId || '').trim())
+      .filter(id => id && !facultyByEmpId.has(id));
+
+    if (missingSubmittedIds.length > 0) {
+      const extraFaculty = await Faculty.find({ empId: { $in: missingSubmittedIds } }).lean();
+      extraFaculty.forEach(fac => {
+        facultyByEmpId.set(String(fac.empId || '').trim(), fac);
+      });
     }
 
-    // Transform to client format
-    const submissions = docs.map(doc => ({
-      empId: String(doc.empId || '').trim(),
-      empName: String(doc.empName || '').trim(),
-      designation: String(doc.designation || '').trim() || 'N/A',
-      mobile: String(doc.mobile || '').trim() || 'N/A',
-      prefs: Array.isArray(doc.prefs) ? doc.prefs : [],
-      submittedAt: doc.createdAt?.toISOString() || null,
-      updatedAt: doc.updatedAt?.toISOString() || null,
-    }));
+    // 1. Submitted Faculty List (Sheet 1)
+    const submittedList = docs.map(doc => {
+      const empId = String(doc.empId || '').trim();
+      const fac = facultyByEmpId.get(empId);
+      return {
+        empId,
+        empName: String(doc.empName || fac?.name || '').trim(),
+        designation: String(doc.designation || fac?.designation || 'N/A').trim(),
+        email: String(fac?.email || '').trim(),
+        mobile: String(doc.mobile || fac?.mobile || 'N/A').trim(),
+        status: 'Submitted',
+        prefs: Array.isArray(doc.prefs) ? doc.prefs : [],
+        submittedAt: doc.createdAt?.toISOString() || null,
+        updatedAt: doc.updatedAt?.toISOString() || null,
+      };
+    });
 
-    // Transform courses to courseId map
+    // 2. Not Submitted Faculty List (Sheet 2: all eligible faculty who have not submitted)
+    const notSubmittedList = allFaculty
+      .filter(fac => !submittedEmpIdMap.has(String(fac.empId || '').trim()))
+      .map(fac => ({
+        empId: String(fac.empId || '').trim(),
+        empName: String(fac.name || '').trim(),
+        designation: String(fac.designation || '').trim() || 'N/A',
+        email: String(fac.email || '').trim(),
+        mobile: String(fac.mobile || '').trim() || 'N/A',
+        status: 'Not Submitted',
+        department: String(fac.department || 'CSE').trim(),
+        capacity: fac.capacity ?? getDefaultCapacity(fac.designation),
+        joiningDate: fac.joiningDate ? new Date(fac.joiningDate).toISOString() : null,
+        relievingDate: fac.relievingDate ? new Date(fac.relievingDate).toISOString() : null,
+      }));
+
+    // Courses lookup
     const courses = (courseList || []).map(doc => ({
       courseId: Number(doc.courseId || 0),
-      shortName: String(doc.shortName || '').trim(),
+      shortName: String(doc.shortName || doc.name || '').trim(),
     }));
 
-    const exportResult = await exportSubmissions(submissions, courses, format);
+    const exportResult = await exportSubmissions({
+      submissions: submittedList,
+      notSubmitted: notSubmittedList,
+      courses,
+      format,
+      academicYear,
+      semester,
+    });
 
-    logger.info('Submissions exported', { format, total: submissions.length, userId: req.user.id });
+    logger.info('Submissions exported', {
+      format,
+      submittedTotal: submittedList.length,
+      notSubmittedTotal: notSubmittedList.length,
+      totalEligible: allFaculty.length,
+      academicYear,
+      semester,
+      userId: req.user.id
+    });
 
     res.setHeader('Content-Type', exportResult.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${exportResult.filename}"`);
-    
-    if (format === 'excel') {
-      res.send(exportResult.content);
-    } else {
-      res.send(exportResult.content);
-    }
-  } catch (err) { 
-    logger.error('Error exporting submissions', { error: err.message, userId: req.user.id });
-    next(err); 
+    return res.send(exportResult.content);
+  } catch (err) {
+    logger.error('Error exporting submissions', { error: err.message, userId: req.user?.id });
+    next(err);
   }
 });
 

@@ -364,10 +364,6 @@ const cancelEdit = () => {
 
   // ── Export handlers ─────────────────────────────
   const handleExport = async (format) => {
-    if (submissions.length === 0) {
-      showToast({ type: 'error', message: 'No submissions to export.' });
-      return;
-    }
     setExportLoading(true);
     setExportError('');
     try {
@@ -376,13 +372,13 @@ const cancelEdit = () => {
         headers: authHeaders(),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.message || `Export failed with status ${res.status}`);
       }
 
       // Get filename from header if available
       const contentDisposition = res.headers.get('content-disposition');
-      let filename = `submissions_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+      let filename = `faculty_form_submissions_${selectedAcademicYear}_${selectedSemester}_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'csv'}`;
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?([^"]+)"?/);
         if (match && match[1]) filename = match[1];
@@ -398,8 +394,11 @@ const cancelEdit = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+      showToast({ type: 'success', message: format === 'excel' ? 'Excel workbook exported successfully with two sheets.' : 'CSV exported successfully.' });
     } catch (err) {
+      console.error('[FacultyFormPage] Export error:', err);
       setExportError(err.message || 'Export failed. Please try again.');
+      showToast({ type: 'error', message: err.message || 'Export failed. Please try again.' });
     } finally {
       setExportLoading(false);
     }
@@ -865,16 +864,16 @@ const cancelEdit = () => {
               <button
                 className="ff-export-btn ff-export-csv"
                 onClick={() => handleExport('csv')}
-                disabled={filteredSubs.length === 0}
-                title="Export submissions as CSV"
+                disabled={exportLoading || (submissions.length === 0 && notSubmittedFaculty.length === 0)}
+                title="Export all faculty submission details as CSV"
               >
                 {exportLoading ? '⏳' : '📊'} CSV
               </button>
               <button
                 className="ff-export-btn ff-export-excel"
                 onClick={() => handleExport('excel')}
-                disabled={filteredSubs.length === 0}
-                title="Export submissions as Excel"
+                disabled={exportLoading || (submissions.length === 0 && notSubmittedFaculty.length === 0)}
+                title="Export Submitted and Not-Submitted faculty as Excel workbook (2 sheets)"
               >
                 {exportLoading ? '⏳' : '📈'} Excel
               </button>
