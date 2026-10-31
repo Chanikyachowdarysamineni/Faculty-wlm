@@ -133,6 +133,8 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       type: 'sections_updated',
       data: { action: 'delete', sectionId: req.params.id }
     });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
 
     sendSuccess(res, { message: 'Section deleted successfully' });
   } catch (err) {

@@ -36,7 +36,11 @@ class WebSocketClient {
     }
 
     const isCseFaculty = typeof window !== 'undefined' && window.location.pathname.startsWith('/csefaculty');
-    const wsPath = isCseFaculty ? '/csefaculty/ws' : '/ws';
+    let wsPath = isCseFaculty ? '/csefaculty/ws' : '/ws';
+    // If initial path failed, try alternative path on reconnect
+    if (this.reconnectAttempts > 0 && this.reconnectAttempts % 2 === 1) {
+      wsPath = isCseFaculty ? '/ws' : '/csefaculty/ws';
+    }
     let url = `${backendUrl}${wsPath}`;
     const token = localStorage.getItem('wlm_token') || localStorage.getItem('token');
     if (token) {

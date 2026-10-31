@@ -16,6 +16,8 @@ const { mongoose } = require('../db');
 const Course = require('../models/Course');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
+const CourseOffering = require('../models/CourseOffering');
+const { recalculateCapacity } = require('../utils/capacityUtils');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
@@ -409,10 +411,16 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       return sendNotFound(res, 'Course not found.');
     }
 
-    // Cascade soft delete
+    // Find active workloads to identify affected faculty for capacity recalculation
+    const affectedWorkloads = await Workload.find({
+      courseId,
+      isDeleted: { $ne: true }
+    }).session(session).lean();
+
+    // Cascade soft delete workloads with CANCELLED status
     await Workload.updateMany(
       { courseId, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true, deletedAt: new Date() } },
+      { $set: { isDeleted: true, allocationStatus: 'CANCELLED', deletedAt: new Date() } },
       { session }
     );
     await CourseAllocation.updateMany(
@@ -420,6 +428,23 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       { $set: { isDeleted: true, deletedAt: new Date() } },
       { session }
     );
+
+    // Cancel CourseOfferings for this course
+    await CourseOffering.updateMany(
+      { $or: [{ courseId }, { course: doc._id }], status: { $ne: 'Cancelled' } },
+      { $set: { status: 'Cancelled', updatedAt: new Date() } },
+      { session }
+    );
+
+    // Recalculate capacity for affected faculty members
+    const affectedFacultyIds = [...new Set(affectedWorkloads.map(w => w.empId).filter(Boolean))];
+    for (const fEmpId of affectedFacultyIds) {
+      try {
+        await recalculateCapacity(fEmpId, { session, updatedBy: req.user.id });
+      } catch (capErr) {
+        logger.warn('Failed recalculating capacity during course delete', { empId: fEmpId, error: capErr.message });
+      }
+    }
 
 
     await session.commitTransaction();
@@ -462,12 +487,17 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req, res, next) =>
     // Cascade restore
     await Workload.updateMany(
       { courseId, isDeleted: true },
-      { $set: { isDeleted: false, deletedAt: null } },
+      { $set: { isDeleted: false, allocationStatus: 'ALLOCATED', deletedAt: null } },
       { session }
     );
     await CourseAllocation.updateMany(
       { courseId, isDeleted: true },
       { $set: { isDeleted: false, deletedAt: null } },
+      { session }
+    );
+    await CourseOffering.updateMany(
+      { $or: [{ courseId }, { course: doc._id }], status: 'Cancelled' },
+      { $set: { status: 'Active', updatedAt: new Date() } },
       { session }
     );
 

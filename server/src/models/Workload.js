@@ -87,6 +87,74 @@ const workloadSchema = new mongoose.Schema(
 );
 
 
+
+// Canonicalize year and isDeleted on save/validation
+workloadSchema.pre('validate', function(next) {
+  if (this.year) {
+    const map = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': 'I', 'II': 'II', 'III': 'III', 'IV': 'IV' };
+    const trimmed = String(this.year).trim();
+    this.year = map[trimmed] || trimmed;
+  }
+  if (this.isDeleted === undefined || this.isDeleted === null) {
+    this.isDeleted = false;
+  }
+  next();
+});
+
+// Clear faculty from allocations when workload is soft-deleted
+workloadSchema.pre('findOneAndUpdate', async function(next) {
+  const update = this.getUpdate();
+  if (update && (update.$set?.isDeleted === true || update.isDeleted === true)) {
+    try {
+      const opts = this.getOptions() || {};
+      if (opts.skipAllocationSync) {
+        return next();
+      }
+      const session = opts.session;
+      const docToUpdate = await this.model.findOne(this.getQuery()).session(session).lean();
+      if (docToUpdate && docToUpdate.empId) {
+        const Allocation = mongoose.model('CourseAllocation');
+        const romanOrder = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+        const yrVariants = Array.from(new Set([String(docToUpdate.year), romanOrder[String(docToUpdate.year)]].filter(Boolean)));
+        
+        const query = {
+          courseId: Number(docToUpdate.courseId),
+          section: String(docToUpdate.section).trim(),
+          year: { $in: yrVariants },
+          isDeleted: { $ne: true }
+        };
+        if (docToUpdate.academicYear) query.academicYear = String(docToUpdate.academicYear).trim();
+        if (docToUpdate.semester) query.semester = String(docToUpdate.semester).trim().toUpperCase();
+
+        const allocs = await Allocation.find(query).session(session);
+        for (const a of allocs) {
+          let modified = false;
+          const clearSlot = (slot) => {
+            if (slot && String(slot.empId || '').trim() === String(docToUpdate.empId).trim()) {
+              slot.empId = '';
+              slot.empName = '';
+              slot.designation = '';
+              slot.faculty = null;
+              slot.hours = 0;
+              modified = true;
+            }
+          };
+
+          if (a.lectureSlot) clearSlot(a.lectureSlot);
+          ['lectureSlots', 'tutorialSlots', 'practicalSlots'].forEach(slotType => {
+            if (Array.isArray(a[slotType])) a[slotType].forEach(clearSlot);
+          });
+
+          if (modified) await a.save({ session });
+        }
+      }
+    } catch (err) {
+      // Ignore hook error so it doesn't block transaction abort
+    }
+  }
+  next();
+});
+
 // ── Indexes ────────────────────────────────────────────────────────────────
 // Prevent duplicate same-role assignment for the same faculty/course/year/section/academicYear
 workloadSchema.index(
@@ -99,7 +167,7 @@ workloadSchema.index(
   { courseId: 1, year: 1, section: 1, facultyRole: 1, allocationRow: 1, semester: 1, academicYear: 1 },
   {
     unique: true,
-    partialFilterExpression: { isDeleted: false, facultyRole: 'TA', year: { $in: ['II', 'III', 'IV'] } },
+    partialFilterExpression: { isDeleted: false, facultyRole: 'TA' },
     name: 'uniq_ta_per_course_section_year',
   }
 );
@@ -109,7 +177,7 @@ workloadSchema.index(
   { courseId: 1, year: 1, section: 1, facultyRole: 1, semester: 1, academicYear: 1 },
   {
     unique: true,
-    partialFilterExpression: { isDeleted: false, facultyRole: 'Main Faculty', year: { $in: ['II', 'III', 'IV'] } },
+    partialFilterExpression: { isDeleted: false, facultyRole: 'Main Faculty' },
     name: 'uniq_main_per_course_section_year',
   }
 );

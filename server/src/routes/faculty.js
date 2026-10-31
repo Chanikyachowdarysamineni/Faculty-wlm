@@ -721,7 +721,7 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
 
     const counters = { workloads: 0, submissions: 0, users: 0, allocations: 0 };
 
-    const wlRes = await Workload.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
+    const wlRes = await Workload.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, allocationStatus: 'CANCELLED', deletedAt: new Date() } }, { session });
     counters.workloads = wlRes.modifiedCount || 0;
 
     const subRes = await Submission.updateMany({ empId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, deletedAt: new Date() } }, { session });
@@ -752,6 +752,20 @@ router.delete('/:empId', requireAuth, requireAdmin, async (req, res, next) => {
       await alloc.save({ session });
     }
     counters.allocations = allocations.length;
+
+    try {
+      const FacultyPreference = mongoose.model('FacultyPreference');
+      if (FacultyPreference) {
+        await FacultyPreference.deleteMany({ empId }, { session });
+      }
+    } catch (_) {}
+
+    try {
+      const FacultyCapacity = mongoose.model('FacultyCapacity');
+      if (FacultyCapacity) {
+        await FacultyCapacity.deleteMany({ empId }, { session });
+      }
+    } catch (_) {}
 
 
     await session.commitTransaction();

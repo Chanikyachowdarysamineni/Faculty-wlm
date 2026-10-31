@@ -63,8 +63,9 @@ facultySchema.pre('findOneAndUpdate', async function(next) {
       const empId = docToUpdate.empId;
       const Allocation = mongoose.model('CourseAllocation');
       const activeAllocs = await Allocation.find({
-        isDeleted: false,
+        isDeleted: { $ne: true },
         $or: [
+          { 'lectureSlot.empId': empId },
           { 'lectureSlots.empId': empId },
           { 'tutorialSlots.empId': empId },
           { 'practicalSlots.empId': empId }
@@ -73,10 +74,17 @@ facultySchema.pre('findOneAndUpdate', async function(next) {
 
       for (const a of activeAllocs) {
         let modified = false;
+        if (a.lectureSlot && a.lectureSlot.empId === empId) {
+          a.lectureSlot.empId = '';
+          a.lectureSlot.empName = '';
+          a.lectureSlot.faculty = null;
+          a.lectureSlot.hours = 0;
+          modified = true;
+        }
         ['lectureSlots', 'tutorialSlots', 'practicalSlots'].forEach(slotType => {
           if (Array.isArray(a[slotType])) {
             a[slotType].forEach(slot => {
-              if (slot.empId === empId) {
+              if (slot && slot.empId === empId) {
                 slot.empId = '';
                 slot.empName = '';
                 slot.faculty = null;

@@ -145,16 +145,18 @@ router.get('/integrity', requireAuth, requireAdmin, async (req, res, next) => {
       duplicateCourses,
       nullCriticalCounts,
     ] = await Promise.all([
-      Faculty.find().select({ empId: 1 }).lean(),
-      Course.find().select({ courseId: 1 }).lean(),
-      Workload.find().select({ _id: 1, empId: 1, courseId: 1, year: 1, section: 1, subjectCode: 1, subjectName: 1 }).lean(),
-      CourseAllocation.find().select({ _id: 1, courseId: 1, year: 1, section: 1, lectureSlot: 1, lectureSlots: 1, tutorialSlots: 1, practicalSlots: 1 }).lean(),
-      Submission.find().select({ _id: 1, empId: 1, prefs: 1 }).lean(),
+      Faculty.find({ isDeleted: { $ne: true } }).select({ empId: 1 }).lean(),
+      Course.find({ isDeleted: { $ne: true } }).select({ courseId: 1 }).lean(),
+      Workload.find({ isDeleted: { $ne: true } }).select({ _id: 1, empId: 1, courseId: 1, year: 1, section: 1, subjectCode: 1, subjectName: 1 }).lean(),
+      CourseAllocation.find({ isDeleted: { $ne: true } }).select({ _id: 1, courseId: 1, year: 1, section: 1, lectureSlot: 1, lectureSlots: 1, tutorialSlots: 1, practicalSlots: 1 }).lean(),
+      Submission.find({ isDeleted: { $ne: true } }).select({ _id: 1, empId: 1, prefs: 1 }).lean(),
       Workload.aggregate([
+        { $match: { isDeleted: { $ne: true } } },
         { $group: { _id: { courseId: '$courseId', year: '$year', section: '$section' }, count: { $sum: 1 }, ids: { $push: '$_id' } } },
         { $match: { count: { $gt: 1 } } },
       ]),
       CourseAllocation.aggregate([
+        { $match: { isDeleted: { $ne: true } } },
         { $group: { _id: { courseId: '$courseId', year: '$year', section: '$section' }, count: { $sum: 1 }, ids: { $push: '$_id' } } },
         { $match: { count: { $gt: 1 } } },
       ]),
@@ -274,7 +276,7 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
 
     const baseCourseFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
     const baseSubmissionFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
-    const baseWorkloadFilter = { isDeleted: { $ne: true }, ...req.getPeriodFilter() };
+    const baseWorkloadFilter = { isDeleted: { $ne: true }, allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] }, ...req.getPeriodFilter() };
 
     const [
       totalFaculty,

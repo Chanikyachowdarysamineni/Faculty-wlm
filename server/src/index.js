@@ -334,29 +334,32 @@ app.use((req, _res, next) => {
 });
 
 // ── API routes ─────────────────────────────────────────────
-app.use('/deva/auth',                  authRoutes);
-app.use('/deva/designations',          designationsRoutes);
-// B-10 FIX: facultyCapacityRoutes uses /:empId/capacity sub-routes so must be mounted
-// under /deva/faculty BEFORE facultyRoutes to avoid /:empId wildcard shadowing.
-// Both are mounted on /deva/faculty — Express processes in registration order.
-app.use('/deva/faculty',               facultyCapacityRoutes); // capacity sub-routes first
-app.use('/deva/faculty',               facultyRoutes);         // general faculty routes
-app.use('/deva/courses',               coursesRoutes);
-app.use('/deva/submissions',           submissionsRoutes);
-app.use('/deva/workloads',             workloadsRoutes);
-app.use('/deva/settings',              settingsRoutes);
-app.use('/deva/sections',              require('./routes/sections'));
-app.use('/deva/stats',                 statsRoutes);
-app.use('/deva/allocations',           allocationsRoutes);
-app.use('/deva/course-workload-plan',  courseWorkloadPlanRoutes);
+// Mount on both /deva and /csefaculty/deva to guarantee seamless reverse-proxy & standalone support
+const registerApiRoutes = (prefix) => {
+  app.use(`${prefix}/auth`,                  authRoutes);
+  app.use(`${prefix}/designations`,          designationsRoutes);
+  // B-10 FIX: facultyCapacityRoutes uses /:empId/capacity sub-routes so must be mounted
+  // under faculty BEFORE facultyRoutes to avoid /:empId wildcard shadowing.
+  app.use(`${prefix}/faculty`,               facultyCapacityRoutes);
+  app.use(`${prefix}/faculty`,               facultyRoutes);
+  app.use(`${prefix}/courses`,               coursesRoutes);
+  app.use(`${prefix}/submissions`,           submissionsRoutes);
+  app.use(`${prefix}/workloads`,             workloadsRoutes);
+  app.use(`${prefix}/settings`,              settingsRoutes);
+  app.use(`${prefix}/sections`,              require('./routes/sections'));
+  app.use(`${prefix}/stats`,                 statsRoutes);
+  app.use(`${prefix}/allocations`,           allocationsRoutes);
+  app.use(`${prefix}/course-workload-plan`,  courseWorkloadPlanRoutes);
+  app.use(`${prefix}/faculty-preferences`,   facultyPreferencesRoutes);
+  app.use(`${prefix}/config`,                configRoutes);
+  app.use(`${prefix}/academic-years`,        academicYearsRoutes);
+  app.use(`${prefix}/admin-management`,      adminManagementRoutes);
+  app.use(`${prefix}/course-types`,          courseTypesRoutes);
+  app.use(`${prefix}/course-loads`,          courseLoadsRoutes);
+};
 
-app.use('/deva/faculty-preferences',   facultyPreferencesRoutes);
-// NOTE: facultyCapacityRoutes already mounted above (line 306) — do NOT register again
-app.use('/deva/config', configRoutes);
-app.use('/deva/academic-years', academicYearsRoutes);
-app.use('/deva/admin-management', adminManagementRoutes);
-app.use('/deva/course-types', courseTypesRoutes);
-app.use('/deva/course-loads', courseLoadsRoutes);
+registerApiRoutes('/deva');
+registerApiRoutes('/csefaculty/deva');
 
 // ── Serve React production build ───────────────────────────
 // Express serves the frontend at /csefaculty so a single process handles everything
@@ -368,6 +371,14 @@ if (fs.existsSync(clientBuildPath)) {
     etag: true,
     immutable: true,
   }));
+  // Safety guard: API or WebSocket routes must NEVER return HTML
+  app.use(['/csefaculty/deva', '/csefaculty/deva/*'], (_req, res) => {
+    res.status(404).json({ success: false, message: 'API endpoint not found' });
+  });
+  app.use(['/csefaculty/ws', '/ws'], (_req, res) => {
+    res.status(426).json({ success: false, message: 'Upgrade Required for WebSocket' });
+  });
+
   // SPA fallback — all non-API routes under /csefaculty return index.html
   app.get('/csefaculty/*', (_req, res) => {
     res.sendFile(path.join(clientBuildPath, 'index.html'));

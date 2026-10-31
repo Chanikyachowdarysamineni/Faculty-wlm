@@ -31,7 +31,7 @@ const normalizeYear = (y) => {
  * Supports optional context { courseMap, facultyMap } for high-speed batch reconciliation.
  */
 const syncAllocationDocToWorkload = async (allocDoc, session = null, context = null) => {
-  if (!allocDoc || !allocDoc.courseId) return;
+  if (!allocDoc || !allocDoc.courseId || allocDoc.isDeleted === true) return;
 
   const numericCourseId = Number(allocDoc.courseId);
   const normalizedYearStr = normalizeYear(allocDoc.year);
@@ -245,12 +245,66 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
             $set: {
               isDeleted: true,
               deletedAt: new Date(),
-              allocationStatus: 'UNALLOCATED',
+              allocationStatus: 'CANCELLED',
             },
           },
           { ...(session && { session }) }
         );
       }
+    }
+  }
+};
+
+/**
+ * Clear a faculty member from all allocation slots for a course, year, section, academicYear, semester.
+ */
+const clearFacultyFromAllocation = async ({ courseId, year, section, empId, academicYear, semester }, session = null) => {
+  const numericCourseId = Number(courseId || 0);
+  if (!numericCourseId || !year || !section || !empId) return;
+
+  const romanOrder = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+  const yrVariants = Array.from(new Set([String(year), romanOrder[String(year)], normalizeYear(year)].filter(Boolean)));
+
+  const query = {
+    courseId: numericCourseId,
+    section: String(section).trim(),
+    year: { $in: yrVariants },
+    isDeleted: { $ne: true },
+  };
+  if (academicYear) query.academicYear = String(academicYear).trim();
+  if (semester) query.semester = String(semester).trim().toUpperCase();
+
+  const allocQuery = CourseAllocation.find(query);
+  if (session) allocQuery.session(session);
+  const matchingAllocs = await allocQuery.exec();
+
+  for (const existing of matchingAllocs) {
+    let modified = false;
+
+    if (existing.lectureSlot && String(existing.lectureSlot.empId || '').trim() === String(empId).trim()) {
+      existing.lectureSlot = { empId: '', empName: '', designation: '', hours: 0 };
+      modified = true;
+    }
+
+    const clearSlot = (slot) => {
+      if (slot && String(slot.empId || '').trim() === String(empId).trim()) {
+        slot.empId = '';
+        slot.empName = '';
+        slot.designation = '';
+        slot.faculty = null;
+        slot.hours = 0;
+        modified = true;
+      }
+    };
+
+    ['lectureSlots', 'tutorialSlots', 'practicalSlots'].forEach(slotType => {
+      if (Array.isArray(existing[slotType])) {
+        existing[slotType].forEach(clearSlot);
+      }
+    });
+
+    if (modified) {
+      await existing.save({ ...(session && { session }) });
     }
   }
 };
@@ -264,9 +318,12 @@ const removeWorkloadsForAllocation = async ({ courseId, year, section, semester,
   const sectionStr = String(section || '').trim();
   const semesterStr = String(semester || 'ODD').toUpperCase();
 
+  const romanOrder = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+  const yrVariants = Array.from(new Set([String(year), romanOrder[String(year)], normalizedYearStr].filter(Boolean)));
+
   const filter = {
     courseId: numericCourseId,
-    year: normalizedYearStr,
+    year: { $in: yrVariants },
     section: sectionStr,
     ...(semesterStr ? { semester: semesterStr } : {}),
     ...(academicYear ? { academicYear: String(academicYear).trim() } : {}),
@@ -278,7 +335,7 @@ const removeWorkloadsForAllocation = async ({ courseId, year, section, semester,
       $set: {
         isDeleted: true,
         deletedAt: new Date(),
-        allocationStatus: 'UNALLOCATED',
+        allocationStatus: 'CANCELLED',
       },
     },
     { ...(session && { session }) }
@@ -301,7 +358,7 @@ const reconcileAllAllocationsToWorkload = async ({ semester = null, academicYear
   lastReconcileTime = now;
 
   try {
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     if (semester) filter.semester = String(semester).toUpperCase();
     if (academicYear) filter.academicYear = String(academicYear).trim();
 
@@ -360,6 +417,7 @@ const reconcileAllAllocationsToWorkload = async ({ semester = null, academicYear
 
 module.exports = {
   syncAllocationDocToWorkload,
+  clearFacultyFromAllocation,
   removeWorkloadsForAllocation,
   reconcileAllAllocationsToWorkload,
   normalizeYear,

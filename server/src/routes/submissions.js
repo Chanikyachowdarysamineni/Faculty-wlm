@@ -525,7 +525,13 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       return sendNotFound(res, 'Submission not found.');
     }
     await Submission.findByIdAndDelete(req.params.id);
-    logger.info('Submission deleted', { id: req.params.id, empId: doc.empId, userId: req.user.id });
+    try {
+      const FacultyPreference = mongoose.model('FacultyPreference');
+      if (FacultyPreference) {
+        await FacultyPreference.deleteMany({ empId: doc.empId });
+      }
+    } catch (_) {}
+    logger.info('Submission deleted and associated preferences cleaned', { id: req.params.id, empId: doc.empId, userId: req.user.id });
     wsHandler.broadcast({
       type: 'submissions_updated',
       data: { action: 'delete', empId: doc.empId, id: req.params.id }

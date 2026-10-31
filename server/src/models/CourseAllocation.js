@@ -65,6 +65,19 @@ const courseAllocationSchema = new mongoose.Schema(
   { timestamps: true, collection: 'allocations' }
 );
 
+// Canonicalize year and isDeleted on save/validation
+courseAllocationSchema.pre('validate', function(next) {
+  if (this.year) {
+    const map = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': 'I', 'II': 'II', 'III': 'III', 'IV': 'IV' };
+    const trimmed = String(this.year).trim();
+    this.year = map[trimmed] || trimmed;
+  }
+  if (this.isDeleted === undefined || this.isDeleted === null) {
+    this.isDeleted = false;
+  }
+  next();
+});
+
 courseAllocationSchema.index({ courseId: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true, partialFilterExpression: { isDeleted: false, courseId: { $type: "number" } } });
 courseAllocationSchema.index({ course: 1, year: 1, section: 1, academicYear: 1, semester: 1 }, { unique: true, partialFilterExpression: { isDeleted: false, course: { $exists: true } } });
 courseAllocationSchema.index({ year: 1, section: 1, academicYear: 1, semester: 1 });

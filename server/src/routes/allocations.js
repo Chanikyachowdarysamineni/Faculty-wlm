@@ -134,7 +134,7 @@ router.get('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, re
     res.set('Expires', '0');
     
     const { page, limit, skip } = parsePagination(req.query);
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     
     // MANDATORY: Apply all provided filters (trim for consistency)
     if (req.query.courseId) filter.courseId = Number(req.query.courseId);
@@ -201,7 +201,7 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, require
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     Object.assign(filter, req.getPeriodFilter());
     const docs = await CourseAllocation.find(filter).lean();
 
@@ -264,7 +264,7 @@ router.get('/export/csv', requireAuth, requireAdmin, exportLimiter, requireAcade
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     Object.assign(filter, req.getPeriodFilter());
     const docs = await CourseAllocation.find(filter).sort({ courseId: 1, year: 1, section: 1 }).lean();
 
@@ -400,7 +400,7 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     let enrichedTutorials = await Promise.all(rawTutorialSlots.map(enrichSlot));
     let enrichedPracticals = await Promise.all(rawPracticalSlots.map(enrichSlot));
 
-    const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section, semester: targetSemester }).lean();
+    const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section, semester: targetSemester, academicYear: yearName, isDeleted: { $ne: true } }).lean();
 
     // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types (L, T, P)
     for (const slot of enrichedLSlots) {
@@ -519,6 +519,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
           tutorialSlots:  enrichedTutorials,
           practicalSlots: enrichedPracticals,
           createdBy:      req.user?.id || '',
+          isDeleted:      false,
+          deletedAt:      null,
         },
       },
       { upsert: true, new: true, session }
@@ -581,6 +583,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       academicYear: doc.academicYear,
     });
 
+    await CourseAllocation.findByIdAndUpdate(req.params.id, { $set: { isDeleted: true, deletedAt: new Date() } });
     await CourseAllocation.findByIdAndDelete(req.params.id);
 
     // Recalculate capacity for all affected faculty

@@ -34,7 +34,7 @@ const { normalizeCourseTypeKey, normalizeYear, deriveYearFromCode, resolveCourse
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { isTADesignation, isTaDesignationAsync, getDefaultCapacity } = require('../utils/designationUtils');
-const { reconcileAllAllocationsToWorkload } = require('../utils/allocationWorkloadSync');
+const { reconcileAllAllocationsToWorkload, clearFacultyFromAllocation } = require('../utils/allocationWorkloadSync');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
 const wsHandler = require('../websocket');
@@ -1498,11 +1498,10 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           year: normalizedYear,
           section: normalizedSection,
           facultyRole: 'Main Faculty',
-          allocationStatus: 'ALLOCATED',
+          isDeleted: { $ne: true },
           empId: { $ne: '' },
           academicYear: yearName,
           semester: semType,
-          isDeleted: { $ne: true },
         };
         if (effectiveCourse.courseId === 0) {
           existingMainFilter.subjectName = effectiveCourse.subjectName;
@@ -1556,11 +1555,10 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
           year: normalizedYear,
           section: normalizedSection,
           facultyRole: 'TA',
-          allocationStatus: 'ALLOCATED',
+          isDeleted: { $ne: true },
           empId: { $ne: '' },
           academicYear: yearName,
           semester: semType,
-          isDeleted: { $ne: true },
           allocationRow: parsedRow,
         };
         if (effectiveCourse.courseId === 0) {
@@ -1629,10 +1627,9 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
         year: normalizedYear,
         section: normalizedSection,
         facultyRole: normalizedFacultyRole,
-        allocationStatus: 'ALLOCATED',
+        isDeleted: { $ne: true },
         academicYear: yearName,
         semester: semType,
-        isDeleted: { $ne: true },
       };
       if (effectiveCourse.courseId === 0) {
         duplicateRoleFilter.subjectName = effectiveCourse.subjectName;
@@ -1925,7 +1922,7 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
         year: nextYear,
         section: nextSection,
         facultyRole: 'Main Faculty',
-        allocationStatus: 'ALLOCATED',
+        isDeleted: { $ne: true },
         empId: { $ne: '' },
         academicYear: yearName,
         semester: semType,
@@ -1950,7 +1947,7 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
             section: nextSection,
             facultyRole: 'TA',
             allocationRow: nextAllocationRow,
-            allocationStatus: 'ALLOCATED',
+            isDeleted: { $ne: true },
             empId: { $ne: '' },
             academicYear: yearName,
             semester: semType,
@@ -1969,7 +1966,7 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
       year: nextYear,
       section: nextSection,
       facultyRole: normalizedFacultyRole,
-      allocationStatus: 'ALLOCATED',
+      isDeleted: { $ne: true },
       academicYear: yearName,
       semester: semType,
     }).session(session).lean();
@@ -2198,30 +2195,18 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
     await Workload.findByIdAndUpdate(
       req.params.id,
       { $set: { isDeleted: true, deletedAt: new Date(), allocationStatus: 'CANCELLED' } },
-      { session }
+      { session, skipAllocationSync: true }
     );
 
-    if (String(doc.facultyRole || 'Main Faculty') === 'Main Faculty') {
-      await clearMainFacultyFromAllocation({
-        courseId: doc.courseId,
-        year: doc.year,
-        section: doc.section,
-        empId: doc.empId,
-        academicYear: doc.academicYear,
-        semester: doc.semester,
-      }, session);
-    }
-
-    if (String(doc.facultyRole || '') === 'TA' && doc.allocationRow) {
-      await clearTAFromAllocation({
-        courseId: doc.courseId,
-        year: doc.year,
-        section: doc.section,
-        allocationRow: doc.allocationRow,
-        academicYear: doc.academicYear,
-        semester: doc.semester,
-      }, session);
-    }
+    // Purge faculty from any and all allocation slots for this course, section, year, period
+    await clearFacultyFromAllocation({
+      courseId: doc.courseId,
+      year: doc.year,
+      section: doc.section,
+      empId: doc.empId,
+      academicYear: doc.academicYear,
+      semester: doc.semester,
+    }, session);
 
 
     logger.info('Workload soft-deleted', { id: String(doc._id), empId: doc.empId, courseId: doc.courseId, year: doc.year, section: doc.section, userId: req.user.id });
@@ -2229,7 +2214,9 @@ router.delete('/:id', requireAuth, requireAdmin, validateWorkloadDelete, async (
     await session.commitTransaction();
     // H-6: Recalculate capacity AFTER commit (outside transaction scope)
     await recalculateCapacity(doc.empId, { updatedBy: req.user.empId, semester: doc.semester, academicYear: doc.academicYear });
-    wsHandler.broadcast({ type: 'workload_updated' });
+    wsHandler.broadcast({ type: 'workload_updated', action: 'delete', id: req.params.id });
+    wsHandler.broadcast({ type: 'workloads_reload', academicYear: doc.academicYear, semester: doc.semester });
+    wsHandler.broadcast({ type: 'allocations_reload', academicYear: doc.academicYear, semester: doc.semester });
     sendSuccess(res, { message: 'Workload entry deleted.' }, 200);
   } catch (err) {
     await session.abortTransaction();
