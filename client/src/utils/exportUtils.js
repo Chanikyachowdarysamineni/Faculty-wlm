@@ -6,7 +6,7 @@ const safeValue = (value) => (value === null || value === undefined ? '' : value
 
 const buildMatrix = (columns, rows) => {
   const headers = columns.map(c => c.header);
-  const body = rows.map((row) => columns.map((c) => safeValue(typeof c.value === 'function' ? c.value(row) : row[c.key])));
+  const body = rows.map((row, i) => columns.map((c) => safeValue(typeof c.value === 'function' ? c.value(row, i) : row[c.key])));
   return { headers, body };
 };
 
@@ -28,15 +28,27 @@ export const exportAsCSV = ({ fileName, columns, rows }) => {
 };
 
 export const exportAsExcel = ({ fileName, columns, rows, sheetName = 'Sheet1' }) => {
-  const mappedRows = rows.map((row) => {
+  const mappedRows = rows.map((row, i) => {
     const out = {};
     columns.forEach((c) => {
-      out[c.header] = safeValue(typeof c.value === 'function' ? c.value(row) : row[c.key]);
+      out[c.header] = safeValue(typeof c.value === 'function' ? c.value(row, i) : row[c.key]);
     });
     return out;
   });
 
   const worksheet = XLSX.utils.json_to_sheet(mappedRows);
+
+  // Auto-fit column widths
+  const colWidths = columns.map(c => {
+    let maxLen = (c.header || '').length;
+    mappedRows.forEach(r => {
+      const valLen = String(r[c.header] || '').length;
+      if (valLen > maxLen) maxLen = valLen;
+    });
+    return { wch: Math.min(Math.max(maxLen + 3, 10), 40) };
+  });
+  worksheet['!cols'] = colWidths;
+
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   XLSX.writeFile(workbook, fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`);
@@ -56,4 +68,3 @@ export const exportAsPDF = ({ fileName, title, columns, rows }) => {
   });
   doc.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
 };
-

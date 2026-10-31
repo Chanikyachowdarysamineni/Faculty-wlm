@@ -368,34 +368,72 @@ const CourseWiseWorkloadPage = () => {
   // Export Columns definition
   const getExportColumns = () => [
     { header: 'Program', value: r => r.program },
-    { header: 'Sl. No.', value: (_, i) => i + 1 },
-    { header: 'Year', value: r => `${toRoman(r.year)} Year` },
-    { header: 'Sem', value: r => r.semester },
-    { header: 'Course Name', value: r => r.subjectName },
-    { header: 'Short Form in the Time-Table', value: r => r.shortName },
-    { header: 'Subject Code', value: r => r.subjectCode },
-    { header: 'Course Type', value: r => r.courseType },
+    { header: 'Sl. No.', value: (r, i) => r.__isTotal ? '' : i + 1 },
+    { header: 'Year', value: r => r.__isTotal ? '' : `${toRoman(r.year)} Year` },
+    { header: 'Sem', value: r => r.__isTotal ? '' : r.semester },
+    { header: 'Course Name', value: r => r.__isTotal ? '' : r.subjectName },
+    { header: 'Short Form in the Time-Table', value: r => r.__isTotal ? '' : r.shortName },
+    { header: 'Subject Code', value: r => r.__isTotal ? '' : r.subjectCode },
+    { header: 'Course Type', value: r => r.__isTotal ? '' : r.courseType },
     { header: 'L', value: r => r.L },
     { header: 'T', value: r => r.T },
     { header: 'P', value: r => r.P },
     { header: 'C', value: r => r.C },
-    { header: 'T&P Batches', value: r => getRowVal(r, 'tpBatches') },
-    { header: 'No of Sections', value: r => getRowVal(r, 'noOfSections') },
-    { header: 'Student Strength', value: r => getRowVal(r, 'studentStrength') },
-    { header: 'Total L', value: r => calculateTotals(r).totalL },
-    { header: 'Total T', value: r => calculateTotals(r).totalT },
-    { header: 'Total P', value: r => calculateTotals(r).totalP },
-    { header: 'Total', value: r => calculateTotals(r).total }
+    { header: 'T&P Batches', value: r => r.__isTotal ? r.tpBatches : getRowVal(r, 'tpBatches') },
+    { header: 'No of Sections', value: r => r.__isTotal ? r.noOfSections : getRowVal(r, 'noOfSections') },
+    { header: 'Student Strength', value: r => r.__isTotal ? r.studentStrength : getRowVal(r, 'studentStrength') },
+    { header: 'Total L', value: r => r.__isTotal ? r.totalL : calculateTotals(r).totalL },
+    { header: 'Total T', value: r => r.__isTotal ? r.totalT : calculateTotals(r).totalT },
+    { header: 'Total P', value: r => r.__isTotal ? r.totalP : calculateTotals(r).totalP },
+    { header: 'Total', value: r => r.__isTotal ? r.total : calculateTotals(r).total }
   ];
 
   const handleExport = (type) => {
+    // Compute column-wise totals exactly matching the UI footer row
+    let sumL = 0, sumT = 0, sumP = 0, sumC = 0;
+    let sumTpBatches = 0, sumNoOfSections = 0, sumStudentStrength = 0;
+    let sumTotalL = 0, sumTotalT = 0, sumTotalP = 0, sumTotal = 0;
+
+    displayData.forEach(row => {
+      const totals = calculateTotals(row);
+      sumL += Number(row.L) || 0;
+      sumT += Number(row.T) || 0;
+      sumP += Number(row.P) || 0;
+      sumC += Number(row.C) || 0;
+      sumTpBatches += Number(getRowVal(row, 'tpBatches')) || 0;
+      sumNoOfSections += Number(getRowVal(row, 'noOfSections')) || 0;
+      sumStudentStrength += Number(getRowVal(row, 'studentStrength')) || 0;
+      sumTotalL += Number(totals.totalL) || 0;
+      sumTotalT += Number(totals.totalT) || 0;
+      sumTotalP += Number(totals.totalP) || 0;
+      sumTotal += Number(totals.total) || 0;
+    });
+
+    const totalRow = {
+      __isTotal: true,
+      program: `TOTAL (${displayData.length} courses)`,
+      L: sumL,
+      T: sumT,
+      P: sumP,
+      C: sumC,
+      tpBatches: sumTpBatches || '',
+      noOfSections: sumNoOfSections || '',
+      studentStrength: sumStudentStrength || '',
+      totalL: sumTotalL,
+      totalT: sumTotalT,
+      totalP: sumTotalP,
+      total: sumTotal,
+    };
+
     const config = {
       fileName: `Course_Wise_Workload_${selectedAcademicYear}_${selectedSemester}`,
       title: `Course Wise Workload - ${selectedAcademicYear} - ${selectedSemester}`,
       columns: getExportColumns(),
-      rows: displayData.map((row, i) => ({ ...row, __idx: i }))
+      rows: [...displayData, totalRow]
     };
     if (type === 'excel') exportAsExcel(config);
+    else if (type === 'csv') exportAsCSV(config);
+    else if (type === 'pdf') exportAsPDF(config);
   };
 
   return (
