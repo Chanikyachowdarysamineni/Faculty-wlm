@@ -118,6 +118,7 @@ const CellPicker = ({
       if (rowIdx === 0) {
         const desig = String(f.designation || '').toLowerCase();
         const isTA =
+          f.category === 'TA_INSTRUCTOR' ||
           desig.includes('teaching assistant') ||
           desig.includes('teaching associate') ||
           desig.includes('teaching instructor') ||
@@ -125,18 +126,8 @@ const CellPicker = ({
         if (isTA) return false;
       }
 
-      // R2-R4 should only show Supporting Faculty and TAs.
-      if (rowIdx >= 1) {
-        const desig = String(f.designation || '').toLowerCase();
-        const isSupportingOrTA =
-          desig.includes('teaching assistant') ||
-          desig.includes('teaching associate') ||
-          desig.includes('teaching instructor') ||
-          desig === 'ta' ||
-          desig.includes('supporting') ||
-          f.empId === empId; // always include currently-selected faculty
-        if (!isSupportingOrTA) return false;
-      }
+      // R2-R4: Both Regular Faculty and TAs/Instructors are eligible!
+      // (No restriction needed here since both categories can be allocated to R2-R4)
 
       const capacity = Number(f.capacity);
       const info = facultyStatusMap[f.empId] || {
@@ -220,10 +211,12 @@ const CellPicker = ({
                 key={f.empId}
                 className={`ap-dd-item${f.empId === empId ? ' ap-dd-selected' : ''}`}
                 onMouseDown={() => { onSelect(f.empId); setOpen(false); setSearch(''); }}
+                title={`${f.name} | ${f.empId} | ${f.designation || 'Faculty'}`}
               >
                 <span className="ap-dd-name">{f.name}</span>
+                <span className="ap-dd-id" style={{ margin: '0 4px', color: '#6b7280' }}>| {f.empId} |</span>
+                <span className="ap-dd-desig" style={{ fontSize: '11px', color: '#4b5563', marginRight: '6px' }}>{f.designation || 'Faculty'}</span>
                 <span className={`ap-dd-status ap-dd-status-${getStatusText(f).tone}`}>{getStatusText(f).label}</span>
-                <span className="ap-dd-id">[{f.empId}]</span>
               </div>
             ))}
             {filtered.length === 0 && (

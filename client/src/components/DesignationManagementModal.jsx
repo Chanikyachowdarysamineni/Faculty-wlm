@@ -15,6 +15,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [name, setName] = useState('');
   const [order, setOrder] = useState('');
+  const [category, setCategory] = useState('FACULTY');
   const [editId, setEditId] = useState(null);
   const [nameError, setNameError] = useState('');
 
@@ -31,6 +32,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
     const columns = [
       { header: 'Order', key: 'order' },
       { header: 'Designation Name', key: 'name' },
+      { header: 'Workload Eligibility', value: (row) => row.category === 'TA_INSTRUCTOR' ? 'TA / Instructor (R2-R4 Only)' : 'Regular Faculty' },
       { header: 'Status', value: (row) => row.isEnabled === false ? 'Disabled' : 'Active' },
       { header: 'Created At', value: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : '' }
     ];
@@ -76,7 +78,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
     setNameError('');
 
     try {
-      const payload = { name: name.trim(), order: Number(order) || 0 };
+      const payload = { name: name.trim(), order: Number(order) || 0, category };
       const url = editId ? `${API}/deva/designations/${editId}` : `${API}/deva/designations`;
       const method = editId ? 'PUT' : 'POST';
 
@@ -89,6 +91,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
       if (res.ok && data.success) {
         setName('');
         setOrder('');
+        setCategory('FACULTY');
         setEditId(null);
         showToast.success(editId ? 'Designation updated successfully.' : 'Designation created successfully.');
         fetchDesignations();
@@ -111,7 +114,8 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
   const handleEdit = (d) => {
     setEditId(d._id);
     setName(d.name);
-    setOrder(d.order);
+    setOrder(d.order ?? '');
+    setCategory(d.category || 'FACULTY');
     setNameError('');
   };
 
@@ -148,6 +152,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
     setEditId(null);
     setName('');
     setOrder('');
+    setCategory('FACULTY');
     setNameError('');
   };
 
@@ -158,8 +163,8 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
         {!isStandalone && <button className="dmm-close" onClick={onClose}>✕</button>}
       </div>
       
-      <form className="dmm-form" onSubmit={handleSave}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <form className="dmm-form" onSubmit={handleSave} style={{ flexWrap: 'wrap' }}>
+        <div style={{ flex: 2, minWidth: '180px', display: 'flex', flexDirection: 'column' }}>
           <input 
             type="text" 
             placeholder="Designation Name *" 
@@ -173,12 +178,21 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
           />
           <FieldError error={nameError} />
         </div>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ flex: 2, minWidth: '220px' }}
+          title="Workload eligibility rule for this designation"
+        >
+          <option value="FACULTY">Regular Faculty (Main, Supporting, R2-R4)</option>
+          <option value="TA_INSTRUCTOR">TA / Instructor (R2, R3, R4 Only)</option>
+        </select>
         <input 
           type="number" 
           placeholder="Order (Optional)" 
           value={order} 
           onChange={(e) => setOrder(e.target.value)} 
-          style={{ width: '130px' }}
+          style={{ width: '90px' }}
         />
         <button type="submit" className="dmm-btn-save" disabled={isSaving}>
           {isSaving ? 'Saving...' : (editId ? 'Update' : 'Add')}
@@ -188,13 +202,14 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
 
       <div className="dmm-list-wrap">
         {loading ? (
-          <p>Loading...</p>
+          <p style={{ padding: '12px' }}>Loading...</p>
         ) : (
           <table className="dmm-table">
             <thead>
               <tr>
                 <th>Order</th>
                 <th>Name</th>
+                <th>Workload Eligibility</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -203,9 +218,16 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
                 <tr key={d._id}>
                   <td>{d.order}</td>
                   <td>
-                    {d.name}
+                    <strong>{d.name}</strong>
                     {d.isEnabled === false && (
                       <span style={{ marginLeft: '8px', fontSize: '11px', color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>Disabled</span>
+                    )}
+                  </td>
+                  <td>
+                    {d.category === 'TA_INSTRUCTOR' ? (
+                      <span className="dmm-badge-ta" title="Eligible for R2, R3, R4 only">TA / Instructor (R2-R4 Only)</span>
+                    ) : (
+                      <span className="dmm-badge-faculty" title="Eligible for Main, Supporting, and R2-R4">Regular Faculty</span>
                     )}
                   </td>
                   <td>
@@ -215,7 +237,7 @@ const DesignationManagementModal = ({ onClose, onUpdated, isStandalone }) => {
                 </tr>
               ))}
               {designations.length === 0 && (
-                <tr><td colSpan="3" style={{textAlign: 'center'}}>No designations found.</td></tr>
+                <tr><td colSpan="4" style={{textAlign: 'center', padding: '12px'}}>No designations found.</td></tr>
               )}
             </tbody>
           </table>

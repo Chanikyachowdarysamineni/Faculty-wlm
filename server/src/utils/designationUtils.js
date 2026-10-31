@@ -51,6 +51,46 @@ const getDefaultCapacity = (designation = '') => {
   return isTADesignation(designation) ? 12 : 18;
 };
 
+let designationsCache = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 60000; // 1 minute
+
+const invalidateDesignationCache = () => {
+  designationsCache = null;
+  lastCacheTime = 0;
+};
+
+const getDesignationsFromDb = async () => {
+  const now = Date.now();
+  if (designationsCache && (now - lastCacheTime < CACHE_TTL_MS)) {
+    return designationsCache;
+  }
+  try {
+    const Designation = require('../models/Designation');
+    designationsCache = await Designation.find().lean();
+    lastCacheTime = now;
+    return designationsCache;
+  } catch (err) {
+    return designationsCache || [];
+  }
+};
+
+const getDesignationCategory = async (rawDesignation) => {
+  if (!rawDesignation) return 'FACULTY';
+  const clean = String(rawDesignation).trim().toLowerCase();
+  const docs = await getDesignationsFromDb();
+  const found = docs.find(d => String(d.name || '').trim().toLowerCase() === clean);
+  if (found && found.category) {
+    return found.category;
+  }
+  return isTADesignation(rawDesignation) ? 'TA_INSTRUCTOR' : 'FACULTY';
+};
+
+const isTaDesignationAsync = async (rawDesignation) => {
+  const category = await getDesignationCategory(rawDesignation);
+  return category === 'TA_INSTRUCTOR';
+};
+
 const syncFacultyDesignationIds = async () => {
   try {
     const Designation = require('../models/Designation');
@@ -59,6 +99,12 @@ const syncFacultyDesignationIds = async () => {
     if (!designations || !designations.length) return;
 
     for (const d of designations) {
+      // Ensure category is set on designation
+      if (!d.category) {
+        const cat = isTADesignation(d.name) ? 'TA_INSTRUCTOR' : 'FACULTY';
+        await Designation.updateOne({ _id: d._id }, { $set: { category: cat } });
+      }
+
       await Faculty.updateMany(
         { 
           $and: [
@@ -76,9 +122,20 @@ const syncFacultyDesignationIds = async () => {
         { $set: { designationId: d._id } }
       );
     }
+    invalidateDesignationCache();
   } catch (err) {
     console.warn('[designationUtils] syncFacultyDesignationIds error:', err.message);
   }
 };
 
-module.exports = { TA_DESIGNATIONS, matchTaDesignation, isTADesignation, getDefaultCapacity, syncFacultyDesignationIds };
+module.exports = {
+  TA_DESIGNATIONS,
+  matchTaDesignation,
+  isTADesignation,
+  getDefaultCapacity,
+  syncFacultyDesignationIds,
+  invalidateDesignationCache,
+  getDesignationsFromDb,
+  getDesignationCategory,
+  isTaDesignationAsync
+};

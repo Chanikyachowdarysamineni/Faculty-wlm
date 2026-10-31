@@ -12,8 +12,8 @@
 }
 .dmm-modal {
   background: white;
-  width: 500px;
-  max-width: 90vw;
+  width: 650px;
+  max-width: 95vw;
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
@@ -109,6 +109,35 @@
   color: white;
 }
 
+
+.dmm-form select {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.dmm-badge-faculty {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.dmm-badge-ta {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c2d12;
+  background: #ffedd5;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
 
 /* Dark text for visibility */
 .dmm-table, .dmm-standalone, .dmm-modal {

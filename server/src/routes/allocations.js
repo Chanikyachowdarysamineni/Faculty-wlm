@@ -23,7 +23,7 @@ const requireAcademicPeriod = require('../middleware/academicPeriod');
 const { exportLimiter } = require('../middleware/rateLimiters'); // M-12 FIX: add export rate limiter
 const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
-const { isTADesignation } = require('../utils/designationUtils');
+const { isTADesignation, isTaDesignationAsync } = require('../utils/designationUtils');
 const { syncAllocationDocToWorkload, removeWorkloadsForAllocation } = require('../utils/allocationWorkloadSync');
 const wsHandler = require('../websocket');
 
@@ -403,17 +403,18 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     const existing = await CourseAllocation.findOne({ courseId: Number(courseId), year, section, semester: targetSemester }).lean();
 
     // RULE 1: Validate R1 must be MAIN faculty (not TA) for all types (L, T, P)
-    const lectureHasTa = enrichedLSlots.some((slot) => slot?.empId && isTADesignation(slot?.designation));
-    if (lectureHasTa) {
-      return sendError(res, 'R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations. R1 is reserved for Main Faculty only.', 400);
+    for (const slot of enrichedLSlots) {
+      if (slot?.empId && await isTaDesignationAsync(slot?.designation)) {
+        return sendError(res, 'R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations. R1 is reserved for Main Faculty only.', 400);
+      }
     }
 
     // Validate R1 in T and P must not be TA designation
-    if (enrichedTutorials[0]?.empId && isTADesignation(enrichedTutorials[0]?.designation)) {
+    if (enrichedTutorials[0]?.empId && await isTaDesignationAsync(enrichedTutorials[0]?.designation)) {
       return sendError(res, 'Tutorial R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations.', 400);
     }
 
-    if (enrichedPracticals[0]?.empId && isTADesignation(enrichedPracticals[0]?.designation)) {
+    if (enrichedPracticals[0]?.empId && await isTaDesignationAsync(enrichedPracticals[0]?.designation)) {
       return sendError(res, 'Practical R1 (Main Faculty slot) cannot be assigned to Teaching Associate/Assistant/Instructor designations.', 400);
     }
 
@@ -429,35 +430,37 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, async (req, r
     // 2) Same TA cannot appear multiple times for the same subject+section.
     // 3) If a TA already exists in a TA row position, another faculty cannot replace it directly.
     const taEmpIds = [];
-    const validateTaRules = (slots, type, existingSlots = []) => {
-      slots.forEach((slot, idx) => {
+    const validateTaRules = async (slots, type, existingSlots = []) => {
+      for (let idx = 0; idx < slots.length; idx++) {
+        const slot = slots[idx];
         const empId = String(slot?.empId || '').trim();
-        if (!empId) return;
+        if (!empId) continue;
 
         const existingEmpId = String(existingSlots[idx]?.empId || '').trim();
-        const existingIsTa = !!existingEmpId && isTADesignation(existingSlots[idx]?.designation);
+        const existingIsTa = !!existingEmpId && await isTaDesignationAsync(existingSlots[idx]?.designation);
         if (existingIsTa && existingEmpId !== empId) {
           const rowNo = idx + 1;
-          const err = new Error(`TA already assigned in ${type} row R${rowNo}. Clear the row first before assigning another faculty.`);
+          const err = new Error('TA already assigned in ' + type + ' row R' + rowNo + '. Clear the row first before assigning another faculty.');
           err.status = 409;
           throw err;
         }
 
-        if (!isTADesignation(slot?.designation)) return;
+        const isSlotTa = await isTaDesignationAsync(slot?.designation);
+        if (!isSlotTa) continue;
 
         const inAllowedRow = idx >= 1 && idx <= 3;
         if (!inAllowedRow) {
-          const err = new Error(`TA can only be assigned in ${type} rows R2, R3, or R4.`);
+          const err = new Error('TA can only be assigned in ' + type + ' rows R2, R3, or R4.');
           err.status = 400;
           throw err;
         }
 
         taEmpIds.push(empId);
-      });
+      }
     };
 
-    validateTaRules(enrichedTutorials, 'Tutorial', existing?.tutorialSlots || []);
-    validateTaRules(enrichedPracticals, 'Practical', existing?.practicalSlots || []);
+    await validateTaRules(enrichedTutorials, 'Tutorial', existing?.tutorialSlots || []);
+    await validateTaRules(enrichedPracticals, 'Practical', existing?.practicalSlots || []);
 
     const duplicateTa = taEmpIds.find((empId, index) => taEmpIds.indexOf(empId) !== index);
     if (duplicateTa) {

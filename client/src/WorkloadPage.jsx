@@ -189,15 +189,52 @@ const WorkloadPage = ({ submissions }) => {
   const [facultySearchInput, setFacultySearchInput] = useState(''); // Faculty search input
   const [showFacultyDropdown, setShowFacultyDropdown] = useState(false); // Show faculty dropdown
 
+  const [facultyLoading, setFacultyLoading] = useState(false);
+
   // Sync shared context data to local state
   useEffect(() => {
-    if (contextFaculty) {
+    if (contextFaculty && contextFaculty.length > 0) {
       setFacultyList(contextFaculty);
     }
-    if (contextCourses) {
+    if (contextCourses && contextCourses.length > 0) {
       setCourseList(contextCourses);
     }
   }, [contextFaculty, contextCourses]);
+
+  // Fallback: Fetch courses and faculty directly if shared context is not populated
+  const fetchFacultyDirect = useCallback(async () => {
+    try {
+      setFacultyLoading(true);
+      const res = await fetchAllPages('/deva/faculty', { semester: selectedSemester, academicYear: selectedAcademicYear }, { headers: authHeader() });
+      if (res?.success && Array.isArray(res.data)) {
+        setFacultyList(res.data);
+        if (setFaculty) setFaculty(res.data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch faculty list directly', e);
+    } finally {
+      setFacultyLoading(false);
+    }
+  }, [selectedSemester, selectedAcademicYear, setFaculty]);
+
+  useEffect(() => {
+    if (!contextFaculty || contextFaculty.length === 0) {
+      fetchFacultyDirect();
+    }
+  }, [contextFaculty, fetchFacultyDirect]);
+
+  // Listen for faculty and designations reload events
+  useEffect(() => {
+    const handleReload = () => {
+      fetchFacultyDirect();
+    };
+    window.addEventListener('wlm:faculty_reload', handleReload);
+    window.addEventListener('wlm:designations_reload', handleReload);
+    return () => {
+      window.removeEventListener('wlm:faculty_reload', handleReload);
+      window.removeEventListener('wlm:designations_reload', handleReload);
+    };
+  }, [fetchFacultyDirect]);
 
   // Faculty workload hours tracking
   const [facultyWorkloadSummary, setFacultyWorkloadSummary] = useState(null);
@@ -460,14 +497,25 @@ const WorkloadPage = ({ submissions }) => {
       return;
     }
     const f = facultyList.find(f => f.empId === val);
-    setForm(prev => ({
-      ...prev,
-      empId: val,
-      empName: f ? f.name : '',
-      designation: f ? f.designation : '',
-      mobile: f ? (f.mobile || '') : '',
-      courseId: '', manualL: '', manualT: '', manualP: ''
-    }));
+    const isTa = f && isTaDesignationFaculty(f);
+
+    setForm(prev => {
+      const targetRole = (isTa && (prev.facultyRole === 'Main Faculty' || prev.facultyRole === 'Supporting Faculty'))
+        ? 'TA'
+        : prev.facultyRole;
+      const targetAllocationRow = (isTa && !prev.taAllocationRow) ? 'R2' : prev.taAllocationRow;
+
+      return {
+        ...prev,
+        empId: val,
+        empName: f ? f.name : '',
+        designation: f ? f.designation : '',
+        mobile: f ? (f.mobile || '') : '',
+        courseId: '', manualL: targetRole === 'TA' ? '0' : prev.manualL, manualT: '', manualP: '',
+        facultyRole: targetRole,
+        taAllocationRow: targetAllocationRow
+      };
+    });
     setErrors({});
 
     // Fetch faculty workload hours summary
@@ -478,24 +526,36 @@ const WorkloadPage = ({ submissions }) => {
 
   // Helper: check if a designation belongs to TA category
   const isTADesignationStr = (desig) => {
-    const d = String(desig || '').toLowerCase().replace(/\s+/g, ' ');
+    const d = String(desig || '').toLowerCase().replace(/[\s_-]+/g, ' ');
     return d === 'ta' ||
       d.includes('teaching assistant') ||
       d.includes('teaching associate') ||
-      d.includes('teaching instructor');
+      d.includes('teaching instructor') ||
+      d === 'ti';
   };
 
-  // Filter faculty by search input (ID or name)
-  const filteredFaculty = facultyList.filter(f => {
-    const match = f.empId.toLowerCase().includes(facultySearchInput.toLowerCase()) ||
-      f.name.toLowerCase().includes(facultySearchInput.toLowerCase());
-    if (!match) return false;
-    // When role is Main Faculty or Supporting Faculty, exclude TA designations from dropdown
-    if (form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty') {
-      if (isTADesignationStr(f.designation)) return false;
-    }
+  const isTaDesignationFaculty = (f) => {
+    if (f?.category === 'TA_INSTRUCTOR') return true;
+    if (f?.category === 'FACULTY') return false;
+    return isTADesignationStr(f?.designation);
+  };
+
+  // Filter faculty by search input (ID, name, or designation)
+  const searchQuery = facultySearchInput.trim().toLowerCase();
+  const allMatchingFaculty = facultyList.filter(f => {
+    if (!searchQuery) return true;
+    const matchId = String(f.empId || '').toLowerCase().includes(searchQuery);
+    const matchName = String(f.name || '').toLowerCase().includes(searchQuery);
+    const matchDesig = String(f.designation || '').toLowerCase().includes(searchQuery);
+    return matchId || matchName || matchDesig;
+  });
+
+  const isMainOrSupportingRole = form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty';
+  const filteredFaculty = allMatchingFaculty.filter(f => {
+    if (isMainOrSupportingRole && isTaDesignationFaculty(f)) return false;
     return true;
   });
+  const matchedTaFaculty = allMatchingFaculty.filter(f => isTaDesignationFaculty(f));
 
   // ── Fetch faculty workload hours summary ──
   const fetchFacultyWorkloadHours = async (empId) => {
@@ -642,7 +702,7 @@ const WorkloadPage = ({ submissions }) => {
     // TA Designation restrictions: Teaching Associate, Teaching Assistant, Teaching Assistant-I, Teaching Assistant-II, Teaching Instructor cannot be Main Faculty or Supporting Faculty
     const fac = facultyList.find(f => f.empId === form.empId);
     const desig = fac ? fac.designation : (form.empId === '__other__' ? form.designationOther : form.designation);
-    if (isTADesignationStr(desig) && (form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty')) {
+    if ((isTaDesignationFaculty(fac) || isTADesignationStr(desig)) && (form.facultyRole === 'Main Faculty' || form.facultyRole === 'Supporting Faculty')) {
       e.facultyRole = `${desig || 'TA-designated faculty'} can only participate in course allocations as TA (R2, R3, R4), not as ${form.facultyRole}.`;
     }
 
@@ -1422,9 +1482,22 @@ const WorkloadPage = ({ submissions }) => {
                     }}>
                       {filteredFaculty.length > 0 ? (
                         <>
-                          {facultySearchInput && (
-                            <div style={{ padding: '8px 12px', background: '#f3f4f6', fontSize: '11px', fontWeight: 600, color: '#666', borderBottom: '1px solid #e5e7eb' }}>
-                              Found {filteredFaculty.length} faculty
+                          <div style={{ padding: '6px 12px', background: '#f8fafc', fontSize: '11px', fontWeight: 600, color: '#64748b', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Eligible for {form.facultyRole || 'Main Faculty'} ({filteredFaculty.length})</span>
+                            {facultyLoading && <span style={{ color: '#3b82f6' }}>Updating…</span>}
+                          </div>
+                          {isMainOrSupportingRole && matchedTaFaculty.length > 0 && (
+                            <div style={{ padding: '6px 12px', background: '#fef3c7', borderBottom: '1px solid #fde68a', fontSize: '11px', color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>{matchedTaFaculty.length} TA / Instructor(s) match query</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setForm(p => ({ ...p, facultyRole: 'TA', taAllocationRow: p.taAllocationRow || 'R2', manualL: '0' }));
+                                }}
+                                style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                Switch to TA (R2-R4)
+                              </button>
                             </div>
                           )}
                           {filteredFaculty.map(f => (
@@ -1435,20 +1508,30 @@ const WorkloadPage = ({ submissions }) => {
                                 setTimeout(() => setShowFacultyDropdown(false), 100);
                               }}
                               style={{
-                                padding: '10px 12px',
+                                padding: '8px 12px',
                                 cursor: 'pointer',
                                 borderBottom: '1px solid #f0f0f0',
                                 background: form.empId === f.empId ? '#e3f2fd' : '#fff',
                                 transition: 'background 0.15s'
                               }}
-                              onMouseEnter={e => e.target.style.background = '#f5f5f5'}
-                              onMouseLeave={e => e.target.style.background = form.empId === f.empId ? '#e3f2fd' : '#fff'}
+                              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                              onMouseLeave={e => e.currentTarget.style.background = form.empId === f.empId ? '#e3f2fd' : '#fff'}
                             >
-                              <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e40af' }}>
-                                {f.empId}
+                              <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span>{f.name} <span style={{ color: '#94a3b8', fontWeight: 400 }}>|</span> {f.empId} <span style={{ color: '#94a3b8', fontWeight: 400 }}>|</span> <span style={{ color: '#2563eb' }}>{f.designation || 'Faculty'}</span></span>
+                                {isTaDesignationFaculty(f) && (
+                                  <span style={{ fontSize: '10px', background: '#ffedd5', color: '#9a3412', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>TA (R2-R4)</span>
+                                )}
                               </div>
-                              <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-                                {f.name} • {f.designation}
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', display: 'flex', gap: '8px' }}>
+                                <span>Cap: <strong>{f.capacity ?? 18}h</strong></span>
+                                <span>Allocated: <strong>{f.allocated ?? 0}h</strong></span>
+                                <span style={{ color: (f.remaining ?? 18) <= 0 ? '#dc2626' : '#16a34a' }}>
+                                  Rem: <strong>{f.remaining ?? (f.capacity || 18)}h</strong>
+                                </span>
+                                {f.status && f.status !== 'Available' && (
+                                  <span style={{ marginLeft: 'auto', fontSize: '10px', color: f.status === 'Overload' ? '#dc2626' : '#2563eb', fontWeight: 600 }}>{f.status}</span>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1466,15 +1549,37 @@ const WorkloadPage = ({ submissions }) => {
                               fontWeight: 600,
                               color: '#92400e'
                             }}
-                            onMouseEnter={e => e.target.style.background = '#fde68a'}
-                            onMouseLeave={e => e.target.style.background = '#fef3c7'}
+                            onMouseEnter={e => e.currentTarget.style.background = '#fde68a'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fef3c7'}
                           >
                             + Other Faculty (Manual Entry)
                           </div>
                         </>
                       ) : (
-                        <div style={{ padding: '10px 12px', color: '#999', fontSize: '12px' }}>
-                          {facultySearchInput ? 'No faculty found' : 'Loading faculty...'}
+                        <div style={{ padding: '12px', color: '#64748b', fontSize: '12px', textAlign: 'center' }}>
+                          {facultyLoading ? (
+                            <span>Loading faculty records from database…</span>
+                          ) : matchedTaFaculty.length > 0 ? (
+                            <div>
+                              <p style={{ margin: '0 0 6px 0', color: '#b45309', fontWeight: 500 }}>
+                                No eligible regular faculty for <strong>{form.facultyRole || 'Main Faculty'}</strong> matching "{facultySearchInput}".
+                              </p>
+                              <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#64748b' }}>
+                                {matchedTaFaculty.length} TA / Instructor match(es) found (permitted for R2, R3, R4 allocations only).
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setForm(p => ({ ...p, facultyRole: 'TA', taAllocationRow: 'R2', manualL: '0' }));
+                                }}
+                                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                Switch to TA Role to View &amp; Assign
+                              </button>
+                            </div>
+                          ) : (
+                            facultySearchInput ? `No faculty found matching "${facultySearchInput}"` : 'Type a name or Employee ID to search'
+                          )}
                         </div>
                       )}
                     </div>
@@ -1527,9 +1632,23 @@ const WorkloadPage = ({ submissions }) => {
                 value={form.facultyRole || 'Main Faculty'}
                 onChange={e => {
                   const newRole = e.target.value;
+                  const isTa = facMember && isTaDesignationFaculty(facMember);
+                  if (isTa && (newRole === 'Main Faculty' || newRole === 'Supporting Faculty')) {
+                    setErrors(prev => ({
+                      ...prev,
+                      facultyRole: `${facMember.designation} can only participate in course allocations as TA (R2, R3, R4), not as ${newRole}.`
+                    }));
+                  } else {
+                    setErrors(prev => {
+                      const n = { ...prev };
+                      delete n.facultyRole;
+                      return n;
+                    });
+                  }
                   setForm(p => ({
                     ...p,
                     facultyRole: newRole,
+                    taAllocationRow: newRole === 'TA' ? (p.taAllocationRow || 'R2') : p.taAllocationRow,
                     ...(newRole === 'TA' ? { manualL: '0' } : (p.manualL === '0' && selectedCourse ? { manualL: String(selectedCourse.L) } : {}))
                   }));
                 }}

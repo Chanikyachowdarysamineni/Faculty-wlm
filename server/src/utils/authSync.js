@@ -6,6 +6,7 @@ const Faculty = require('../models/Faculty');
 const User = require('../models/User');
 const Role = require('../models/Role');
 const Designation = require('../models/Designation');
+const { isTADesignation, invalidateDesignationCache } = require('./designationUtils');
 const logger = require('./logger');
 const { isAdminEmployeeId } = require('../config/adminConfig');
 const { recalculateCapacity } = require('./capacityUtils');
@@ -48,12 +49,18 @@ const syncAuthAndRBAC = async () => {
       'Teaching Assistant-II',
     ];
     for (let i = 0; i < defaultDesignations.length; i++) {
+      const name = defaultDesignations[i];
+      const category = isTADesignation(name) ? 'TA_INSTRUCTOR' : 'FACULTY';
       await Designation.findOneAndUpdate(
-        { name: defaultDesignations[i] },
-        { $setOnInsert: { name: defaultDesignations[i], order: i } },
+        { name },
+        { 
+          $setOnInsert: { name, order: i, category },
+          $set: { category }
+        },
         { upsert: true }
       );
     }
+    invalidateDesignationCache();
 
     // 3. Ensure primary admin user exists
     const adminId = (process.env.ADMIN_ID || 'admin').trim();

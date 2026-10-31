@@ -21,6 +21,8 @@ const Faculty   = require('../models/Faculty');
 const Course    = require('../models/Course');
 const CourseAllocation = require('../models/CourseAllocation');
 const Setting   = require('../models/Setting');
+const Designation = require('../models/Designation');
+const FacultyCapacity = require('../models/FacultyCapacity');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 
 const { requireAuth, requireAdmin } = require('../middleware/auth');
@@ -31,8 +33,10 @@ const { validateWorkloadCreate, validateWorkloadUpdate, validateWorkloadDelete, 
 const { normalizeCourseTypeKey, normalizeYear, deriveYearFromCode, resolveCourseYear } = require('../utils/courseUtils');
 const { calculateFacultyWorkload, getFacultyWorkloadSummary, canAssignWorkload, getFacultyWorkloadReport } = require('../utils/workloadHours');
 const { recalculateCapacity } = require('../utils/capacityUtils');
-const { isTADesignation } = require('../utils/designationUtils');
+const { isTADesignation, isTaDesignationAsync, getDefaultCapacity } = require('../utils/designationUtils');
 const { reconcileAllAllocationsToWorkload } = require('../utils/allocationWorkloadSync');
+const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
+const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
 const wsHandler = require('../websocket');
 
 const router = express.Router();
@@ -635,6 +639,202 @@ router.get('/main-faculty', requireAuth, requireAcademicPeriod, async (req, res,
   }
 });
 
+// GET /api/workloads/eligible-faculty
+// Centralized endpoint: returns eligible faculty for a given role/slot in the active academic period
+router.get('/eligible-faculty', requireAuth, requireAcademicPeriod, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    const search = String(req.query.search || '').trim();
+    const facultyRole = String(req.query.facultyRole || '').trim();
+    const allocationSlot = String(req.query.allocationSlot || '').toUpperCase().trim();
+    const allocationRow = req.query.allocationRow !== undefined && req.query.allocationRow !== '' ? Number(req.query.allocationRow) : null;
+    const onlyEligible = String(req.query.onlyEligible || '').toLowerCase() === 'true';
+
+    // 1. Resolve Academic Period
+    const periodStart = req.academicPeriod?.periodStart || req.academicPeriod?.academicYear?.startDate;
+    const periodEnd = req.academicPeriod?.periodEnd || req.academicPeriod?.academicYear?.endDate;
+    const periodFilter = req.getPeriodFilter ? req.getPeriodFilter() : {};
+
+    // 2. Fetch Designations to build category map
+    const designationDocs = await Designation.find({ isEnabled: { $ne: false } }).lean();
+    const desigMap = new Map();
+    designationDocs.forEach(d => {
+      const cat = d.category || (isTADesignation(d.name) ? 'TA_INSTRUCTOR' : 'FACULTY');
+      desigMap.set(d.name.toLowerCase().trim(), cat);
+    });
+
+    const getFacultyCategory = (designationName) => {
+      const clean = String(designationName || '').toLowerCase().trim();
+      if (desigMap.has(clean)) return desigMap.get(clean);
+      return isTADesignation(designationName) ? 'TA_INSTRUCTOR' : 'FACULTY';
+    };
+
+    // 3. Faculty query
+    const hiddenIds = ADMIN_EMPLOYEE_IDS;
+    const facultyMatch = {
+      isDeleted: { $ne: true },
+      empId: { $nin: hiddenIds }
+    };
+
+    const dateClauses = buildFacultyDateFilter(periodStart, periodEnd);
+    if (dateClauses.length > 0) {
+      facultyMatch.$and = dateClauses;
+    }
+
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escaped, 'i');
+      const searchOr = [
+        { name: searchRegex },
+        { empId: searchRegex },
+        { designation: searchRegex }
+      ];
+      if (facultyMatch.$and) {
+        facultyMatch.$and.push({ $or: searchOr });
+      } else {
+        facultyMatch.$or = searchOr;
+      }
+    }
+
+    const rawFaculty = await Faculty.find(facultyMatch).sort({ slNo: 1, name: 1 }).lean();
+
+    // Deduplicate by empId
+    const facultyMap = new Map();
+    for (const f of rawFaculty) {
+      const empIdKey = String(f.empId || '').trim();
+      if (!empIdKey) continue;
+      if (!facultyMap.has(empIdKey)) {
+        facultyMap.set(empIdKey, f);
+      } else {
+        const existing = facultyMap.get(empIdKey);
+        if (f.updatedAt && (!existing.updatedAt || new Date(f.updatedAt) > new Date(existing.updatedAt))) {
+          facultyMap.set(empIdKey, f);
+        }
+      }
+    }
+    const facultyList = Array.from(facultyMap.values());
+    const empIds = facultyList.map(f => f.empId);
+
+    // 4. Fetch Workloads for these faculty members in the active academic period
+    const workloadMatch = {
+      empId: { $in: empIds },
+      isDeleted: { $ne: true },
+      allocationStatus: { $nin: ['CANCELLED', 'UNALLOCATED'] },
+      ...periodFilter
+    };
+
+    const workloadAgg = await Workload.aggregate([
+      { $match: workloadMatch },
+      {
+        $group: {
+          _id: '$empId',
+          assignedHours: {
+            $sum: {
+              $add: [
+                {
+                  $cond: [
+                    { $eq: ['$facultyRole', 'TA'] },
+                    0,
+                    { $ifNull: ['$manualL', { $ifNull: ['$fixedL', 0] }] }
+                  ]
+                },
+                { $ifNull: ['$manualT', { $ifNull: ['$fixedT', 0] }] },
+                { $ifNull: ['$manualP', { $ifNull: ['$fixedP', 0] }] }
+              ]
+            }
+          },
+          courseCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const workloadByEmpId = new Map();
+    workloadAgg.forEach(w => {
+      workloadByEmpId.set(String(w._id).trim(), {
+        assignedHours: Number(w.assignedHours) || 0,
+        courseCount: Number(w.courseCount) || 0
+      });
+    });
+
+    // 5. Fetch Capacity for these faculty in the active academic period
+    const capFilter = {
+      empId: { $in: empIds },
+      ...(req.getSemesterId && req.getSemesterId() ? periodFilter : {})
+    };
+    const capacities = await FacultyCapacity.find(capFilter).lean();
+    const capacityByEmpId = new Map();
+    capacities.forEach(c => {
+      if (c.capacity != null) capacityByEmpId.set(String(c.empId).trim(), Number(c.capacity));
+    });
+
+    // 6. Eligibility assessment
+    const isTaRequested = facultyRole === 'TA' || ['R2', 'R3', 'R4'].includes(allocationSlot) || (allocationRow !== null && allocationRow >= 1);
+    const isMainOrSupportingRequested = facultyRole === 'Main Faculty' || facultyRole === 'Supporting Faculty' || allocationSlot === 'R1' || allocationRow === 0;
+
+    let results = facultyList.map((f, idx) => {
+      const empIdStr = String(f.empId).trim();
+      const wData = workloadByEmpId.get(empIdStr) || { assignedHours: 0, courseCount: 0 };
+      const defaultCap = getDefaultCapacity(f.designation);
+      const cap = capacityByEmpId.get(empIdStr) || Number(f.capacity || defaultCap);
+      const assigned = wData.assignedHours || 0;
+      const remaining = cap - assigned;
+      const category = getFacultyCategory(f.designation);
+
+      const isTaCategory = category === 'TA_INSTRUCTOR';
+
+      let isEligible = true;
+      let ineligibleReason = null;
+
+      if (isMainOrSupportingRequested && isTaCategory) {
+        isEligible = false;
+        ineligibleReason = `${f.designation} can only be allocated as TA (R2, R3, R4), not as ${facultyRole || allocationSlot || 'Main/Supporting Faculty'}.`;
+      }
+
+      let status = 'Available';
+      if (assigned > cap) {
+        status = 'Overload';
+      } else if (assigned === cap && cap > 0) {
+        status = 'Fully Loaded';
+      } else if (assigned > 0) {
+        status = 'Normal';
+      }
+
+      return {
+        _id: f._id,
+        sNo: idx + 1,
+        empId: empIdStr,
+        name: f.name,
+        designation: f.designation,
+        category,
+        department: f.department || 'CSE',
+        mobile: f.mobile || '—',
+        email: f.email || '—',
+        assignedHours: assigned,
+        capacity: cap,
+        remainingCapacity: remaining,
+        courseCount: wData.courseCount,
+        status,
+        isEligible,
+        ineligibleReason,
+        allowedRoles: isTaCategory ? ['TA'] : ['Main Faculty', 'Supporting Faculty', 'TA'],
+        allowedSlots: isTaCategory ? ['R2', 'R3', 'R4'] : ['R1', 'R2', 'R3', 'R4']
+      };
+    });
+
+    if (onlyEligible) {
+      results = results.filter(r => r.isEligible);
+    }
+
+    sendSuccess(res, results, 200);
+  } catch (err) {
+    logger.error('Error fetching eligible faculty', { error: err.message });
+    next(err);
+  }
+});
+
 // GET /api/workloads/faculty-hours/:empId (admin/faculty)
 // Get faculty workload summary with remaining hours capacity
 // MUST BE BEFORE /:id route to match correctly
@@ -1199,7 +1399,8 @@ router.post('/', requireAuth, requireAdmin, requireAcademicPeriod, validateWorkl
       };
 
       // TA designations can ONLY be allocated as TA (R2, R3, R4)
-      if (isTADesignation(effectiveMember.designation) && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
+      const isMemberTa = await isTaDesignationAsync(effectiveMember.designation);
+      if (isMemberTa && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
         await session.abortTransaction();
         session.endSession();
         return sendError(res, `${effectiveMember.designation} can only be allocated as TA (R2, R3, R4), not as ${normalizedFacultyRole}.`, 400);
@@ -1652,7 +1853,8 @@ router.put('/:id', requireAuth, requireAdmin, requireAcademicPeriod, validateWor
     }
 
     // TA designations can ONLY be allocated as TA (R2, R3, R4)
-    if (isTADesignation(effectiveMember.designation) && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
+    const isMemberTa = await isTaDesignationAsync(effectiveMember.designation);
+    if (isMemberTa && (normalizedFacultyRole === 'Main Faculty' || normalizedFacultyRole === 'Supporting Faculty')) {
       await session.abortTransaction();
       session.endSession();
       return sendError(res, `${effectiveMember.designation} can only be allocated as TA (R2, R3, R4), not as ${normalizedFacultyRole}.`, 400);

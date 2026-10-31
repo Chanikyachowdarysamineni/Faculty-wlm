@@ -14,7 +14,7 @@ const { sendSuccess, sendError, sendValidationError, sendConflict, sendNotFound,
 const logger = require('../utils/logger');
 const { ADMIN_EMPLOYEE_IDS } = require('../config/adminConfig');
 const { buildFacultyDateFilter } = require('../utils/academicPeriodUtils');
-const { getDefaultCapacity } = require('../utils/designationUtils');
+const { getDefaultCapacity, isTADesignation, invalidateDesignationCache } = require('../utils/designationUtils');
 
 const router = express.Router();
 
@@ -22,6 +22,9 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const docs = await Designation.find({ isEnabled: true }).sort({ order: 1 }).lean();
+    if (req.query.detailed === 'true') {
+      return sendSuccess(res, docs, 200);
+    }
     sendSuccess(res, docs.map(d => d.name), 200);
   } catch (err) {
     logger.error('Error listing designations', { error: err.message });
@@ -43,7 +46,7 @@ router.get('/admin', requireAuth, requireAdmin, async (req, res, next) => {
 // POST /api/designations (Admin only)
 router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const { name, order, isEnabled } = req.body;
+    const { name, order, isEnabled, category } = req.body;
     if (!name || !name.trim()) return sendError(res, 'Designation name is required.', 400);
 
     const trimmedName = name.trim();
@@ -54,7 +57,18 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
       return sendConflict(res, `Designation "${trimmedName}" already exists.`);
     }
 
-    const doc = await Designation.create({ name: trimmedName, order: order || 0, isEnabled: isEnabled !== false });
+    let targetCategory = category;
+    if (!targetCategory || !['FACULTY', 'TA_INSTRUCTOR'].includes(targetCategory)) {
+      targetCategory = isTADesignation(trimmedName) ? 'TA_INSTRUCTOR' : 'FACULTY';
+    }
+
+    const doc = await Designation.create({
+      name: trimmedName,
+      category: targetCategory,
+      order: order || 0,
+      isEnabled: isEnabled !== false
+    });
+    invalidateDesignationCache();
     sendSuccess(res, doc, 201);
   } catch (err) {
     if (err.code === 11000) {
@@ -70,7 +84,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { name, order, isEnabled } = req.body;
+    const { name, order, isEnabled, category } = req.body;
     const newName = name?.trim();
     
     const existing = await Designation.findById(req.params.id).session(session);
@@ -98,6 +112,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     existing.name = newName || existing.name;
     if (order !== undefined) existing.order = order;
     if (isEnabled !== undefined) existing.isEnabled = isEnabled;
+    if (category && ['FACULTY', 'TA_INSTRUCTOR'].includes(category)) {
+      existing.category = category;
+    }
     await existing.save({ session });
     
     if (isNameChanged) {
@@ -140,6 +157,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     
     await session.commitTransaction();
     session.endSession();
+    invalidateDesignationCache();
     sendSuccess(res, existing, 200);
   } catch (err) {
     await session.abortTransaction();
@@ -166,6 +184,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (activeFacultyCount > 0) {
       desig.isEnabled = false;
       await desig.save();
+      invalidateDesignationCache();
       return sendSuccess(res, {
         message: `Designation "${desig.name}" is assigned to ${activeFacultyCount} active faculty member(s) and was disabled instead of deleted to protect data integrity.`,
         deactivated: true
@@ -173,6 +192,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     await Designation.findByIdAndDelete(req.params.id);
+    invalidateDesignationCache();
     sendSuccess(res, { message: 'Designation deleted', deactivated: false }, 200);
   } catch (err) {
     logger.error('Error deleting designation', { error: err.message });
