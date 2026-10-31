@@ -315,6 +315,98 @@ const FacultyPage = () => {
     });
   }, [list, search]);
 
+  // ── Directional Navigation State & Handlers ────────────
+  const displayList = useMemo(() => {
+    return restoreMode ? deletedList : (isDragMode ? mergedList : filtered);
+  }, [restoreMode, deletedList, isDragMode, mergedList, filtered]);
+
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // Keep activeIdx within valid bounds when displayList changes
+  useEffect(() => {
+    if (displayList.length === 0) {
+      setActiveIdx(-1);
+    } else if (activeIdx >= displayList.length) {
+      setActiveIdx(displayList.length - 1);
+    } else if (activeIdx < 0) {
+      setActiveIdx(0);
+    }
+  }, [displayList.length, activeIdx]);
+
+  const scrollToRecord = useCallback((idx) => {
+    if (idx < 0 || idx >= displayList.length) return;
+    setActiveIdx(idx);
+    const target = displayList[idx];
+    if (target) {
+      const rowEl = document.getElementById('faculty-row-' + target.empId);
+      if (rowEl) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [displayList]);
+
+  const handlePrev = useCallback(() => {
+    if (displayList.length === 0) return;
+    const nextIdx = activeIdx > 0 ? activeIdx - 1 : 0;
+    scrollToRecord(nextIdx);
+  }, [activeIdx, displayList.length, scrollToRecord]);
+
+  const handleNext = useCallback(() => {
+    if (displayList.length === 0) return;
+    const maxIdx = displayList.length - 1;
+    const nextIdx = activeIdx < maxIdx ? (activeIdx < 0 ? 0 : activeIdx + 1) : maxIdx;
+    scrollToRecord(nextIdx);
+  }, [activeIdx, displayList.length, scrollToRecord]);
+
+  const handleScrollTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (displayList.length > 0) {
+      scrollToRecord(0);
+    }
+  }, [displayList.length, scrollToRecord]);
+
+  const handleScrollBottom = useCallback(() => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    if (displayList.length > 0) {
+      scrollToRecord(displayList.length - 1);
+    }
+  }, [displayList.length, scrollToRecord]);
+
+  // Keyboard Navigation: Left, Right, Home, End, Alt+Up, Alt+Down
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      const isInputActive =
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        document.activeElement?.isContentEditable;
+
+      if (isInputActive || showModal || showDesignationModal || deleteConfirm) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
+      } else if (e.key === 'Home' || (e.altKey && e.key === 'ArrowUp')) {
+        e.preventDefault();
+        handleScrollTop();
+      } else if (e.key === 'End' || (e.altKey && e.key === 'ArrowDown')) {
+        e.preventDefault();
+        handleScrollBottom();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePrev, handleNext, handleScrollTop, handleScrollBottom, showModal, showDesignationModal, deleteConfirm]);
+
+  const currentFaculty = displayList[activeIdx] || null;
+
   // ── Toast helper ───────────────────────────────────────
   // ── Toast helper (Moved to top) ──
 
@@ -533,6 +625,64 @@ const FacultyPage = () => {
         <div className="fp-topbar-left">
           <h2 className="fp-heading">Faculty List</h2>
           <span className="fp-count-badge">{mergedList.length} Members</span>
+
+          {/* Directional Navigation Controls (Topbar) */}
+          <div className="fp-topbar-nav" role="group" aria-label="Faculty directional navigation">
+            <button
+              type="button"
+              className="fp-nav-btn fp-nav-top"
+              onClick={handleScrollTop}
+              title="Scroll to top of Faculty page (↑ or Home)"
+              aria-label="Scroll to top"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="fp-nav-btn fp-nav-left"
+              onClick={handlePrev}
+              disabled={activeIdx <= 0 || displayList.length === 0}
+              title="Previous faculty record (← Left Arrow)"
+              aria-label="Previous faculty record"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+            <div
+              className="fp-nav-counter"
+              title={currentFaculty ? ('Selected: ' + currentFaculty.name + ' (' + currentFaculty.empId + ')') : 'Faculty record navigation'}
+            >
+              <span className="fp-nav-counter-current">{displayList.length > 0 && activeIdx >= 0 ? activeIdx + 1 : 0}</span>
+              <span className="fp-nav-counter-sep">/</span>
+              <span className="fp-nav-counter-total">{displayList.length}</span>
+            </div>
+            <button
+              type="button"
+              className="fp-nav-btn fp-nav-right"
+              onClick={handleNext}
+              disabled={activeIdx >= displayList.length - 1 || displayList.length === 0}
+              title="Next faculty record (→ Right Arrow)"
+              aria-label="Next faculty record"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="fp-nav-btn fp-nav-down"
+              onClick={handleScrollBottom}
+              title="Scroll to bottom of Faculty page (↓ or End)"
+              aria-label="Scroll to bottom"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div className="fp-topbar-right">
           {/* Search */}
@@ -683,17 +833,22 @@ const FacultyPage = () => {
             </tr>
           </thead>
           <tbody>
-            {(restoreMode ? deletedList : (isDragMode ? mergedList : filtered)).length === 0 ? (
+            {displayList.length === 0 ? (
               <tr><td colSpan={isDragMode ? 17 : 18} className="fp-empty">{restoreMode ? 'No deleted records.' : 'No records found.'}</td></tr>
             ) : (
-              (isDragMode ? mergedList : filtered).map((f, i) => (
+              displayList.map((f, i) => (
                 <tr
                   key={f.empId}
+                  id={'faculty-row-' + f.empId}
                   className={[
                     i % 2 === 0 ? 'fp-row-even' : 'fp-row-odd',
+                    activeIdx === i ? 'fp-row-active' : '',
                     isDragMode ? 'fp-row-draggable' : '',
                     isDragMode && dragOverIdx === i ? 'fp-row-dragover' : '',
                   ].filter(Boolean).join(' ')}
+                  onClick={() => setActiveIdx(i)}
+                  title={'Click to focus ' + f.name + ' (Record ' + (i + 1) + ' of ' + displayList.length + ')'}
+                  style={{ cursor: isDragMode ? 'grab' : 'pointer' }}
                   draggable={isDragMode}
                   onDragStart={isDragMode ? e => handleDragStart(e, i) : undefined}
                   onDragOver={isDragMode ? e => handleDragOver(e, i) : undefined}
@@ -887,6 +1042,69 @@ const FacultyPage = () => {
           }}
         />
       )}
+
+      {/* ── Directional Floating Navigation Dock ── */}
+      <div className="fp-floating-nav" role="group" aria-label="Faculty directional navigation">
+        <button
+          type="button"
+          className="fp-nav-btn fp-nav-top"
+          onClick={handleScrollTop}
+          title="Scroll to top of Faculty page (↑ or Home)"
+          aria-label="Scroll to top"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="fp-nav-btn fp-nav-left"
+          onClick={handlePrev}
+          disabled={activeIdx <= 0 || displayList.length === 0}
+          title="Previous faculty record (← Left Arrow)"
+          aria-label="Previous faculty record"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+        <div
+          className="fp-nav-counter"
+          title={currentFaculty ? ('Selected: ' + currentFaculty.name + ' (' + currentFaculty.empId + ')') : 'Faculty record navigation'}
+        >
+          <span className="fp-nav-counter-current">{displayList.length > 0 && activeIdx >= 0 ? activeIdx + 1 : 0}</span>
+          <span className="fp-nav-counter-sep">/</span>
+          <span className="fp-nav-counter-total">{displayList.length}</span>
+          {currentFaculty && (
+            <span className="fp-nav-active-name" title={currentFaculty.name}>
+              • {currentFaculty.name.split(' ')[0]}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="fp-nav-btn fp-nav-right"
+          onClick={handleNext}
+          disabled={activeIdx >= displayList.length - 1 || displayList.length === 0}
+          title="Next faculty record (→ Right Arrow)"
+          aria-label="Next faculty record"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="fp-nav-btn fp-nav-down"
+          onClick={handleScrollBottom}
+          title="Scroll to bottom of Faculty page (↓ or End)"
+          aria-label="Scroll to bottom"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 };
