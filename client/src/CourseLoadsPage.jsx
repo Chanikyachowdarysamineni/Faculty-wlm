@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from './config';
 import { fetchJsonWithRetry } from './utils/apiFetchAll';
 import { useAcademicPeriod } from './AcademicPeriodContext';
+import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import './CourseLoadsPage.css';
 import './WorkloadPage.css'; // Use workload styling
 
@@ -276,21 +277,160 @@ const CourseLoadsPage = () => {
     return res.length > 0 ? res : ['I', 'II', 'III', 'IV'];
   }, [filters.program, availableFilters]);
 
+  const flatCourses = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    return data.flatMap(progGroup => 
+      (progGroup.years || []).flatMap(yearGroup => 
+        (yearGroup.courses || []).map(course => ({
+          program: progGroup.program,
+          year: yearGroup.year,
+          ...course
+        }))
+      )
+    );
+  }, [data]);
+
+  const totals = useMemo(() => {
+    let totalAllocated = 0;
+    let totalNotAllocated = 0;
+    flatCourses.forEach(c => {
+      totalAllocated += Array.isArray(c.allocatedSections) ? c.allocatedSections.length : 0;
+      totalNotAllocated += Array.isArray(c.notAllocatedSections) ? c.notAllocatedSections.length : 0;
+    });
+    return {
+      totalCourses: flatCourses.length,
+      totalAllocated,
+      totalNotAllocated
+    };
+  }, [flatCourses]);
+
+  const getExportColumns = () => [
+    { 
+      header: 'Program', 
+      value: (r) => r.__isTotal ? r.program : (r.program || '')
+    },
+    { 
+      header: 'Sl. No.', 
+      value: (r, i) => r.__isTotal ? '' : (i + 1)
+    },
+    { 
+      header: 'Year', 
+      value: (r) => r.__isTotal ? '' : `${toRoman(r.year)} Year`
+    },
+    { 
+      header: 'Sem', 
+      value: (r) => {
+        if (r.__isTotal) return '';
+        if (r.semester) {
+          return r.semester.charAt(0).toUpperCase() + r.semester.slice(1).toLowerCase();
+        }
+        if (filters.semesterType) {
+          return filters.semesterType.charAt(0).toUpperCase() + filters.semesterType.slice(1).toLowerCase();
+        }
+        return '—';
+      }
+    },
+    { 
+      header: 'Course Name', 
+      value: (r) => r.__isTotal ? '' : (r.courseName || '')
+    },
+    { 
+      header: 'Course Code', 
+      value: (r) => r.__isTotal ? '' : (r.courseCode || '')
+    },
+    { 
+      header: 'Sections Allocated', 
+      value: (r) => {
+        if (r.__isTotal) return r.allocatedSections;
+        if (Array.isArray(r.allocatedSections) && r.allocatedSections.length > 0) {
+          return `${r.allocatedSections.join(', ')} (${r.allocatedSections.length})`;
+        }
+        return 'None';
+      }
+    },
+    { 
+      header: 'Sections Not Allocated', 
+      value: (r) => {
+        if (r.__isTotal) return r.notAllocatedSections;
+        if (Array.isArray(r.notAllocatedSections) && r.notAllocatedSections.length > 0) {
+          return `${r.notAllocatedSections.join(', ')} (${r.notAllocatedSections.length})`;
+        }
+        return 'All Allocated ✓';
+      }
+    }
+  ];
+
+  const handleExport = (type = 'excel') => {
+    if (flatCourses.length === 0) return;
+
+    const totalRow = {
+      __isTotal: true,
+      program: `TOTAL (${totals.totalCourses} courses)`,
+      allocatedSections: `${totals.totalAllocated} sections`,
+      notAllocatedSections: `${totals.totalNotAllocated} sections`
+    };
+
+    const academicYearStr = filters.academicYear ? filters.academicYear.replace(/[^a-zA-Z0-9_-]/g, '_') : 'All';
+    const semesterStr = filters.semesterType ? filters.semesterType.toUpperCase() : 'All';
+    const fileName = `Course_Loads_${academicYearStr}_${semesterStr}`;
+    const title = `Course Loads - Academic Year: ${filters.academicYear || 'All'} - Semester: ${filters.semesterType || 'All'}`;
+
+    const config = {
+      fileName,
+      sheetName: 'Course Loads',
+      title,
+      columns: getExportColumns(),
+      rows: [...flatCourses, totalRow]
+    };
+
+    if (type === 'excel') exportAsExcel(config);
+    else if (type === 'csv') exportAsCSV(config);
+    else if (type === 'pdf') exportAsPDF(config);
+  };
+
   return (
     <div className="course-loads-page">
       <div className="clp-header-sticky">
-        <div className="clp-topbar">
-          <button className="clp-back-btn" onClick={() => {
-            try { sessionStorage.setItem('wlm_dash_mode', 'admin'); } catch {}
-            navigate('/dashboard');
-          }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            Back to Dashboard
-          </button>
-          <h1>Course Loads</h1>
+        <div className="clp-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <button className="clp-back-btn" onClick={() => {
+              try { sessionStorage.setItem('wlm_dash_mode', 'admin'); } catch {}
+              navigate('/dashboard');
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              Back to Dashboard
+            </button>
+            <h1>Course Loads</h1>
+            <span className="wl-count-badge" style={{ marginLeft: '12px' }}>
+              {flatCourses.length} courses
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="wl-btn wl-btn-export"
+              onClick={() => handleExport('excel')}
+              disabled={flatCourses.length === 0}
+              title="Export Course Loads to Excel"
+              style={{ padding: '8px 14px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: flatCourses.length === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              ⬇ Export Excel
+            </button>
+            <button
+              type="button"
+              className="wl-btn"
+              onClick={() => handleExport('csv')}
+              disabled={flatCourses.length === 0}
+              title="Export Course Loads to CSV"
+              style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 600, background: '#fff', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: flatCourses.length === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              CSV
+            </button>
+          </div>
         </div>
 
         <div className="clp-filters">
@@ -385,6 +525,33 @@ const CourseLoadsPage = () => {
               </button>
             </div>
           </div>
+
+          {/* Export buttons */}
+          <div className="clp-filter-group" style={{ justifyContent: 'flex-end' }}>
+            <label>Export</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="wl-btn wl-btn-export"
+                onClick={() => handleExport('excel')}
+                disabled={flatCourses.length === 0}
+                title="Export Course Loads to Excel"
+                style={{ padding: '8px 14px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: flatCourses.length === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                ⬇ Export Excel
+              </button>
+              <button
+                type="button"
+                className="wl-btn"
+                onClick={() => handleExport('csv')}
+                disabled={flatCourses.length === 0}
+                title="Export Course Loads to CSV"
+                style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 600, background: '#fff', color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: flatCourses.length === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                CSV
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -400,7 +567,7 @@ const CourseLoadsPage = () => {
             <div className="clp-summary-header" style={{ marginBottom: '14px', padding: '12px 16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <strong>Completeness Summary: </strong>
-                {data.length} Program(s) | {data.reduce((acc, p) => acc + p.years.length, 0)} Year(s) | {data.reduce((acc, p) => acc + p.years.reduce((yAcc, y) => yAcc + y.courses.length, 0), 0)} Total Course(s)
+                {data.length} Program(s) | {data.reduce((acc, p) => acc + p.years.length, 0)} Year(s) | {flatCourses.length} Total Course(s) | {totals.totalAllocated} Allocated Section(s) | {totals.totalNotAllocated} Pending Section(s)
               </div>
               <span style={{ fontSize: '12px', color: '#64748b' }}>💡 Tip: Click and drag table with mouse in any direction, or use mouse wheel with Shift</span>
             </div>
@@ -439,15 +606,7 @@ const CourseLoadsPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.flatMap(progGroup => 
-                    progGroup.years.flatMap(yearGroup => 
-                      yearGroup.courses.map(course => ({
-                        program: progGroup.program,
-                        year: yearGroup.year,
-                        ...course
-                      }))
-                    )
-                  ).map((row, i) => (
+                  {flatCourses.map((row, i) => (
                     <tr key={i} className={i % 2 === 0 ? 'wl-tr-even' : 'wl-tr-odd'}>
                       <td><span className="wl-badge-prog">{row.program}</span></td>
                       <td style={{ textAlign: 'center', fontWeight: 600, color: '#475569' }}>{i + 1}</td>
@@ -490,6 +649,34 @@ const CourseLoadsPage = () => {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 9, background: '#f8fafc', borderTop: '2px solid #cbd5e1' }}>
+                  <tr style={{ fontWeight: 'bold', background: '#f8fafc', color: '#0f172a' }}>
+                    <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 800 }}>
+                      TOTAL ({flatCourses.length} courses)
+                    </td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span className="clp-sec-count" style={{ fontSize: '13px', fontWeight: 800, color: '#166534', background: '#dcfce7', padding: '4px 10px', borderRadius: '6px', border: '1px solid #86efac' }}>
+                        {totals.totalAllocated} Allocated
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      {totals.totalNotAllocated > 0 ? (
+                        <span className="clp-sec-count" style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b', background: '#fee2e2', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fca5a5' }}>
+                          {totals.totalNotAllocated} Not Allocated
+                        </span>
+                      ) : (
+                        <span className="clp-all-allocated-badge" style={{ fontSize: '13px', fontWeight: 800 }}>
+                          All Allocated ✓
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
