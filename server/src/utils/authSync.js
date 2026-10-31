@@ -54,7 +54,7 @@ const syncAuthAndRBAC = async () => {
       await Designation.findOneAndUpdate(
         { name },
         { 
-          $setOnInsert: { name, order: i, category },
+          $setOnInsert: { name, order: i },
           $set: { category }
         },
         { upsert: true }
@@ -93,7 +93,7 @@ const syncAuthAndRBAC = async () => {
         department: 'CSE',
         mobile: '0000000000',
         email: 'admin@wlm.local',
-        capacity: require('./designationUtils').getDefaultCapacity(user.role),
+        capacity: require('./designationUtils').getDefaultCapacity(adminUser ? adminUser.role : 'Admin'),
       });
       logger.info(`Initialized default admin faculty record: ${adminId}`);
     }
