@@ -108,6 +108,17 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
         if (missingOfferings.length > 0) {
           await CourseOffering.insertMany(missingOfferings);
         }
+
+        // Auto-cancel offerings for deleted courses or courses no longer in this period
+        const activeCourseIdsSet = new Set(activeCourses.map(c => c._id.toString()));
+        await CourseOffering.updateMany(
+          {
+            academicYearSemesterId: semId,
+            courseId: { $nin: Array.from(activeCourseIdsSet) },
+            status: { $ne: 'Cancelled' }
+          },
+          { $set: { status: 'Cancelled' } }
+        );
       } catch (syncErr) {
         console.warn('Course offering sync error:', syncErr.message);
       }
@@ -119,13 +130,22 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
       status: { $ne: 'Cancelled' }
     }).populate('courseId').lean();
 
-    // Filter out offerings where the course was deleted or hard-deleted
-    offerings = offerings.filter(o => o.courseId && o.courseId.isDeleted !== true);
+    // Filter out offerings where the course was deleted, archived, or does not match period
+    offerings = offerings.filter(o => {
+      if (!o.courseId) return false;
+      if (o.courseId.isDeleted === true) return false;
+      if (o.courseId.status === 'Archived' || o.courseId.status === 'Inactive') return false;
+      if (academicYearName && o.courseId.academicYear && o.courseId.academicYear !== academicYearName) return false;
+      if (semType && o.courseId.semester && o.courseId.semester.toUpperCase() !== semType.toUpperCase()) return false;
+      return true;
+    });
 
-    // Get all plans for this academic year + semester
+    // Get all plans strictly for active offerings in this academic year + semester
+    const activeOfferingIds = offerings.map(o => o._id);
     const plans = await CourseWorkloadPlan.find({
       academicYearId,
-      semesterType: semType
+      semesterType: semType,
+      courseOfferingId: { $in: activeOfferingIds }
     }).lean();
 
     const planMap = {};

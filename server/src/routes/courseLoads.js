@@ -21,16 +21,26 @@ const router = express.Router();
  */
 router.get('/filters', requireAuth, async (req, res) => {
   try {
+    const { academicYear, semesterType } = req.query;
+
     // 1. Get Academic Years from DB
     const academicYearsDocs = await AcademicYear.find({ status: { $ne: 'ARCHIVED' } }).sort({ name: -1 }).lean();
     const academicYears = academicYearsDocs.map(ay => ay.name);
     
-    // 2. Get Semester Types from DB
-    const semesterTypes = await AcademicYearSemester.distinct('semesterType');
+    // 2. Get Semester Types from DB (scoped to academicYear if passed)
+    let semQuery = {};
+    if (academicYear) {
+      const selectedAy = academicYearsDocs.find(ay => ay.name === academicYear);
+      if (selectedAy) semQuery.academicYearId = selectedAy._id;
+    }
+    const semesterTypes = await AcademicYearSemester.distinct('semesterType', semQuery);
     
-    // 3. Get Programs and Years per program
-    // A. Distinct programs from Course collection
-    const distinctCoursePrograms = await Course.distinct('program', { isDeleted: { $ne: true } });
+    // 3. Get Programs and Years per program (scoped to active non-deleted courses)
+    const courseFilter = { isDeleted: { $ne: true } };
+    if (academicYear) courseFilter.academicYear = academicYear;
+    if (semesterType) courseFilter.semester = new RegExp('^' + escapeRegex(semesterType) + '$', 'i');
+
+    const distinctCoursePrograms = await Course.distinct('program', courseFilter);
     
     // B. Configured programs & years from SystemConfig
     let configPrograms = [];
@@ -53,7 +63,7 @@ router.get('/filters', requireAuth, async (req, res) => {
     const programs = Array.from(allProgramsSet).sort();
 
     // Query courses to collect actual years used per program
-    const courses = await Course.find({ isDeleted: { $ne: true } }).select('program year').lean();
+    const courses = await Course.find(courseFilter).select('program year').lean();
     const yearsPerProgramMap = {};
 
     for (const p of programs) {
@@ -197,6 +207,17 @@ router.get('/', requireAuth, async (req, res) => {
       if (missingOfferings.length > 0) {
         await CourseOffering.insertMany(missingOfferings);
       }
+
+      // Auto-cancel offerings for deleted courses or courses no longer in this period
+      const activeCourseIdsSet = new Set(activeCourses.map(c => c._id.toString()));
+      await CourseOffering.updateMany(
+        {
+          academicYearSemesterId: semDoc._id,
+          courseId: { $nin: Array.from(activeCourseIdsSet) },
+          status: { $ne: 'Cancelled' }
+        },
+        { $set: { status: 'Cancelled' } }
+      );
     } catch (syncErr) {
       console.warn('Course offering sync error in courseLoads:', syncErr.message);
     }
@@ -213,7 +234,13 @@ router.get('/', requireAuth, async (req, res) => {
         }
       },
       { $unwind: '$course' },
-      { $match: { 'course.isDeleted': { $ne: true } } }
+      {
+        $match: {
+          'course.isDeleted': { $ne: true },
+          'course.academicYear': academicYear,
+          'course.semester': new RegExp('^' + escapeRegex(semesterType) + '$', 'i')
+        }
+      }
     ];
 
     if (program) {
@@ -256,6 +283,53 @@ router.get('/', requireAuth, async (req, res) => {
                   { $eq: ['$academicYear', academicYear] },
                   { $eq: ['$semester', semesterType] },
                   { $ne: ['$isDeleted', true] },
+                  {
+                    $or: [
+                      { $ne: [{ $ifNull: ['$lectureSlot.empId', ''] }, ''] },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: { $ifNull: ['$lectureSlots', []] },
+                                as: 's',
+                                cond: { $ne: [{ $ifNull: ['$$s.empId', ''] }, ''] }
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: { $ifNull: ['$tutorialSlots', []] },
+                                as: 's',
+                                cond: { $ne: [{ $ifNull: ['$$s.empId', ''] }, ''] }
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: { $ifNull: ['$practicalSlots', []] },
+                                as: 's',
+                                cond: { $ne: [{ $ifNull: ['$$s.empId', ''] }, ''] }
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
                   {
                     $or: [
                       { $eq: ['$course', '$$courseObjId'] },

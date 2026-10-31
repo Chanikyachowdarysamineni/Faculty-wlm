@@ -52,7 +52,10 @@ const CourseWiseWorkloadPage = () => {
           })
           .catch(() => {});
 
-        fetch(`${API}/deva/course-loads/filters`, { headers })
+        const fParams = new URLSearchParams();
+        if (selectedAcademicYear) fParams.append('academicYear', selectedAcademicYear);
+        if (selectedSemester) fParams.append('semesterType', selectedSemester);
+        fetch(`${API}/deva/course-loads/filters?${fParams.toString()}`, { headers })
           .then(r => r.json())
           .then(json => {
             if (json.success && json.data) {
@@ -82,7 +85,7 @@ const CourseWiseWorkloadPage = () => {
       }
     };
     fetchConfigAndFilters();
-  }, []);
+  }, [selectedAcademicYear, selectedSemester]);
 
   // Editable state
   const [editMap, setEditMap] = useState({});
@@ -367,12 +370,12 @@ const CourseWiseWorkloadPage = () => {
 
   // Export Columns definition
   const getExportColumns = () => [
-    { header: 'Program', value: r => r.program },
+    { header: 'Program', value: r => r.__isTotal ? `TOTAL (${displayData.length} courses)` : r.program },
     { header: 'Sl. No.', value: (r, i) => r.__isTotal ? '' : i + 1 },
     { header: 'Year', value: r => r.__isTotal ? '' : `${toRoman(r.year)} Year` },
     { header: 'Sem', value: r => r.__isTotal ? '' : r.semester },
-    { header: 'Course Name', value: r => r.__isTotal ? (r.subjectName || 'TOTAL') : r.subjectName },
-    { header: 'Short Form in the Time-Table', value: r => r.__isTotal ? (r.shortName || 'TOTAL') : r.shortName },
+    { header: 'Course Name', value: r => r.__isTotal ? `TOTAL (${displayData.length} courses)` : r.subjectName },
+    { header: 'Short Form in the Time-Table', value: r => r.__isTotal ? '' : r.shortName },
     { header: 'Subject Code', value: r => r.__isTotal ? '' : r.subjectCode },
     { header: 'Course Type', value: r => r.__isTotal ? '' : r.courseType },
     { header: 'L', value: r => r.L },
@@ -412,13 +415,15 @@ const CourseWiseWorkloadPage = () => {
     const totalRow = {
       __isTotal: true,
       program: `TOTAL (${displayData.length} courses)`,
+      subjectName: `TOTAL (${displayData.length} courses)`,
+      shortName: '',
       L: sumL,
       T: sumT,
       P: sumP,
       C: sumC,
-      tpBatches: sumTpBatches || '',
-      noOfSections: sumNoOfSections || '',
-      studentStrength: sumStudentStrength || '',
+      tpBatches: sumTpBatches,
+      noOfSections: sumNoOfSections,
+      studentStrength: sumStudentStrength,
       totalL: sumTotalL,
       totalT: sumTotalT,
       totalP: sumTotalP,

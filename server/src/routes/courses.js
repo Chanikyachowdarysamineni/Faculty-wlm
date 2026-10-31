@@ -431,10 +431,17 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
 
     // Cancel CourseOfferings for this course
     await CourseOffering.updateMany(
-      { $or: [{ courseId }, { course: doc._id }], status: { $ne: 'Cancelled' } },
+      { courseId: doc._id, status: { $ne: 'Cancelled' } },
       { $set: { status: 'Cancelled', updatedAt: new Date() } },
       { session }
     );
+    try {
+      const CourseWorkloadPlan = mongoose.model('CourseWorkloadPlan');
+      const offDocs = await CourseOffering.find({ courseId: doc._id }).session(session).lean();
+      if (offDocs.length > 0) {
+        await CourseWorkloadPlan.deleteMany({ courseOfferingId: { $in: offDocs.map(o => o._id) } }).session(session);
+      }
+    } catch (_) {}
 
     // Recalculate capacity for affected faculty members
     const affectedFacultyIds = [...new Set(affectedWorkloads.map(w => w.empId).filter(Boolean))];
@@ -496,7 +503,7 @@ router.post('/:id/restore', requireAuth, requireAdmin, async (req, res, next) =>
       { session }
     );
     await CourseOffering.updateMany(
-      { $or: [{ courseId }, { course: doc._id }], status: 'Cancelled' },
+      { courseId: doc._id, status: 'Cancelled' },
       { $set: { status: 'Active', updatedAt: new Date() } },
       { session }
     );

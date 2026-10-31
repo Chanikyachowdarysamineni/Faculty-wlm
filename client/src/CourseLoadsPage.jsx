@@ -114,7 +114,10 @@ const CourseLoadsPage = () => {
       try {
         const token = localStorage.getItem('wlm_token');
         const headers = { 'Authorization': `Bearer ${token}` };
-        const res = await fetchJsonWithRetry(`${API}/deva/course-loads/filters`, { headers });
+        const queryParams = new URLSearchParams();
+        if (selectedAcademicYear) queryParams.append('academicYear', selectedAcademicYear);
+        if (selectedSemester) queryParams.append('semesterType', selectedSemester);
+        const res = await fetchJsonWithRetry(`${API}/deva/course-loads/filters?${queryParams.toString()}`, { headers });
         if (res && res.success) {
           const payload = res.data.data || res.data; // Handle double-wrapping if present
           const progs = Array.from(new Set(payload.programs || [])).sort();
