@@ -13,6 +13,7 @@
 
 const express     = require('express');
 const { body, validationResult } = require('express-validator');
+const { mongoose } = require('../db');
 const Submission  = require('../models/Submission');
 const Course      = require('../models/Course');
 const Faculty     = require('../models/Faculty');
@@ -29,6 +30,8 @@ const { exportSubmissions } = require('../utils/exportUtils');
 const wsHandler = require('../websocket');
 
 const router = express.Router();
+
+const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const toClient = (doc) => ({
   id:          doc._id?.toString() || '',
@@ -512,6 +515,290 @@ router.get('/export', requireAuth, requireAdmin, requireAcademicPeriod, async (r
     return res.send(exportResult.content);
   } catch (err) {
     logger.error('Error exporting submissions', { error: err.message, userId: req.user?.id });
+    next(err);
+  }
+});
+
+// GET /api/submissions/preference-analysis (admin) — Dynamic preference analysis by course and preference level
+router.get('/preference-analysis', requireAuth, requireAdmin, requireAcademicPeriod, async (req, res, next) => {
+  try {
+    const academicYear = String(req.academicPeriod?.academicYear?.name || req.query.academicYear || '').trim();
+    const semester = String(req.academicPeriod?.academicYearSemester?.semesterType || req.query.semester || 'ODD').toUpperCase().trim();
+    const { courseId, preferenceLevel, program, search } = req.query;
+
+    if (!academicYear) {
+      return sendError(res, 'Academic year is required.', 400);
+    }
+
+    // 1. Fetch active courses for this academic period
+    const courseQuery = {
+      academicYear,
+      semester: new RegExp('^' + escapeRegex(semester) + '$', 'i'),
+      isDeleted: { $ne: true }
+    };
+    if (program && program !== 'All' && program !== 'all') {
+      courseQuery.program = new RegExp('^' + escapeRegex(program) + '$', 'i');
+    }
+
+    const activeCourses = await Course.find(courseQuery)
+      .select('courseId subjectCode subjectName shortName program year courseType L T P C')
+      .sort({ program: 1, year: 1, subjectCode: 1 })
+      .lean();
+
+    const activeCourseIds = activeCourses.map(c => c.courseId);
+    const courseMap = new Map();
+    activeCourses.forEach(c => courseMap.set(c.courseId, c));
+
+    // 2. Aggregate preferences directly from database submissions for this period
+    const matchFilter = {
+      academicYear,
+      semester: new RegExp('^' + escapeRegex(semester) + '$', 'i')
+    };
+
+    const pipeline = [
+      { $match: matchFilter },
+      {
+        $project: {
+          empId: 1,
+          empName: 1,
+          designation: 1,
+          mobile: 1,
+          createdAt: 1,
+          prefs: { $slice: [{ $ifNull: ['$prefs', []] }, 5] }
+        }
+      },
+      {
+        $unwind: {
+          path: '$prefs',
+          includeArrayIndex: 'prefIndex'
+        }
+      },
+      {
+        $match: {
+          prefs: { $in: activeCourseIds },
+          prefIndex: { $in: [0, 1, 2, 3, 4] }
+        }
+      },
+      {
+        $project: {
+          empId: 1,
+          empName: 1,
+          designation: 1,
+          mobile: 1,
+          courseId: '$prefs',
+          preferenceLevel: { $add: ['$prefIndex', 1] },
+          submittedAt: '$createdAt'
+        }
+      },
+      // Prevent duplicate faculty counting for the same course and preference level
+      {
+        $group: {
+          _id: {
+            empId: '$empId',
+            courseId: '$courseId',
+            preferenceLevel: '$preferenceLevel'
+          },
+          empName: { $first: '$empName' },
+          designation: { $first: '$designation' },
+          mobile: { $first: '$mobile' },
+          submittedAt: { $first: '$submittedAt' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          empId: '$_id.empId',
+          courseId: '$_id.courseId',
+          preferenceLevel: '$_id.preferenceLevel',
+          empName: 1,
+          designation: 1,
+          mobile: 1,
+          submittedAt: 1
+        }
+      }
+    ];
+
+    const preferenceRecords = await Submission.aggregate(pipeline);
+
+    // 3. Compute preference counts for each course and overall
+    const courseCounts = new Map();
+    activeCourses.forEach(c => {
+      courseCounts.set(c.courseId, {
+        pref1: 0,
+        pref2: 0,
+        pref3: 0,
+        pref4: 0,
+        pref5: 0,
+        total: 0
+      });
+    });
+
+    const overallCounts = {
+      pref1: 0,
+      pref2: 0,
+      pref3: 0,
+      pref4: 0,
+      pref5: 0,
+      total: 0
+    };
+
+    preferenceRecords.forEach(rec => {
+      const pKey = 'pref' + rec.preferenceLevel;
+      if (courseCounts.has(rec.courseId)) {
+        const counts = courseCounts.get(rec.courseId);
+        counts[pKey]++;
+        counts.total++;
+      }
+      overallCounts[pKey]++;
+      overallCounts.total++;
+    });
+
+    const coursesWithCounts = activeCourses.map(c => ({
+      ...c,
+      counts: courseCounts.get(c.courseId) || { pref1: 0, pref2: 0, pref3: 0, pref4: 0, pref5: 0, total: 0 }
+    }));
+
+    // 4. Enrich faculty details with department and email from Faculty collection
+    const empIds = [...new Set(preferenceRecords.map(r => r.empId))];
+    const facultyDocs = await Faculty.find({ empId: { $in: empIds } })
+      .select('empId email department designation')
+      .lean();
+    const facultyMap = new Map();
+    facultyDocs.forEach(f => facultyMap.set(f.empId, f));
+
+    // 5. Build full matching faculty array
+    let matchingFaculty = preferenceRecords.map(rec => {
+      const course = courseMap.get(rec.courseId) || {};
+      const faculty = facultyMap.get(rec.empId) || {};
+      return {
+        empId: rec.empId,
+        empName: rec.empName || faculty.name || 'Unknown',
+        designation: rec.designation || faculty.designation || 'N/A',
+        department: faculty.department || 'CSE',
+        email: faculty.email || '',
+        mobile: rec.mobile || '',
+        courseId: rec.courseId,
+        subjectCode: course.subjectCode || '',
+        subjectName: course.subjectName || '',
+        shortName: course.shortName || '',
+        program: course.program || '',
+        year: course.year || '',
+        preferenceLevel: rec.preferenceLevel,
+        submittedAt: rec.submittedAt ? new Date(rec.submittedAt).toISOString() : null
+      };
+    });
+
+    // 6. Filter by courseId if specified
+    const targetCourseId = courseId && courseId !== 'all' ? Number(courseId) : null;
+    if (targetCourseId) {
+      matchingFaculty = matchingFaculty.filter(f => f.courseId === targetCourseId);
+    }
+
+    // 7. Filter by preferenceLevel if specified (1..5)
+    const targetPrefLevel = preferenceLevel && preferenceLevel !== 'all' ? Number(preferenceLevel) : null;
+    if (targetPrefLevel && [1, 2, 3, 4, 5].includes(targetPrefLevel)) {
+      matchingFaculty = matchingFaculty.filter(f => f.preferenceLevel === targetPrefLevel);
+    }
+
+    // 8. Filter by search query if specified
+    if (search && String(search).trim()) {
+      const q = String(search).trim().toLowerCase();
+      matchingFaculty = matchingFaculty.filter(f =>
+        f.empId.toLowerCase().includes(q) ||
+        f.empName.toLowerCase().includes(q) ||
+        f.designation.toLowerCase().includes(q) ||
+        f.subjectCode.toLowerCase().includes(q) ||
+        f.subjectName.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort by preferenceLevel ascending, then empName ascending
+    matchingFaculty.sort((a, b) => {
+      if (a.preferenceLevel !== b.preferenceLevel) return a.preferenceLevel - b.preferenceLevel;
+      return a.empName.localeCompare(b.empName);
+    });
+
+    const selectedCourse = targetCourseId ? courseMap.get(targetCourseId) || null : null;
+    const selectedCounts = targetCourseId
+      ? (courseCounts.get(targetCourseId) || { pref1: 0, pref2: 0, pref3: 0, pref4: 0, pref5: 0, total: 0 })
+      : overallCounts;
+
+    // Check if export requested
+    if (req.query.format === 'csv' || req.query.format === 'excel') {
+      const format = req.query.format.toLowerCase();
+      const ExcelJS = require('exceljs');
+      const filename = 'preference_analysis_' + academicYear + '_' + semester + '_' + (targetCourseId ? 'course_' + targetCourseId + '_' : '') + (targetPrefLevel ? 'pref_' + targetPrefLevel + '_' : '') + (new Date().toISOString().split('T')[0]) + '.' + (format === 'excel' ? 'xlsx' : 'csv');
+
+      const exportCols = [
+        { header: 'Employee ID', key: 'empId' },
+        { header: 'Faculty Name', key: 'empName' },
+        { header: 'Designation', key: 'designation' },
+        { header: 'Department', key: 'department' },
+        { header: 'Course Code', key: 'subjectCode' },
+        { header: 'Course Name', key: 'subjectName' },
+        { header: 'Program', key: 'program' },
+        { header: 'Year', key: 'year' },
+        { header: 'Preference Level', value: r => 'Preference ' + r.preferenceLevel },
+        { header: 'Submitted At', value: r => r.submittedAt ? new Date(r.submittedAt).toLocaleString('en-IN') : 'N/A' },
+      ];
+
+      if (format === 'csv') {
+        const headers = exportCols.map(c => '"' + c.header + '"').join(',');
+        const rows = matchingFaculty.map(r => exportCols.map(c => '"' + String(typeof c.value === 'function' ? c.value(r) : r[c.key] || '').replace(/"/g, '""') + '"').join(','));
+        const csvContent = [headers, ...rows].join('\r\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+        return res.status(200).send(csvContent);
+      } else {
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Preference Analysis');
+        sheet.columns = exportCols.map(c => ({ header: c.header, key: c.key || c.header, width: 22 }));
+        matchingFaculty.forEach(r => {
+          const rowData = {};
+          exportCols.forEach(c => {
+            rowData[c.key || c.header] = typeof c.value === 'function' ? c.value(r) : (r[c.key] || '');
+          });
+          sheet.addRow(rowData);
+        });
+        sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        const buffer = await workbook.xlsx.writeBuffer();
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+        return res.status(200).send(buffer);
+      }
+    }
+
+    const totalSubmissionsInPeriod = await Submission.countDocuments(matchFilter);
+
+    logger.info('Preference analysis fetched', {
+      academicYear,
+      semester,
+      totalCourses: activeCourses.length,
+      matchingFacultyCount: matchingFaculty.length,
+      courseId: targetCourseId,
+      preferenceLevel: targetPrefLevel,
+      userId: req.user.id
+    });
+
+    return sendSuccess(res, {
+      academicYear,
+      semester,
+      totalSubmissions: totalSubmissionsInPeriod,
+      courses: coursesWithCounts,
+      summary: {
+        totalCourses: activeCourses.length,
+        totalFacultySubmitted: totalSubmissionsInPeriod,
+        totalPreferencesCounted: preferenceRecords.length,
+        selectedCourse,
+        counts: selectedCounts
+      },
+      matchingFacultyCount: matchingFaculty.length,
+      faculty: matchingFaculty
+    }, 200);
+
+  } catch (err) {
+    logger.error('Error in preference-analysis', { error: err.message, stack: err.stack, userId: req.user?.id });
     next(err);
   }
 });

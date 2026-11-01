@@ -59,6 +59,15 @@ const FacultyFormPage = ({
   const [showFacultyDropdown, setShowFacultyDropdown] = useState(false);
   const [submissionFilter, setSubmissionFilter] = useState('all'); // 'all' | 'submitted' | 'notsubmitted'
 
+  // ── Preference Analysis State ────────────────────
+  const [analysisCourseId, setAnalysisCourseId] = useState('all');
+  const [analysisPrefLevel, setAnalysisPrefLevel] = useState('all'); // 'all' | '1' | '2' | '3' | '4' | '5'
+  const [analysisSearch, setAnalysisSearch] = useState('');
+  const [analysisData, setAnalysisData] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [analysisExportLoading, setAnalysisExportLoading] = useState(false);
+
   // Sync shared context data to local state
   useEffect(() => {
     if (contextFaculty) {
@@ -362,6 +371,83 @@ const cancelEdit = () => {
     return data;
   }, [submissions, notSubmittedFaculty, search, submissionFilter]);
 
+  // ── Preference Analysis Handlers ─────────────────
+  const fetchPreferenceAnalysis = useCallback(async () => {
+    if (!selectedAcademicYear) return;
+    setAnalysisLoading(true);
+    setAnalysisError('');
+    try {
+      const params = new URLSearchParams();
+      params.append('academicYear', selectedAcademicYear);
+      params.append('semester', selectedSemester);
+      if (analysisCourseId && analysisCourseId !== 'all') params.append('courseId', analysisCourseId);
+      if (analysisPrefLevel && analysisPrefLevel !== 'all') params.append('preferenceLevel', analysisPrefLevel);
+      if (analysisSearch && analysisSearch.trim()) params.append('search', analysisSearch.trim());
+
+      const res = await fetch(`${API}/deva/submissions/preference-analysis?${params.toString()}`, {
+        headers: authHeaders()
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load preference analysis');
+      setAnalysisData(json.data);
+    } catch (err) {
+      console.error('[PreferenceAnalysis] Fetch error:', err);
+      setAnalysisError(err.message || 'Failed to load preference analysis.');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [selectedAcademicYear, selectedSemester, analysisCourseId, analysisPrefLevel, analysisSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'analysis') {
+      fetchPreferenceAnalysis();
+    }
+  }, [activeTab, fetchPreferenceAnalysis]);
+
+  const handleAnalysisExport = async (format) => {
+    setAnalysisExportLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('academicYear', selectedAcademicYear);
+      params.append('semester', selectedSemester);
+      if (analysisCourseId && analysisCourseId !== 'all') params.append('courseId', analysisCourseId);
+      if (analysisPrefLevel && analysisPrefLevel !== 'all') params.append('preferenceLevel', analysisPrefLevel);
+      if (analysisSearch && analysisSearch.trim()) params.append('search', analysisSearch.trim());
+      params.append('format', format);
+
+      const res = await fetch(`${API}/deva/submissions/preference-analysis?${params.toString()}`, {
+        method: 'GET',
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(`Export failed with status ${res.status}`);
+      }
+
+      const contentDisposition = res.headers.get('content-disposition');
+      let filename = `faculty_preference_analysis_${selectedAcademicYear}_${selectedSemester}_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast({ type: 'success', message: `Preference analysis exported as ${format.toUpperCase()} successfully.` });
+    } catch (err) {
+      console.error('[FacultyFormPage] Preference export error:', err);
+      showToast({ type: 'error', message: err.message || 'Export failed.' });
+    } finally {
+      setAnalysisExportLoading(false);
+    }
+  };
+
   // ── Export handlers ─────────────────────────────
   const handleExport = async (format) => {
     setExportLoading(true);
@@ -479,15 +565,23 @@ const cancelEdit = () => {
               Submit Preferences
             </button>
             {isAdmin && (
-              <button
-                className={`ff-tab${activeTab === 'submissions' ? ' ff-tab-active' : ''}`}
-                onClick={() => setActiveTab('submissions')}
-              >
-                All Submissions
-                {submissions.length > 0 && (
-                  <span className="ff-tab-badge">{submissions.length}</span>
-                )}
-              </button>
+              <>
+                <button
+                  className={`ff-tab${activeTab === 'submissions' ? ' ff-tab-active' : ''}`}
+                  onClick={() => setActiveTab('submissions')}
+                >
+                  All Submissions
+                  {submissions.length > 0 && (
+                    <span className="ff-tab-badge">{submissions.length}</span>
+                  )}
+                </button>
+                <button
+                  className={`ff-tab${activeTab === 'analysis' ? ' ff-tab-active' : ''}`}
+                  onClick={() => setActiveTab('analysis')}
+                >
+                  📊 Preference Analysis
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -909,6 +1003,13 @@ const cancelEdit = () => {
             >
               ⏳ Not Submitted ({notSubmittedFaculty.length})
             </button>
+            <button
+              className="ff-filter-btn ff-filter-btn-analysis"
+              onClick={() => setActiveTab('analysis')}
+              title="Analyse faculty course preference choices"
+            >
+              📊 Preference Analysis
+            </button>
           </div>
 
           {filteredSubs.length === 0 ? (
@@ -1056,6 +1157,312 @@ const cancelEdit = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════
+          TAB 3 — PREFERENCE ANALYSIS (Admin View)
+      ═══════════════════════════════════════════ */}
+      {activeTab === 'analysis' && (
+        <div className="ff-analysis-panel">
+          {/* Topbar */}
+          <div className="ff-analysis-topbar">
+            <div className="ff-analysis-topbar-left">
+              <h3 className="ff-analysis-title">📊 Faculty Course Preference Analysis</h3>
+              <span className="ff-analysis-period-pill">
+                {selectedAcademicYear} • {selectedSemester} Semester
+              </span>
+              <span className="ff-analysis-stat-pill">
+                {analysisData?.summary?.totalFacultySubmitted ?? 0} Submitted Faculty
+              </span>
+            </div>
+            <div className="ff-export-actions">
+              <button
+                className="ff-export-btn"
+                onClick={fetchPreferenceAnalysis}
+                disabled={analysisLoading}
+                title="Refresh Preference Analysis"
+              >
+                {analysisLoading ? '⏳ Refreshing…' : '🔄 Refresh'}
+              </button>
+              <button
+                className="ff-export-btn ff-export-csv"
+                onClick={() => handleAnalysisExport('csv')}
+                disabled={analysisExportLoading || !analysisData?.faculty?.length}
+                title="Export filtered preference analysis as CSV"
+              >
+                {analysisExportLoading ? '⏳' : '📊'} CSV
+              </button>
+              <button
+                className="ff-export-btn ff-export-excel"
+                onClick={() => handleAnalysisExport('excel')}
+                disabled={analysisExportLoading || !analysisData?.faculty?.length}
+                title="Export filtered preference analysis as Excel"
+              >
+                {analysisExportLoading ? '⏳' : '📈'} Excel
+              </button>
+            </div>
+          </div>
+
+          {analysisError && (
+            <div className="ff-banner ff-banner-error" style={{ marginBottom: '16px' }}>
+              <span>⚠️ {analysisError}</span>
+              <button className="ff-error-retry" onClick={fetchPreferenceAnalysis}>Retry</button>
+            </div>
+          )}
+
+          {/* Dynamic Filter Controls Card */}
+          <div className="ff-analysis-controls-card">
+            <div className="ff-analysis-filter-grid">
+              {/* 1. Courses Available */}
+              <div className="ff-analysis-filter-group">
+                <label className="ff-analysis-filter-label">
+                  <span className="ff-label-icon">📚</span>
+                  <strong>Courses Available</strong>
+                  <span className="ff-filter-sublabel">({analysisData?.courses?.length || 0} active in period)</span>
+                </label>
+                <select
+                  className="ff-analysis-select"
+                  value={analysisCourseId}
+                  onChange={(e) => setAnalysisCourseId(e.target.value)}
+                >
+                  <option value="all">-- All Available Courses ({analysisData?.courses?.length || 0}) --</option>
+                  {(analysisData?.courses || []).map((c) => (
+                    <option key={c.courseId} value={c.courseId}>
+                      {c.subjectCode} — {c.subjectName} ({c.program || 'B.Tech'}{c.year ? ` • Year ${toRoman(c.year)}` : ''}) — [{c.counts?.total || 0} faculty]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Preference Level Selection */}
+              <div className="ff-analysis-filter-group">
+                <label className="ff-analysis-filter-label">
+                  <span className="ff-label-icon">🎯</span>
+                  <strong>Preference Level</strong>
+                  <span className="ff-filter-sublabel">(Preference 1 to 5)</span>
+                </label>
+                <div className="ff-pref-btn-group">
+                  <button
+                    className={`ff-pref-btn${analysisPrefLevel === 'all' ? ' ff-pref-btn-active' : ''}`}
+                    onClick={() => setAnalysisPrefLevel('all')}
+                  >
+                    All Prefs ({analysisData?.summary?.counts?.total ?? 0})
+                  </button>
+                  {[1, 2, 3, 4, 5].map((lvl) => {
+                    const count = analysisData?.summary?.counts?.[`pref${lvl}`] ?? 0;
+                    return (
+                      <button
+                        key={lvl}
+                        className={`ff-pref-btn ff-pref-btn-p${lvl}${analysisPrefLevel === String(lvl) ? ' ff-pref-btn-active' : ''}`}
+                        onClick={() => setAnalysisPrefLevel(String(lvl))}
+                      >
+                        Pref {lvl} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. Search Bar */}
+              <div className="ff-analysis-filter-group ff-analysis-search-group">
+                <label className="ff-analysis-filter-label">
+                  <span className="ff-label-icon">🔍</span>
+                  <strong>Search Faculty / Course</strong>
+                </label>
+                <div className="ff-search-wrap" style={{ maxWidth: '100%' }}>
+                  <svg className="ff-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input
+                    className="ff-search"
+                    placeholder="Search by ID, faculty name, designation, code…"
+                    value={analysisSearch}
+                    onChange={(e) => setAnalysisSearch(e.target.value)}
+                  />
+                  {analysisSearch && <button className="ff-search-clear" onClick={() => setAnalysisSearch('')}>✕</button>}
+                </div>
+              </div>
+            </div>
+
+            {/* Active filters bar */}
+            {(analysisCourseId !== 'all' || analysisPrefLevel !== 'all' || analysisSearch.trim()) && (
+              <div className="ff-analysis-active-filters-row">
+                <span className="ff-active-filters-title">Active Filters:</span>
+                {analysisCourseId !== 'all' && (
+                  <span className="ff-active-filter-tag">
+                    Course: {analysisData?.summary?.selectedCourse?.subjectCode || analysisCourseId}
+                    <button onClick={() => setAnalysisCourseId('all')}>✕</button>
+                  </span>
+                )}
+                {analysisPrefLevel !== 'all' && (
+                  <span className="ff-active-filter-tag">
+                    Preference {analysisPrefLevel}
+                    <button onClick={() => setAnalysisPrefLevel('all')}>✕</button>
+                  </span>
+                )}
+                {analysisSearch.trim() && (
+                  <span className="ff-active-filter-tag">
+                    Search: "{analysisSearch.trim()}"
+                    <button onClick={() => setAnalysisSearch('')}>✕</button>
+                  </span>
+                )}
+                <button
+                  className="ff-clear-all-btn"
+                  onClick={() => {
+                    setAnalysisCourseId('all');
+                    setAnalysisPrefLevel('all');
+                    setAnalysisSearch('');
+                  }}
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Interactive Preference Breakdown Metric Cards */}
+          <div className="ff-pref-cards-grid">
+            {[1, 2, 3, 4, 5].map((lvl) => {
+              const count = analysisData?.summary?.counts?.[`pref${lvl}`] ?? 0;
+              const isSelected = analysisPrefLevel === String(lvl);
+              const suffixes = ['1st Choice', '2nd Choice', '3rd Choice', '4th Choice', '5th Choice'];
+              return (
+                <div
+                  key={lvl}
+                  className={`ff-pref-card ff-pref-card-p${lvl}${isSelected ? ' ff-pref-card-active' : ''}`}
+                  onClick={() => setAnalysisPrefLevel(isSelected ? 'all' : String(lvl))}
+                  title={`Click to filter faculty by Preference ${lvl}`}
+                >
+                  <div className="ff-pref-card-badge">Preference {lvl}</div>
+                  <div className="ff-pref-card-val">{count}</div>
+                  <div className="ff-pref-card-lbl">Faculty Members</div>
+                  <div className="ff-pref-card-sub">
+                    {analysisCourseId !== 'all'
+                      ? `Selected as ${suffixes[lvl - 1]}`
+                      : `Priority ${lvl} across courses`}
+                  </div>
+                </div>
+              );
+            })}
+            <div
+              className={`ff-pref-card ff-pref-card-total${analysisPrefLevel === 'all' ? ' ff-pref-card-active' : ''}`}
+              onClick={() => setAnalysisPrefLevel('all')}
+              title="Click to view all preferences"
+            >
+              <div className="ff-pref-card-badge">Total Selections</div>
+              <div className="ff-pref-card-val">{analysisData?.summary?.counts?.total ?? 0}</div>
+              <div className="ff-pref-card-lbl">Total Preferences</div>
+              <div className="ff-pref-card-sub">
+                {analysisCourseId !== 'all'
+                  ? 'All preferences for selected course'
+                  : 'Across all courses & levels'}
+              </div>
+            </div>
+          </div>
+
+          {/* Matching Faculty Table */}
+          <div className="ff-analysis-table-section">
+            <div className="ff-analysis-table-header">
+              <div className="ff-table-header-left">
+                <h4 className="ff-table-header-title">
+                  Matching Faculty Members ({analysisData?.faculty?.length || 0})
+                </h4>
+                <p className="ff-table-header-subtitle">
+                  {analysisCourseId !== 'all' && analysisData?.summary?.selectedCourse
+                    ? `Showing faculty who selected [${analysisData.summary.selectedCourse.subjectCode}] ${analysisData.summary.selectedCourse.subjectName}`
+                    : 'Showing faculty who submitted course preferences'}
+                  {analysisPrefLevel !== 'all' ? ` as Preference ${analysisPrefLevel}` : ' across all preference levels'}
+                  .
+                </p>
+              </div>
+            </div>
+
+            {analysisLoading ? (
+              <div className="ff-empty-state" style={{ padding: '60px 20px' }}>
+                <div className="ff-empty-icon">⏳</div>
+                <div className="ff-empty-title">Loading preference analysis…</div>
+                <div className="ff-empty-sub">Fetching real-time preference records from database.</div>
+              </div>
+            ) : (!analysisData?.faculty || analysisData.faculty.length === 0) ? (
+              <div className="ff-empty-state">
+                <div className="ff-empty-icon">📋</div>
+                <div className="ff-empty-title">No matching faculty preferences found</div>
+                <div className="ff-empty-sub">
+                  {analysisCourseId !== 'all' && analysisPrefLevel !== 'all'
+                    ? `No faculty member selected this course as Preference ${analysisPrefLevel}. Try selecting another preference level or 'All Prefs'.`
+                    : 'No faculty preference records match the current filter criteria.'}
+                </div>
+                {(analysisCourseId !== 'all' || analysisPrefLevel !== 'all' || analysisSearch.trim()) && (
+                  <button
+                    className="ff-empty-action-btn"
+                    onClick={() => {
+                      setAnalysisCourseId('all');
+                      setAnalysisPrefLevel('all');
+                      setAnalysisSearch('');
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="ff-table-wrap">
+                <table className="ff-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '45px', textAlign: 'center' }}>#</th>
+                      <th style={{ width: '110px' }}>Employee ID</th>
+                      <th>Faculty Name</th>
+                      <th>Designation</th>
+                      <th>Department</th>
+                      <th>Selected Course</th>
+                      <th style={{ textAlign: 'center', width: '135px' }}>Preference Level</th>
+                      <th style={{ width: '160px' }}>Submitted At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysisData.faculty.map((f, i) => (
+                      <tr key={`${f.empId}_${f.courseId}_${f.preferenceLevel}`} className={i % 2 === 0 ? 'ff-tr-even' : 'ff-tr-odd'}>
+                        <td className="ff-td-sl">{i + 1}</td>
+                        <td className="ff-td-empid">{f.empId}</td>
+                        <td className="ff-td-name" style={{ fontWeight: 600 }}>{f.empName}</td>
+                        <td className="ff-td-desig">{f.designation}</td>
+                        <td>
+                          <span className="ff-dept-pill">{f.department || 'CSE'}</span>
+                        </td>
+                        <td>
+                          <div className="ff-course-cell">
+                            <span className="ff-chip ff-chip-code">{f.subjectCode}</span>
+                            <span className="ff-course-name-text">{f.subjectName}</span>
+                            {f.program && (
+                              <span className="ff-prog-subtag">{f.program}{f.year ? ` • Yr ${toRoman(f.year)}` : ''}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="ff-td-pref">
+                          <span className={`ff-pref-level-pill ff-pref-pill-${f.preferenceLevel}`}>
+                            ⭐ Preference {f.preferenceLevel}
+                          </span>
+                        </td>
+                        <td className="ff-td-time">
+                          {f.submittedAt ? new Date(f.submittedAt).toLocaleString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
