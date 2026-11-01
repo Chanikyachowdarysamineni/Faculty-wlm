@@ -374,7 +374,7 @@ const CourseWiseWorkloadPage = () => {
     { header: 'Sl. No.', value: (r, i) => r.__isTotal ? '' : i + 1 },
     { header: 'Year', value: r => r.__isTotal ? '' : `${toRoman(r.year)} Year` },
     { header: 'Sem', value: r => r.__isTotal ? '' : r.semester },
-    { header: 'Course Name', value: r => r.__isTotal ? `TOTAL (${displayData.length} courses)` : r.subjectName },
+    { header: 'Course Name', value: r => r.__isTotal ? '' : r.subjectName },
     { header: 'Short Form in the Time-Table', value: r => r.__isTotal ? '' : r.shortName },
     { header: 'Subject Code', value: r => r.__isTotal ? '' : r.subjectCode },
     { header: 'Course Type', value: r => r.__isTotal ? '' : r.courseType },
@@ -415,7 +415,7 @@ const CourseWiseWorkloadPage = () => {
     const totalRow = {
       __isTotal: true,
       program: `TOTAL (${displayData.length} courses)`,
-      subjectName: `TOTAL (${displayData.length} courses)`,
+      subjectName: '',
       shortName: '',
       L: sumL,
       T: sumT,

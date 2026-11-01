@@ -7,6 +7,12 @@ import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
 import './FacultyFormPage.css';
 import { useToast } from './Toast';
 
+const toRoman = (val) => {
+  if (!val) return '';
+  const map = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', 'I': 'I', 'II': 'II', 'III': 'III', 'IV': 'IV' };
+  return map[String(val).trim()] || String(val);
+};
+
 const FacultyFormPage = ({
   formEnabled, setFormEnabled,
   editEnabled, setEditEnabled,
