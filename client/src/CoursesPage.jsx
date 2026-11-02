@@ -75,14 +75,14 @@ const CoursesPage = ({ isAdmin = true }) => {
   const COURSE_TYPES = Array.from(new Set([...(activeCourseTypes.length > 0 ? activeCourseTypes : DEFAULT_COURSE_TYPES), ...distinctCourseTypes])).filter(Boolean);
 
   const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
-  const configPrograms = (systemConfig?.programs || [])
-    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
-    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
-    .filter(Boolean);
-  const distinctCoursePrograms = Array.from(new Set((courseList || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
-  }, [configPrograms, distinctCoursePrograms]);
+    const configProg = (systemConfig?.programs || [])
+      .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+      .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+      .filter(Boolean);
+    const distinctCoursePrograms = Array.from(new Set((courseList || []).map(c => c.program).filter(Boolean)));
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configProg, ...distinctCoursePrograms])).filter(Boolean);
+  }, [systemConfig?.programs, courseList]);
   const YEARS = allKnownYears.filter(y => y !== 'Other' && y !== 'M.Tech');
 
   // ── Filters ──

@@ -483,7 +483,11 @@ if (process.env.NODE_ENV !== 'test') {
 
   // Auto-backfill CourseAllocation documents missing academicYear
   try {
-    const defaultYear = process.env.DEFAULT_ACADEMIC_YEAR || '2026-2027';
+    let defaultYear = process.env.DEFAULT_ACADEMIC_YEAR;
+    if (!defaultYear) {
+      const activeAy = await AcademicYear.findOne({ $or: [{ isCurrent: true }, { status: 'ACTIVE' }] }).lean();
+      defaultYear = activeAy ? activeAy.name : '2026-2027';
+    }
     await CourseAllocation.updateMany(
       {
         $or: [

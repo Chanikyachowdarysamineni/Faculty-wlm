@@ -185,58 +185,107 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
         deletedAt: null,
       };
 
+      const empKey = `${slotEmpId}_${numericCourseId}_${normalizedYearStr}_${sectionStr}_${semesterStr}_${academicYearStr || ''}`;
+      const slotKey = cfg.isMain
+        ? `${numericCourseId}_${normalizedYearStr}_${sectionStr}_${semesterStr}_${academicYearStr || ''}_Main Faculty`
+        : `${numericCourseId}_${normalizedYearStr}_${sectionStr}_${semesterStr}_${academicYearStr || ''}_${cfg.allocationRow}`;
+
       // 1. Check if there's an existing workload for this faculty member on this course + section + semester
-      const empWlQuery = Workload.findOne({
-        empId: slotEmpId,
-        courseId: numericCourseId,
-        year: normalizedYearStr,
-        section: sectionStr,
-        semester: semesterStr,
-        ...(academicYearStr ? { academicYear: academicYearStr } : {}),
-      });
-      if (session) empWlQuery.session(session);
-      const existingEmpWl = await empWlQuery.exec();
+      let existingEmpWl = null;
+      if (context && context.workloadEmpMap) {
+        existingEmpWl = context.workloadEmpMap.get(empKey) || null;
+      } else {
+        const empWlQuery = Workload.findOne({
+          empId: slotEmpId,
+          courseId: numericCourseId,
+          year: normalizedYearStr,
+          section: sectionStr,
+          semester: semesterStr,
+          ...(academicYearStr ? { academicYear: academicYearStr } : {}),
+        });
+        if (session) empWlQuery.session(session);
+        existingEmpWl = await empWlQuery.exec();
+      }
 
       if (existingEmpWl) {
         // Preserves admin's existing isVisible toggle state (never overwrites visibility on sync)
-        await Workload.findByIdAndUpdate(
-          existingEmpWl._id,
-          { $set: updateData },
-          { new: true, ...(session && { session }) }
-        );
-      } else {
-        // 2. Check if a workload already exists for this specific slot (e.g. replacing prior faculty)
-        const existingQuery = Workload.findOne(slotQueryFilter);
-        if (session) existingQuery.session(session);
-        const existingWl = await existingQuery.exec();
-
-        if (existingWl) {
-          // Preserves admin's existing isVisible toggle state (never overwrites visibility on sync)
+        const needsUpdate = Object.entries(updateData).some(([k, v]) => {
+          if (k === 'deletedAt') return false;
+          return existingEmpWl[k] !== v;
+        });
+        if (needsUpdate || existingEmpWl.isDeleted) {
           await Workload.findByIdAndUpdate(
-            existingWl._id,
+            existingEmpWl._id,
             { $set: updateData },
             { new: true, ...(session && { session }) }
           );
+          Object.assign(existingEmpWl, updateData);
+        }
+      } else {
+        // 2. Check if a workload already exists for this specific slot (e.g. replacing prior faculty)
+        let existingWl = null;
+        if (context && context.workloadSlotMap) {
+          existingWl = context.workloadSlotMap.get(slotKey) || null;
+        } else {
+          const existingQuery = Workload.findOne(slotQueryFilter);
+          if (session) existingQuery.session(session);
+          existingWl = await existingQuery.exec();
+        }
+
+        if (existingWl) {
+          // Preserves admin's existing isVisible toggle state (never overwrites visibility on sync)
+          const needsUpdate = Object.entries(updateData).some(([k, v]) => {
+            if (k === 'deletedAt') return false;
+            return existingWl[k] !== v;
+          });
+          if (needsUpdate || existingWl.isDeleted) {
+            await Workload.findByIdAndUpdate(
+              existingWl._id,
+              { $set: updateData },
+              { new: true, ...(session && { session }) }
+            );
+            Object.assign(existingWl, updateData);
+          }
         } else {
           // 3. Create new workload (inherits visibility of period if visible, otherwise false)
-          const periodHasVisible = await Workload.exists({
-            academicYear: academicYearStr,
-            semester: semesterStr,
-            isDeleted: false,
-            isVisible: true,
-          });
+          let periodHasVisible = false;
+          if (context && context.periodHasVisible !== undefined) {
+            periodHasVisible = context.periodHasVisible;
+          } else {
+            periodHasVisible = Boolean(await Workload.exists({
+              academicYear: academicYearStr,
+              semester: semesterStr,
+              isDeleted: false,
+              isVisible: true,
+            }));
+          }
           const newDoc = new Workload({
             ...updateData,
             isVisible: Boolean(periodHasVisible),
           });
-          await newDoc.save({ ...(session && { session }) });
+          const savedDoc = await newDoc.save({ ...(session && { session }) });
+          if (context) {
+            const rawObj = savedDoc.toObject ? savedDoc.toObject() : savedDoc;
+            if (context.workloadEmpMap) context.workloadEmpMap.set(empKey, rawObj);
+            if (context.workloadSlotMap) context.workloadSlotMap.set(slotKey, rawObj);
+          }
         }
       }
     } else {
       // Slot is empty. If there is an existing active workload for this slot, soft delete / cancel it.
-      const existingQuery = Workload.findOne({ ...slotQueryFilter, isDeleted: false });
-      if (session) existingQuery.session(session);
-      const existingWl = await existingQuery.exec();
+      const slotKey = cfg.isMain
+        ? `${numericCourseId}_${normalizedYearStr}_${sectionStr}_${semesterStr}_${academicYearStr || ''}_Main Faculty`
+        : `${numericCourseId}_${normalizedYearStr}_${sectionStr}_${semesterStr}_${academicYearStr || ''}_${cfg.allocationRow}`;
+
+      let existingWl = null;
+      if (context && context.workloadSlotMap) {
+        existingWl = context.workloadSlotMap.get(slotKey);
+        if (existingWl?.isDeleted) existingWl = null;
+      } else {
+        const existingQuery = Workload.findOne({ ...slotQueryFilter, isDeleted: false });
+        if (session) existingQuery.session(session);
+        existingWl = await existingQuery.exec();
+      }
 
       if (existingWl) {
         await Workload.findByIdAndUpdate(
@@ -250,6 +299,10 @@ const syncAllocationDocToWorkload = async (allocDoc, session = null, context = n
           },
           { ...(session && { session }) }
         );
+        if (context) {
+          existingWl.isDeleted = true;
+          existingWl.allocationStatus = 'CANCELLED';
+        }
       }
     }
   }
@@ -350,7 +403,26 @@ const removeWorkloadsForAllocation = async ({ courseId, year, section, semester,
 let lastReconcileTime = 0;
 const RECONCILE_THROTTLE_MS = 10000; // Run at most once every 10s per process
 
-const reconcileAllAllocationsToWorkload = async ({ semester = null, academicYear = null } = {}, force = false) => {
+const reconcileAllAllocationsToWorkload = async (optionsOrYear = {}, maybeSemesterOrForce = null, maybeForce = false) => {
+  let semester = null;
+  let academicYear = null;
+  let force = false;
+
+  // Support both (academicYear, semester, force) and ({ semester, academicYear }, force)
+  if (typeof optionsOrYear === 'string') {
+    academicYear = optionsOrYear;
+    if (typeof maybeSemesterOrForce === 'string') {
+      semester = maybeSemesterOrForce;
+      force = Boolean(maybeForce);
+    } else {
+      force = Boolean(maybeSemesterOrForce);
+    }
+  } else if (optionsOrYear && typeof optionsOrYear === 'object') {
+    semester = optionsOrYear.semester || null;
+    academicYear = optionsOrYear.academicYear || null;
+    force = Boolean(maybeSemesterOrForce || optionsOrYear.force);
+  }
+
   const now = Date.now();
   if (!force && now - lastReconcileTime < RECONCILE_THROTTLE_MS) {
     return { skipped: true, reason: 'throttled' };
@@ -362,10 +434,15 @@ const reconcileAllAllocationsToWorkload = async ({ semester = null, academicYear
     if (semester) filter.semester = String(semester).toUpperCase();
     if (academicYear) filter.academicYear = String(academicYear).trim();
 
-    const [allocs, allCourses, allFaculty] = await Promise.all([
+    const wlFilter = {};
+    if (semester) wlFilter.semester = String(semester).toUpperCase();
+    if (academicYear) wlFilter.academicYear = String(academicYear).trim();
+
+    const [allocs, allCourses, allFaculty, allWorkloads] = await Promise.all([
       CourseAllocation.find(filter).lean(),
       Course.find().lean(),
       Faculty.find().lean(),
+      Workload.find(wlFilter).lean(),
     ]);
 
     const courseMap = new Map();
@@ -379,7 +456,43 @@ const reconcileAllAllocationsToWorkload = async ({ semester = null, academicYear
       if (f.empId) facultyMap.set(String(f.empId).trim(), f);
     }
 
-    const context = { courseMap, facultyMap };
+    const workloadEmpMap = new Map();
+    const workloadSlotMap = new Map();
+    let periodHasVisible = false;
+
+    for (const w of allWorkloads) {
+      if (!w.isDeleted && w.isVisible === true) {
+        periodHasVisible = true;
+      }
+      const normYr = normalizeYear(w.year);
+      const ayStr = String(w.academicYear || '').trim();
+      const semStr = String(w.semester || '').toUpperCase();
+      const secStr = String(w.section || '').trim();
+      const cId = Number(w.courseId || 0);
+
+      // Emp key
+      if (w.empId) {
+        const empKey = `${w.empId}_${cId}_${normYr}_${secStr}_${semStr}_${ayStr}`;
+        if (!workloadEmpMap.has(empKey) || !w.isDeleted) {
+          workloadEmpMap.set(empKey, w);
+        }
+      }
+
+      // Slot key
+      if (w.facultyRole === 'Main Faculty') {
+        const slotKey = `${cId}_${normYr}_${secStr}_${semStr}_${ayStr}_Main Faculty`;
+        if (!workloadSlotMap.has(slotKey) || !w.isDeleted) {
+          workloadSlotMap.set(slotKey, w);
+        }
+      } else if (w.allocationRow) {
+        const slotKey = `${cId}_${normYr}_${secStr}_${semStr}_${ayStr}_${w.allocationRow}`;
+        if (!workloadSlotMap.has(slotKey) || !w.isDeleted) {
+          workloadSlotMap.set(slotKey, w);
+        }
+      }
+    }
+
+    const context = { courseMap, facultyMap, workloadEmpMap, workloadSlotMap, periodHasVisible };
     let syncedCount = 0;
 
     // Process in concurrent chunks of 15

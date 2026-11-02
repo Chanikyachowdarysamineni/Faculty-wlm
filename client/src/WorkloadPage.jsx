@@ -155,12 +155,14 @@ const WorkloadPage = ({ submissions }) => {
   ])).filter(Boolean);
 
   const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
-  const configPrograms = (systemConfig?.programs || [])
-    .filter(c => c && (typeof c === 'string' || c.isActive !== false))
-    .map(c => typeof c === 'string' ? c : (c.value || c.name || c.label))
-    .filter(Boolean);
-  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
-  const PROGRAMS = Array.from(new Set([...(configPrograms.length > 0 ? configPrograms : DEFAULT_PROGRAMS), ...distinctCoursePrograms])).filter(Boolean);
+  const PROGRAMS = useMemo(() => {
+    const configProg = (systemConfig?.programs || [])
+      .filter(c => c && (typeof c === 'string' || c.isActive !== false))
+      .map(c => typeof c === 'string' ? c : (c.value || c.name || c.label))
+      .filter(Boolean);
+    const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+    return Array.from(new Set([...(configProg.length > 0 ? configProg : DEFAULT_PROGRAMS), ...distinctCoursePrograms])).filter(Boolean);
+  }, [systemConfig?.programs, contextCourses]);
 
   const [workloads, setWorkloads] = useState([]);
   const [loading, setLoading] = useState(true);

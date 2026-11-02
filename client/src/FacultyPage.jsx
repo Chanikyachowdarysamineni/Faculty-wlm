@@ -197,23 +197,13 @@ const FacultyPage = () => {
 
   const autoSortByDesignation = async () => {
     if (!window.confirm("This will overwrite the current manual ordering. Proceed?")) return;
-    const designationRank = {
-      'Professor & Head': 1,
-      'Professor': 2,
-      'Associate Professor': 3,
-      'Assistant Professor': 4,
-      'Teaching Associate': 5,
-      'Teaching Instructor': 6,
-      'Teaching Assistant-I': 7,
-      'Teaching Assistant-II': 8,
-      'Teaching Assistant': 9
-    };
     const getRank = (desig) => {
-      if (!desig) return 99;
-      for (const [key, rank] of Object.entries(designationRank)) {
-        if (desig.includes(key)) return rank;
-      }
-      return 99;
+      if (!desig) return 999;
+      const cleanDesig = String(desig).trim();
+      const exactIndex = designations.indexOf(cleanDesig);
+      if (exactIndex !== -1) return exactIndex;
+      const partialIndex = designations.findIndex(d => cleanDesig.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(cleanDesig.toLowerCase()));
+      return partialIndex !== -1 ? partialIndex : 999;
     };
 
     const sorted = [...list].sort((a, b) => getRank(a.designation) - getRank(b.designation));

@@ -37,14 +37,14 @@ const SectionManagementPage = () => {
   const BASE_MTECH_YEARS = ['I', 'II'];
 
   const { setSectionsConfig: setSharedSectionsConfig, systemConfig, courses: contextCourses } = useSharedData();
-  const configPrograms = (systemConfig?.programs || [])
-    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
-    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
-    .filter(Boolean);
-  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
-  }, [configPrograms, distinctCoursePrograms]);
+    const configProg = (systemConfig?.programs || [])
+      .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+      .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+      .filter(Boolean);
+    const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configProg, ...distinctCoursePrograms])).filter(Boolean);
+  }, [systemConfig?.programs, contextCourses]);
 
   const [activeProgram, setActiveProgram] = useState('');
 

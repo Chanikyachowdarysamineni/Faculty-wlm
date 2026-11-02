@@ -17,6 +17,7 @@ const Course = require('../models/Course');
 const Workload = require('../models/Workload');
 const CourseAllocation = require('../models/CourseAllocation');
 const CourseOffering = require('../models/CourseOffering');
+const AcademicYear = require('../models/AcademicYear');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { nextSequence } = require('../utils/counters');
 const { parsePagination, buildMeta } = require('../utils/pagination');
@@ -66,7 +67,6 @@ const deriveYearFromCode = (subjectCode) => {
   return 'I'; // Default fallback
 };
 
-const COURSE_TYPES = ['Mandatory', 'Department Elective', 'Open Elective', 'Minors', 'Honours'];
 
 const toClient = (doc) => {
   // Determine year: priority given to explicit year field, fallback to deriving from code
@@ -452,7 +452,12 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
           let modified = false;
           const updateSet = {};
           if (!a.academicYear) {
-            updateSet.academicYear = doc.academicYear || current.academicYear || '2026-2027';
+            let resolvedYear = doc.academicYear || current.academicYear;
+            if (!resolvedYear) {
+              const activeAY = await AcademicYear.findOne({ $or: [{ isCurrent: true }, { status: 'ACTIVE' }] }).session(session).lean();
+              resolvedYear = activeAY?.name || '2026-2027';
+            }
+            updateSet.academicYear = resolvedYear;
           }
           if (updates.L !== undefined) {
             if (a.lectureSlot && (a.lectureSlot.hours === current.L || !a.lectureSlot.hours)) {

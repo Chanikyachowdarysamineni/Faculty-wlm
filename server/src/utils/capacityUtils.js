@@ -43,11 +43,13 @@ const recalculateCapacity = async (empId, options = {}) => {
     let currentAcademicYear = options.academicYear;
     if (!currentAcademicYear) {
       const AcademicYear = mongoose.model('AcademicYear');
-      const currentYrDoc = await AcademicYear.findOne({ isCurrent: true }).session(session);
+      const currentYrDoc = await AcademicYear.findOne({ isCurrent: true }).session(session)
+        || await AcademicYear.findOne({ status: 'ACTIVE' }).session(session)
+        || await AcademicYear.findOne({}).session(session);
       if (currentYrDoc) {
         currentAcademicYear = currentYrDoc.name;
       } else {
-        currentAcademicYear = '2026-2027';
+        currentAcademicYear = process.env.DEFAULT_ACADEMIC_YEAR || '';
       }
     }
 

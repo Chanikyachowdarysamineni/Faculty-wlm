@@ -231,7 +231,7 @@ const DesignationDetailsPage = () => {
 
         <div className="dd-topbar-right">
           <span className="dd-badge dd-badge-period">
-            📅 {selectedAcademicYear || '2026-2027'} • {selectedSemester || 'ODD'} Semester
+            📅 {selectedAcademicYear ? `${selectedAcademicYear} • ${selectedSemester || 'ODD'} Semester` : (selectedSemester ? `${selectedSemester} Semester` : 'Current Academic Period')}
           </span>
           <GlobalPeriodSelector />
         </div>

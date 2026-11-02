@@ -7,6 +7,7 @@ const Designation = require('../../src/models/Designation');
 const Role = require('../../src/models/Role');
 
 describe('syncAuthAndRBAC Unit Suite', () => {
+  jest.setTimeout(30000);
   beforeAll(async () => {
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/faculty_workload');

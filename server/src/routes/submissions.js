@@ -239,7 +239,7 @@ router.put(
             mobile: member?.mobile || '',
             prefs,
             semester: semester || 'EVEN',
-            academicYear: academicYear || '2026-2027',
+            academicYear: academicYear || (await AcademicYear.findOne({ isCurrent: true }).lean() || await AcademicYear.findOne({ status: 'ACTIVE' }).lean() || await AcademicYear.findOne({}).lean())?.name || '',
           });
         } else {
           logger.warn('Submission not found for update', { empId: req.params.empId, userId: req.user.id });
@@ -276,8 +276,10 @@ router.post(
       let academicYear = String(req.body.academicYear || '').trim();
 
       if (!academicYear) {
-        const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
-        academicYear = currentYear ? currentYear.name : '2026-2027';
+        const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean()
+          || await AcademicYear.findOne({ status: 'ACTIVE' }).lean()
+          || await AcademicYear.findOne({}).lean();
+        academicYear = currentYear ? currentYear.name : '';
       }
 
       const isSelf = String(req.user.id) === String(empId || '').trim();

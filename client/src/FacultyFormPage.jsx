@@ -26,14 +26,14 @@ const FacultyFormPage = ({
   const distinctCourseYears = Array.from(new Set((contextCourses || []).map(c => c.year).filter(Boolean)));
   const YEARS_ORDER = Array.from(new Set([...activeYearsRaw, ...distinctCourseYears])).filter(y => y !== 'Other');
   const DEFAULT_PROGRAMS = ['B.Tech', 'M.Tech'];
-  const configPrograms = (systemConfig?.programs || [])
-    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
-    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
-    .filter(Boolean);
-  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
-  }, [configPrograms, distinctCoursePrograms]);
+    const configProg = (systemConfig?.programs || [])
+      .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+      .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+      .filter(Boolean);
+    const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configProg, ...distinctCoursePrograms])).filter(Boolean);
+  }, [systemConfig?.programs, contextCourses]);
   
   // Auto-fill empId for logged-in faculty
   const currentEmpId = currentUser?.id || currentUser?.empId || '';

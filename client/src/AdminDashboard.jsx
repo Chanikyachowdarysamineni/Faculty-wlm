@@ -369,7 +369,7 @@ const AdminOverview = ({ user }) => {
               gap: '6px'
             }}>
               <span>📅</span>
-              <span>{selectedAcademicYear || '2026-2027'} • {selectedSemester || 'ODD'} Semester</span>
+              <span>{selectedAcademicYear ? `${selectedAcademicYear} • ${selectedSemester || 'ODD'} Semester` : (selectedSemester ? `${selectedSemester} Semester` : 'Current Academic Period')}</span>
             </span>
 
             {desigTab === 'TA' && (
