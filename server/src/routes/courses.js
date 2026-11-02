@@ -153,12 +153,21 @@ router.get('/deleted', requireAuth, requireAdmin, requireAcademicPeriod, async (
 // GET /api/courses/:id
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
-    const doc = await Course.findOne({ courseId: Number(req.params.id) }).lean();
+    const paramId = req.params.id;
+    let findQuery;
+    if (mongoose.Types.ObjectId.isValid(paramId)) {
+      findQuery = { _id: paramId };
+    } else if (!isNaN(Number(paramId))) {
+      findQuery = { courseId: Number(paramId) };
+    } else {
+      findQuery = { courseId: paramId };
+    }
+    const doc = await Course.findOne(findQuery).lean();
     if (!doc) {
       logger.warn('Course not found', { courseId: req.params.id, userId: req.user.id });
       return sendNotFound(res, 'Course not found.');
     }
-    logger.info('Course retrieved', { courseId: req.params.id, userId: req.user.id });
+    logger.info('Course retrieved', { courseId: doc.courseId, userId: req.user.id });
     sendSuccess(res, toClient(doc), 200);
   } catch (err) {
     logger.error('Error retrieving course', { error: err.message, courseId: req.params.id, userId: req.user.id });
@@ -255,16 +264,24 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const courseId = Number(req.params.id);
-    const semesterQuery = req.query.semester;
+    const paramId = req.params.id;
+    let findQuery;
+    if (mongoose.Types.ObjectId.isValid(paramId)) {
+      findQuery = { _id: paramId };
+    } else if (!isNaN(Number(paramId))) {
+      findQuery = { courseId: Number(paramId) };
+    } else {
+      findQuery = { courseId: paramId };
+    }
 
-    const current = await Course.findOne({ courseId }).session(session).lean();
-    if (!current || (semesterQuery && current.semester !== semesterQuery && !(semesterQuery === 'ODD' && !current.semester))) {
+    const current = await Course.findOne(findQuery).session(session).lean();
+    if (!current) {
       await session.abortTransaction();
       session.endSession();
-      logger.warn('Course not found for update', { courseId, userId: req.user.id });
+      logger.warn('Course not found for update', { paramId, userId: req.user.id });
       return sendNotFound(res, 'Course not found.');
     }
+    const courseId = current.courseId;
 
     const updates = { ...req.body };
     delete updates._id;
@@ -283,6 +300,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
 
     if (checkSubjectCode && checkProgram && checkAy && checkSem) {
       const duplicate = await Course.findOne({
+        _id: { $ne: current._id },
         courseId: { $ne: courseId },
         subjectCode: checkSubjectCode,
         program: checkProgram,
@@ -318,7 +336,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     }
 
     const doc = await Course.findOneAndUpdate(
-      { courseId },
+      { _id: current._id },
       { $set: updates },
       { new: true, runValidators: true, session }
     ).lean();
@@ -429,12 +447,17 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
 
       // Synchronize slot hours in allocations when course L, T, or P changes
       if (updates.L !== undefined || updates.T !== undefined || updates.P !== undefined) {
-        const allocDocs = await CourseAllocation.find({ courseId }).session(session);
+        const allocDocs = await CourseAllocation.find({ courseId, isDeleted: { $ne: true } }).session(session);
         for (const a of allocDocs) {
           let modified = false;
+          const updateSet = {};
+          if (!a.academicYear) {
+            updateSet.academicYear = doc.academicYear || current.academicYear || '2026-2027';
+          }
           if (updates.L !== undefined) {
             if (a.lectureSlot && (a.lectureSlot.hours === current.L || !a.lectureSlot.hours)) {
               a.lectureSlot.hours = doc.L;
+              updateSet.lectureSlot = a.lectureSlot;
               modified = true;
             }
             if (Array.isArray(a.lectureSlots)) {
@@ -444,6 +467,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
                   modified = true;
                 }
               });
+              updateSet.lectureSlots = a.lectureSlots;
             }
           }
           if (updates.T !== undefined && Array.isArray(a.tutorialSlots)) {
@@ -453,6 +477,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
                 modified = true;
               }
             });
+            updateSet.tutorialSlots = a.tutorialSlots;
           }
           if (updates.P !== undefined && Array.isArray(a.practicalSlots)) {
             a.practicalSlots.forEach((s, idx) => {
@@ -461,9 +486,14 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
                 modified = true;
               }
             });
+            updateSet.practicalSlots = a.practicalSlots;
           }
-          if (modified) {
-            await a.save({ session });
+          if (modified || Object.keys(updateSet).length > 0) {
+            await CourseAllocation.updateOne(
+              { _id: a._id },
+              { $set: updateSet },
+              { session }
+            );
           }
         }
       }
@@ -521,12 +551,14 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const courseId = Number(req.params.id);
-    const semesterQuery = req.query.semester;
-
-    const query = { courseId, isDeleted: { $ne: true } };
-    if (semesterQuery) {
-      query.semester = semesterQuery;
+    const paramId = req.params.id;
+    let query;
+    if (mongoose.Types.ObjectId.isValid(paramId)) {
+      query = { _id: paramId, isDeleted: { $ne: true } };
+    } else if (!isNaN(Number(paramId))) {
+      query = { courseId: Number(paramId), isDeleted: { $ne: true } };
+    } else {
+      query = { courseId: paramId, isDeleted: { $ne: true } };
     }
 
     const doc = await Course.findOneAndUpdate(
@@ -538,9 +570,10 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (!doc) {
       await session.abortTransaction();
       session.endSession();
-      logger.warn('Course not found for deletion', { courseId, userId: req.user.id });
+      logger.warn('Course not found for deletion', { paramId, userId: req.user.id });
       return sendNotFound(res, 'Course not found.');
     }
+    const courseId = doc.courseId;
 
     // Find active workloads to identify affected faculty for capacity recalculation
     const affectedWorkloads = await Workload.find({

@@ -1,7 +1,7 @@
 'use strict';
 
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
-const mongoose = require('mongoose');
+const { mongoose, connect } = require('../../src/db');
 const request = require('supertest');
 const express = require('express');
 
@@ -19,6 +19,8 @@ const FacultyCapacity = require('../../src/models/FacultyCapacity');
 const AcademicYear = require('../../src/models/AcademicYear');
 const AcademicYearSemester = require('../../src/models/AcademicYearSemester');
 const { signToken } = require('../../src/utils/jwt');
+
+jest.setTimeout(60000);
 
 const app = express();
 app.use(express.json());
@@ -42,7 +44,7 @@ describe('Course Updates & Course-Wise Workload Details Synchronization Tests', 
 
   beforeAll(async () => {
     if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGO_URI);
+      await connect(2, 1000);
     }
 
     testAy = await AcademicYear.findOne({ name: ACADEMIC_YEAR }).lean() || await AcademicYear.findOne({}).lean();

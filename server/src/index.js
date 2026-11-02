@@ -481,6 +481,25 @@ if (process.env.NODE_ENV !== 'test') {
   await syncIndexesSafe(PasswordResetToken);
   await backfillWorkloadCourseTypeKeys();
 
+  // Auto-backfill CourseAllocation documents missing academicYear
+  try {
+    const defaultYear = process.env.DEFAULT_ACADEMIC_YEAR || '2026-2027';
+    await CourseAllocation.updateMany(
+      {
+        $or: [
+          { academicYear: { $exists: false } },
+          { academicYear: null },
+          { academicYear: '' }
+        ]
+      },
+      { $set: { academicYear: defaultYear } }
+    );
+  } catch (err) {
+    if (err?.name !== 'MongoNotConnectedError' && mongoose?.connection?.readyState !== 0) {
+      console.warn(`⚠️  CourseAllocation academicYear backfill warning: ${err.message}`);
+    }
+  }
+
   // Ensure default settings exist
   await Setting.findOneAndUpdate(
     { key: 'workloadCalculation' },
