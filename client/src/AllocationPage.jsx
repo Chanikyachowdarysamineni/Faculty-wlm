@@ -242,14 +242,14 @@ const AllocationPage = ({ isAdmin = true }) => {
   const BASE_BTECH_YEARS = ['I', 'II', 'III', 'IV'];
   const BASE_MTECH_YEARS = ['I', 'II'];
 
-  const configPrograms = (systemConfig?.programs || [])
-    .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
-    .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
-    .filter(Boolean);
-  const distinctCoursePrograms = Array.from(new Set((contextCourses || []).map(c => c.program).filter(Boolean)));
   const PROGRAMS = useMemo(() => {
-    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configPrograms, ...distinctCoursePrograms])).filter(Boolean);
-  }, [configPrograms, distinctCoursePrograms]);
+    const configProg = (systemConfig?.programs || [])
+      .filter(c => c && (typeof c === 'string' ? true : c.isActive !== false))
+      .map(c => (typeof c === 'string' ? c : (c.value || c.name || c.label)))
+      .filter(Boolean);
+    const courseProg = (contextCourses || []).map(c => c.program).filter(Boolean);
+    return Array.from(new Set([...DEFAULT_PROGRAMS, ...configProg, ...courseProg])).filter(Boolean);
+  }, [systemConfig?.programs, contextCourses]);
   
   const [allocations,   setAllocations]   = useState([]);
   const [allocMap,      setAllocMap]      = useState({});
@@ -281,13 +281,13 @@ const AllocationPage = ({ isAdmin = true }) => {
 
   useEffect(() => {
     if (PROGRAMS.length > 0 && (!activeProgram || !PROGRAMS.includes(activeProgram))) {
-      setActiveProgram(PROGRAMS[0]);
+      setActiveProgram(prev => (prev === PROGRAMS[0] ? prev : PROGRAMS[0]));
     }
   }, [PROGRAMS, activeProgram]);
 
   useEffect(() => {
     if (displayYears.length > 0 && (!activeYear || !displayYears.includes(activeYear))) {
-      setActiveYear(displayYears[0]);
+      setActiveYear(prev => (prev === displayYears[0] ? prev : displayYears[0]));
     }
   }, [displayYears, activeYear]);
 
@@ -666,7 +666,14 @@ const AllocationPage = ({ isAdmin = true }) => {
       }
     });
     
-    setAllocMap(map);
+    setAllocMap(prev => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(map);
+      if (prevKeys.length === nextKeys.length && prevKeys.every(k => prev[k] === map[k])) {
+        return prev;
+      }
+      return map;
+    });
     setUnsaved(false);
   }, [allocations, yearKey, mainFacultyMap, taWorkloadMap, yearCourses, workloads]);
 
@@ -691,7 +698,12 @@ const AllocationPage = ({ isAdmin = true }) => {
         }
       }
     }
-    setSections([...found]);
+    setSections(prev => {
+      if (prev.length === found.length && prev.every((v, i) => v === found[i])) {
+        return prev;
+      }
+      return [...found];
+    });
   }, [yearKey, sectionsConfig, activeProgram, activeYear]);
 
   useEffect(() => () => {

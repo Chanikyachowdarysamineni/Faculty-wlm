@@ -561,17 +561,27 @@ const WorkloadPage = ({ submissions }) => {
 
   // ── Fetch faculty workload hours summary ──
   const fetchFacultyWorkloadHours = async (empId) => {
-    if (!empId) return;
+    let cleanEmpId = empId;
+    if (typeof empId === 'object' && empId !== null) {
+      cleanEmpId = empId.empId || empId._id || empId.id || '';
+    }
+    cleanEmpId = String(cleanEmpId || '').trim();
+    if (!cleanEmpId || cleanEmpId === '[object Object]' || cleanEmpId === '__other__') return;
+
     setWorkloadHoursLoading(true);
     setWorkloadHoursError('');
     try {
-      const res = await fetch(`${API}/deva/workloads/faculty-hours/${empId}?semester=${selectedSemester}&academicYear=${selectedAcademicYear}`, {
+      const qp = new URLSearchParams();
+      if (selectedSemester) qp.set('semester', selectedSemester);
+      if (selectedAcademicYear) qp.set('academicYear', selectedAcademicYear);
+      if (selectedAcademicYearId) qp.set('academicYearId', selectedAcademicYearId);
+      const res = await fetch(`${API}/deva/workloads/faculty-hours/${encodeURIComponent(cleanEmpId)}?${qp.toString()}`, {
         headers: authHeader()
       });
       const data = await res.json();
       if (data.success && data.data) {
         const raw = data.data?.data || data.data;
-        const fac = facultyList.find(f => f.empId === empId);
+        const fac = facultyList.find(f => f.empId === cleanEmpId);
         const fallbackCap = Number(fac?.capacity || (fac?.designation ? getDefaultCapacity(fac.designation) : 18));
         const resolvedCap = Number(raw.capacity ?? raw.target ?? fallbackCap);
         const currentLoad = Number(raw.currentLoad || 0);
