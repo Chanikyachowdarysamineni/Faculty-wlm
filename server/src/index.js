@@ -102,6 +102,8 @@ const TokenBlacklist = require('./models/TokenBlacklist');
 const SystemConfig = require('./models/SystemConfig');
 const Submission = require('./models/Submission');
 const FacultyCapacity = require('./models/FacultyCapacity');
+const AcademicYear = require('./models/AcademicYear');
+const AcademicYearSemester = require('./models/AcademicYearSemester');
 const { syncAuthAndRBAC } = require('./utils/authSync');
 const { refreshConfig } = require('./utils/configManager');
 
@@ -517,8 +519,6 @@ if (process.env.NODE_ENV !== 'test') {
   console.log('✅  App initialized successfully.');
 
   try {
-    const AcademicYear = require('./models/AcademicYear');
-    const AcademicYearSemester = require('./models/AcademicYearSemester');
     const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
     if (currentYear) {
       const activeSem = await AcademicYearSemester.findOne({
