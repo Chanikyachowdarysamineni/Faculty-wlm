@@ -379,6 +379,9 @@ const CoursesPage = ({ isAdmin = true }) => {
 
       // Refresh the course list from server to ensure consistency
       await fetchCourses();
+      window.dispatchEvent(new CustomEvent('wlm:courses_reload'));
+      window.dispatchEvent(new CustomEvent('wlm:workloads_reload'));
+      window.dispatchEvent(new CustomEvent('wlm:allocations_reload'));
       showToast.success(editCourse ? MESSAGES.COURSE_UPDATE_SUCCESS : MESSAGES.COURSE_SAVE_SUCCESS);
       setShowCourseModal(false);
       setCourseForm({ ...emptyCourseForm });
@@ -408,6 +411,9 @@ const CoursesPage = ({ isAdmin = true }) => {
 
       // Refresh the course list from server
       await fetchCourses();
+      window.dispatchEvent(new CustomEvent('wlm:courses_reload'));
+      window.dispatchEvent(new CustomEvent('wlm:workloads_reload'));
+      window.dispatchEvent(new CustomEvent('wlm:allocations_reload'));
       showToast.success(MESSAGES.COURSE_DELETE_SUCCESS);
       setDeleteCourse(null);
     } catch (error) {

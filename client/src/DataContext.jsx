@@ -71,7 +71,7 @@ export const DataProvider = ({ children }) => {
       if (msg.type === 'settings_updated') {
         window.dispatchEvent(new CustomEvent('wlm:settings_reload'));
       }
-      if (msg.type === 'courses_updated') {
+      if (msg.type === 'courses_updated' || msg.type === 'courses_reload') {
         window.dispatchEvent(new CustomEvent('wlm:courses_reload'));
       }
       if (msg.type === 'faculty_updated') {

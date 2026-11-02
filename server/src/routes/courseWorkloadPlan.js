@@ -67,6 +67,8 @@ const resolvePeriod = async (req) => {
 // GET /api/course-workload-plan
 // Fetch all workload plans for the active semester, outer joined with CourseOfferings
 router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
   try {
     const { semId, semType, academicYearId, academicYearName } = await resolvePeriod(req);
     
@@ -102,6 +104,11 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
               P: ac.P || 0,
               status: 'Active'
             });
+          } else {
+            await CourseOffering.updateOne(
+              { academicYearSemesterId: semId, courseId: ac._id },
+              { $set: { L: ac.L || 0, T: ac.T || 0, P: ac.P || 0, credits: ac.C || 0, status: 'Active' } }
+            );
           }
         }
 
@@ -157,10 +164,10 @@ router.get('/', requireAuth, requireAcademicPeriod, async (req, res, next) => {
       const course = offering.courseId || {};
       const plan = planMap[offering._id.toString()] || {};
 
-      const L = offering.L ?? course.L ?? 0;
-      const T = offering.T ?? course.T ?? 0;
-      const P = offering.P ?? course.P ?? 0;
-      const C = offering.credits ?? course.C ?? 0;
+      const L = (course.L !== undefined && course.L !== null) ? Number(course.L) : (Number(offering.L) || 0);
+      const T = (course.T !== undefined && course.T !== null) ? Number(course.T) : (Number(offering.T) || 0);
+      const P = (course.P !== undefined && course.P !== null) ? Number(course.P) : (Number(offering.P) || 0);
+      const C = (course.C !== undefined && course.C !== null) ? Number(course.C) : (Number(offering.credits) || 0);
 
       const tpBatches = plan.tpBatches || 0;
       const noOfSections = plan.noOfSections || 0;

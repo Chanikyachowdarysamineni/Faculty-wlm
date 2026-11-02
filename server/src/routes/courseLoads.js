@@ -201,6 +201,11 @@ router.get('/', requireAuth, async (req, res) => {
             P: ac.P || 0,
             status: 'Active'
           });
+        } else {
+          await CourseOffering.updateOne(
+            { academicYearSemesterId: semDoc._id, courseId: ac._id },
+            { $set: { L: ac.L || 0, T: ac.T || 0, P: ac.P || 0, credits: ac.C || 0, status: 'Active' } }
+          );
         }
       }
 

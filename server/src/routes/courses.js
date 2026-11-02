@@ -328,6 +328,24 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       return sendNotFound(res, 'Course not found.');
     }
 
+    // Synchronize all linked CourseOffering records with latest L, T, P, credits
+    const offeringUpdates = {};
+    if (updates.L !== undefined) offeringUpdates.L = doc.L;
+    if (updates.T !== undefined) offeringUpdates.T = doc.T;
+    if (updates.P !== undefined) offeringUpdates.P = doc.P;
+    if (updates.C !== undefined) offeringUpdates.credits = doc.C;
+    if (updates.status !== undefined || updates.isDeleted !== undefined) {
+      offeringUpdates.status = (doc.status === 'Inactive' || doc.status === 'Archived' || doc.isDeleted) ? 'Cancelled' : 'Active';
+    }
+
+    if (Object.keys(offeringUpdates).length > 0) {
+      await CourseOffering.updateMany(
+        { courseId: doc._id },
+        { $set: offeringUpdates },
+        { session }
+      );
+    }
+
     const cascadeUpdates = {};
     if (updates.subjectCode !== undefined && updates.subjectCode !== current.subjectCode) cascadeUpdates.subjectCode = updates.subjectCode;
     if (updates.subjectName !== undefined && updates.subjectName !== current.subjectName) cascadeUpdates.subjectName = updates.subjectName;
@@ -335,10 +353,59 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     if (updates.shortName !== undefined && updates.shortName !== current.shortName) cascadeUpdates.shortName = updates.shortName;
     if (updates.program !== undefined && updates.program !== current.program) cascadeUpdates.program = updates.program;
     if (updates.year !== undefined && updates.year !== current.year) cascadeUpdates.year = updates.year;
+    if (updates.academicYear !== undefined && updates.academicYear !== current.academicYear) cascadeUpdates.academicYear = updates.academicYear;
+    if (updates.semester !== undefined && updates.semester !== current.semester) cascadeUpdates.semester = updates.semester;
     if (updates.C !== undefined && updates.C !== current.C) cascadeUpdates.C = updates.C;
     if (updates.L !== undefined && updates.L !== current.L) cascadeUpdates.fixedL = updates.L;
     if (updates.T !== undefined && updates.T !== current.T) cascadeUpdates.fixedT = updates.T;
     if (updates.P !== undefined && updates.P !== current.P) cascadeUpdates.fixedP = updates.P;
+
+    // Recalculate Workload fixed and manual hours when L, T, or P changes
+    if (updates.L !== undefined && updates.L !== current.L) {
+      await Workload.updateMany(
+        {
+          courseId,
+          $or: [
+            { facultyRole: 'Main Faculty' },
+            { manualL: current.L },
+            { manualL: { $exists: false } },
+            { manualL: null }
+          ]
+        },
+        { $set: { manualL: updates.L, fixedL: updates.L } },
+        { session }
+      );
+    }
+
+    if (updates.T !== undefined && updates.T !== current.T) {
+      await Workload.updateMany(
+        {
+          courseId,
+          $or: [
+            { manualT: current.T },
+            { manualT: { $exists: false } },
+            { manualT: null }
+          ]
+        },
+        { $set: { manualT: updates.T, fixedT: updates.T } },
+        { session }
+      );
+    }
+
+    if (updates.P !== undefined && updates.P !== current.P) {
+      await Workload.updateMany(
+        {
+          courseId,
+          $or: [
+            { manualP: current.P },
+            { manualP: { $exists: false } },
+            { manualP: null }
+          ]
+        },
+        { $set: { manualP: updates.P, fixedP: updates.P } },
+        { session }
+      );
+    }
 
     if (Object.keys(cascadeUpdates).length > 0) {
       await Workload.updateMany({ courseId }, { $set: cascadeUpdates }, { session });
@@ -349,6 +416,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       if (cascadeUpdates.shortName !== undefined) allocUpdates.shortName = cascadeUpdates.shortName;
       if (cascadeUpdates.program !== undefined) allocUpdates.program = cascadeUpdates.program;
       if (cascadeUpdates.year !== undefined) allocUpdates.year = cascadeUpdates.year;
+      if (cascadeUpdates.academicYear !== undefined) allocUpdates.academicYear = cascadeUpdates.academicYear;
+      if (cascadeUpdates.semester !== undefined) allocUpdates.semester = cascadeUpdates.semester;
       if (cascadeUpdates.C !== undefined) allocUpdates.C = cascadeUpdates.C;
       if (cascadeUpdates.fixedL !== undefined) allocUpdates.fixedL = cascadeUpdates.fixedL;
       if (cascadeUpdates.fixedT !== undefined) allocUpdates.fixedT = cascadeUpdates.fixedT;
@@ -357,7 +426,70 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       if (Object.keys(allocUpdates).length > 0) {
         await CourseAllocation.updateMany({ courseId }, { $set: allocUpdates }, { session });
       }
+
+      // Synchronize slot hours in allocations when course L, T, or P changes
+      if (updates.L !== undefined || updates.T !== undefined || updates.P !== undefined) {
+        const allocDocs = await CourseAllocation.find({ courseId }).session(session);
+        for (const a of allocDocs) {
+          let modified = false;
+          if (updates.L !== undefined) {
+            if (a.lectureSlot && (a.lectureSlot.hours === current.L || !a.lectureSlot.hours)) {
+              a.lectureSlot.hours = doc.L;
+              modified = true;
+            }
+            if (Array.isArray(a.lectureSlots)) {
+              a.lectureSlots.forEach(s => {
+                if (s.hours === current.L || !s.hours) {
+                  s.hours = doc.L;
+                  modified = true;
+                }
+              });
+            }
+          }
+          if (updates.T !== undefined && Array.isArray(a.tutorialSlots)) {
+            a.tutorialSlots.forEach((s, idx) => {
+              if (s.hours === current.T || !s.hours || idx === 0) {
+                s.hours = doc.T;
+                modified = true;
+              }
+            });
+          }
+          if (updates.P !== undefined && Array.isArray(a.practicalSlots)) {
+            a.practicalSlots.forEach((s, idx) => {
+              if (s.hours === current.P || !s.hours || idx === 0) {
+                s.hours = doc.P;
+                modified = true;
+              }
+            });
+          }
+          if (modified) {
+            await a.save({ session });
+          }
+        }
+      }
       logger.info('Cascaded course changes', { courseId, cascadeUpdates });
+    }
+
+    // Recalculate capacity for affected faculty members whenever hours or assignments change
+    if (updates.L !== undefined || updates.T !== undefined || updates.P !== undefined || updates.isDeleted !== undefined) {
+      const affectedWorkloads = await Workload.find({
+        courseId,
+        isDeleted: { $ne: true }
+      }).session(session).lean();
+
+      const affectedEmpIds = [...new Set(affectedWorkloads.map(w => w.empId).filter(Boolean))];
+      for (const fEmpId of affectedEmpIds) {
+        try {
+          await recalculateCapacity(fEmpId, {
+            session,
+            semester: doc.semester,
+            academicYear: doc.academicYear,
+            updatedBy: req.user?.id || 'Admin'
+          });
+        } catch (capErr) {
+          logger.warn('Failed recalculating capacity during course update', { empId: fEmpId, error: capErr.message });
+        }
+      }
     }
 
     await session.commitTransaction();
@@ -368,10 +500,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       type: 'courses_updated',
       data: { action: 'update', course: toClient(doc) }
     });
-    if (Object.keys(cascadeUpdates).length > 0) {
-      wsHandler.broadcast({ type: 'workloads_reload' });
-      wsHandler.broadcast({ type: 'allocations_reload' });
-    }
+    wsHandler.broadcast({ type: 'courses_reload' });
+    wsHandler.broadcast({ type: 'workloads_reload' });
+    wsHandler.broadcast({ type: 'allocations_reload' });
     sendSuccess(res, toClient(doc), 200);
   } catch (err) {
     await session.abortTransaction();

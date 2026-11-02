@@ -187,8 +187,13 @@ const CourseWiseWorkloadPage = () => {
       if (selectedAcademicYear) params.append('academicYear', selectedAcademicYear);
       if (selectedSemester) params.append('semester', selectedSemester);
 
+      params.append('_t', Date.now());
       const res = await fetch(`${API}/deva/course-workload-plan?${params.toString()}`, {
-        headers: authJsonHeaders()
+        headers: {
+          ...authJsonHeaders(),
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to fetch data');
