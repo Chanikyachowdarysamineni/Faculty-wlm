@@ -1388,17 +1388,18 @@ const WorkloadPage = ({ submissions }) => {
           <button
             className="wl-btn wl-btn-export"
             onClick={() => setShowMainFacultyExportModal(true)}
-            title="Course-wise Main Faculty Workload Export"
+            title="Course-wise Main Faculty Workload Export to Excel (.xlsx)"
             style={{
               background: '#0284c7',
               borderColor: '#0284c7',
               color: '#ffffff',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
+              fontWeight: 600
             }}
           >
-            📋&nbsp;Main Faculty Export
+            📋&nbsp;Course Main Faculty Export
           </button>
           <button
             className={`wl-btn ${showForms ? 'wl-btn-forms-active' : 'wl-btn-forms'}`}
@@ -2591,7 +2592,7 @@ const WorkloadPage = ({ submissions }) => {
         onClose={() => setShowMainFacultyExportModal(false)}
         initialAcademicYear={selectedAcademicYear}
         initialSemester={selectedSemester}
-        initialProgram={selectedProgram || 'All'}
+        initialProgram={assignCourseProgram || 'All'}
       />
 
     </div>
