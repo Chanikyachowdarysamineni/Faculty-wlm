@@ -369,3 +369,4 @@ describe('Course Updates & Course-Wise Workload Details Synchronization Tests', 
     expect(row2.P).toBe(0);
   });
 });
+

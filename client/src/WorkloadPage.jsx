@@ -23,6 +23,7 @@ import {
   filterCoursesByPreference,
   hasFacultySubmittedPreferences
 } from './utils/facultyPreferencesApi';
+import CourseMainFacultyExportModal from './components/CourseMainFacultyExportModal';
 
 const AUTO_REFRESH_MS = 60000;
 
@@ -176,6 +177,7 @@ const WorkloadPage = ({ submissions }) => {
   const [activeYear, setActiveYear] = useState('All'); // year-tab filter
   const [assignCourseProgram, setAssignCourseProgram] = useState('All');
   const [showForms, setShowForms] = useState(false);
+  const [showMainFacultyExportModal, setShowMainFacultyExportModal] = useState(false);
   const [sectionsConfig, setSectionsConfig] = useState(DEFAULT_SECTIONS);
   // New: allocation data for selected course/year/section
   const [allocation, setAllocation] = useState(null);
@@ -1384,6 +1386,21 @@ const WorkloadPage = ({ submissions }) => {
             ⬇&nbsp;Export PDF
           </button>
           <button
+            className="wl-btn wl-btn-export"
+            onClick={() => setShowMainFacultyExportModal(true)}
+            title="Course-wise Main Faculty Workload Export"
+            style={{
+              background: '#0284c7',
+              borderColor: '#0284c7',
+              color: '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            📋&nbsp;Main Faculty Export
+          </button>
+          <button
             className={`wl-btn ${showForms ? 'wl-btn-forms-active' : 'wl-btn-forms'}`}
             disabled={workloads.length === 0}
             onClick={() => setShowForms(v => !v)}
@@ -2567,6 +2584,15 @@ const WorkloadPage = ({ submissions }) => {
           </div>
         </div>
       )}
+
+      {/* ── Course-wise Main Faculty Export Modal ── */}
+      <CourseMainFacultyExportModal
+        isOpen={showMainFacultyExportModal}
+        onClose={() => setShowMainFacultyExportModal(false)}
+        initialAcademicYear={selectedAcademicYear}
+        initialSemester={selectedSemester}
+        initialProgram={selectedProgram || 'All'}
+      />
 
     </div>
   );

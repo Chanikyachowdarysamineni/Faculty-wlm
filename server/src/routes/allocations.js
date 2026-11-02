@@ -25,6 +25,7 @@ const logger           = require('../utils/logger');
 const { recalculateCapacity } = require('../utils/capacityUtils');
 const { isTADesignation, isTaDesignationAsync } = require('../utils/designationUtils');
 const { syncAllocationDocToWorkload, removeWorkloadsForAllocation } = require('../utils/allocationWorkloadSync');
+const { getCourseMainFacultyWorkloadData, exportCourseMainFacultyToExcel } = require('../utils/workloadExportUtils');
 const wsHandler = require('../websocket');
 
 const router = express.Router();
@@ -253,6 +254,49 @@ router.get('/workload-sheets', requireAuth, requireAdmin, exportLimiter, require
 
     sendSuccess(res, sheets, 200);
   } catch (err) { next(err); }
+});
+
+// GET /api/allocations/export/course-main-faculty
+// Course-wise Main Faculty Workload Export
+router.get('/export/course-main-faculty', requireAuth, requireAdmin, exportLimiter, requireAcademicPeriod, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    const academicYear = req.query.academicYear || req.headers['x-academic-year'] || req.academicPeriod?.academicYear?.name || 'All';
+    const semester = req.query.semester || req.headers['x-semester'] || req.academicPeriod?.academicYearSemester?.semesterType || 'All';
+    const program = req.query.program || 'All';
+    const format = String(req.query.format || 'excel').toLowerCase();
+
+    logger.info('Exporting course-wise main faculty workload from allocations route', {
+      userId: req.user?.id,
+      academicYear,
+      semester,
+      program,
+      format
+    });
+
+    const rows = await getCourseMainFacultyWorkloadData({ academicYear, semester, program });
+
+    if (format === 'json') {
+      return sendSuccess(res, { count: rows.length, rows }, 200);
+    }
+
+    const { filename, content, contentType } = await exportCourseMainFacultyToExcel(rows, {
+      academicYear,
+      semester,
+      program,
+      format
+    });
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(content);
+  } catch (err) {
+    logger.error('Error exporting course-wise main faculty workload', { error: err.message, userId: req.user?.id });
+    next(err);
+  }
 });
 
 // GET /api/allocations/export/csv

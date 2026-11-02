@@ -14,6 +14,7 @@ import API from './config';
 import './AllocationPage.css';
 import { useToast } from './Toast';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
+import CourseMainFacultyExportModal from './components/CourseMainFacultyExportModal';
 import { fetchAllPages, fetchJsonWithRetry, authJsonHeaders } from './utils/apiFetchAll';
 import { useSharedData } from './DataContext';
 import wsClient from './utils/WebSocketClient';
@@ -348,6 +349,7 @@ const AllocationPage = ({ isAdmin = true }) => {
   // Workloads for auto-populating faculty details
   const [workloads, setWorkloads] = useState([]);
   const [workloadsLoading, setWorkloadsLoading] = useState(false);
+  const [showMainFacultyExportModal, setShowMainFacultyExportModal] = useState(false);
   const fetchWorkloads = useCallback(async () => {
     setWorkloadsLoading(true);
     try {
@@ -1077,6 +1079,19 @@ const AllocationPage = ({ isAdmin = true }) => {
                 onClick={() => exportAllocations('pdf')}
                 disabled={allocationExportRows.length === 0}
               >📄 PDF</button>
+              <button
+                className="ap-btn ap-btn-export"
+                onClick={() => setShowMainFacultyExportModal(true)}
+                title="Course-wise Main Faculty Workload Export"
+                style={{
+                  background: '#0284c7',
+                  borderColor: '#0284c7',
+                  color: '#ffffff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >📋 Main Faculty Export</button>
             </>
           )}
         </div>
@@ -1278,6 +1293,15 @@ const AllocationPage = ({ isAdmin = true }) => {
 
       {saving && <div className="ap-saving-indicator">Saving...</div>}
       {workloadsLoading && <div className="ap-saving-indicator">Syncing workloads...</div>}
+
+      {/* ── Course-wise Main Faculty Export Modal ── */}
+      <CourseMainFacultyExportModal
+        isOpen={showMainFacultyExportModal}
+        onClose={() => setShowMainFacultyExportModal(false)}
+        initialAcademicYear={selectedAcademicYear}
+        initialSemester={selectedSemester}
+        initialProgram={activeProgram || 'All'}
+      />
     </div>
   );
 };

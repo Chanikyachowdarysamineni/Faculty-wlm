@@ -4,6 +4,7 @@ import { useAcademicPeriod } from './AcademicPeriodContext';
 import GlobalPeriodSelector from './components/GlobalPeriodSelector';
 import { fetchAllPages, authJsonHeaders } from './utils/apiFetchAll';
 import { exportAsCSV, exportAsExcel, exportAsPDF } from './utils/exportUtils';
+import CourseMainFacultyExportModal from './components/CourseMainFacultyExportModal';
 import { useNavigate } from 'react-router-dom';
 import './WorkloadPage.css';
 
@@ -14,6 +15,7 @@ const CourseWiseWorkloadPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showMainFacultyExportModal, setShowMainFacultyExportModal] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [programFilter, setProgramFilter] = useState('All');
@@ -539,6 +541,21 @@ const CourseWiseWorkloadPage = () => {
           <button className="wl-btn wl-btn-export" onClick={() => handleExport('excel')} disabled={displayData.length === 0}>
             ⬇ Export Excel
           </button>
+          <button
+            className="wl-btn wl-btn-export"
+            onClick={() => setShowMainFacultyExportModal(true)}
+            title="Course-wise Main Faculty Workload Export"
+            style={{
+              background: '#0284c7',
+              borderColor: '#0284c7',
+              color: '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            📋 Main Faculty Export
+          </button>
           {unsaved && (
             <button className="wl-btn wl-btn-add" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : '💾 Save Changes'}
@@ -708,6 +725,14 @@ const CourseWiseWorkloadPage = () => {
           </table>
         </div>
       )}
+      {/* ── Course-wise Main Faculty Export Modal ── */}
+      <CourseMainFacultyExportModal
+        isOpen={showMainFacultyExportModal}
+        onClose={() => setShowMainFacultyExportModal(false)}
+        initialAcademicYear={selectedAcademicYear}
+        initialSemester={selectedSemester}
+        initialProgram={programFilter || 'All'}
+      />
     </div>
   );
 };
