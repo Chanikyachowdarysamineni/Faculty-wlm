@@ -185,6 +185,10 @@ const baselineAllowedOrigins = [
   'https://faculty-workload-management-1.onrender.com',
   'https://160.187.169.41',
   'https://160.187.169.41:3000',
+  'https://160.187.169.41:5000',
+  'http://160.187.169.41',
+  'http://160.187.169.41:3000',
+  'http://160.187.169.41:5000',
   // Local development (localhost for testing)
   'http://localhost:3000',
   'http://localhost:3001',
@@ -369,9 +373,20 @@ const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
 if (fs.existsSync(clientBuildPath)) {
   // Serve static assets (JS/CSS/images) under the /csefaculty base path
   app.use('/csefaculty', express.static(clientBuildPath, {
-    maxAge: '1y',           // Cache hashed assets for 1 year
     etag: true,
-    immutable: true,
+    setHeaders: (res, filePath) => {
+      // Never cache index.html or service workers so new deployments update immediately
+      if (filePath.endsWith('.html') || filePath.endsWith('service-worker.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (filePath.includes(path.sep + 'static' + path.sep) || filePath.includes('/static/')) {
+        // Cache hashed JS/CSS assets for 1 year
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    }
   }));
   // Safety guard: API or WebSocket routes must NEVER return HTML
   app.use(['/csefaculty/deva', '/csefaculty/deva/*'], (_req, res) => {
@@ -383,6 +398,9 @@ if (fs.existsSync(clientBuildPath)) {
 
   // SPA fallback — all non-API routes under /csefaculty return index.html
   app.get('/csefaculty/*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
   // Redirect root to the app

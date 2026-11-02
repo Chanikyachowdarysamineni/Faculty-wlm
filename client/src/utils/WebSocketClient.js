@@ -21,17 +21,24 @@ class WebSocketClient {
 
     if (process.env.REACT_APP_WS_URL) {
       backendUrl = process.env.REACT_APP_WS_URL.replace(/\/+$/, '');
-    } else if (process.env.REACT_APP_API_URL && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
+    } else if (
+      process.env.REACT_APP_API_URL &&
+      !process.env.REACT_APP_API_URL.includes('localhost') &&
+      !process.env.REACT_APP_API_URL.includes('127.0.0.1')
+    ) {
       const apiUrl = process.env.REACT_APP_API_URL.replace(/\/+$/, '');
       backendUrl = apiUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
-    } else if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    } else if (
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ) {
       // Development or localhost: Use current hostname with port 5000
       const host = window.location.hostname || 'localhost';
       backendUrl = `ws://${host}:5000`;
     } else {
-      // Production: Match page protocol (HTTPS → WSS, HTTP → WS)
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
+      // Production: Match page protocol (HTTPS → WSS, HTTP → WS) and host
+      const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = typeof window !== 'undefined' ? window.location.host : 'localhost:5000';
       backendUrl = `${protocol}//${host}`;
     }
 
